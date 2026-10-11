@@ -1811,7 +1811,7 @@ function renderLists(d) {
         : "";
       // Trip ID up front so a row can be matched to its JSON, the compare
       // output or a car screenshot without copying anything first.
-      const tripId = t.id != null ? `<span class="trip-id" title="Trip ID">#${t.id}</span> ` : "";
+      const tripId = t.id != null ? `<span class="trip-id" title="Trip ID">#${t.id}</span> · ` : "";
       const distFlag = t.distance_flag
         ? `<span class="dq-badge dq-warn" title="Logged distance is shorter than the straight-line distance between this trip's own start/end points — likely an odometer or GPS glitch">⚠</span>`
         : "";
@@ -1867,8 +1867,8 @@ function renderLists(d) {
         ? `<li class="vampire-note">🔋 Parked ${fmt(vb.hours, 0)} h · lost ${fmt(vb.pct, 1)}% (${fmt(vb.kwh, 1)} kWh) standby</li>`
         : "";
       return `${vampireNote}<li class="trip${tripSelectMode ? " selectable" : ""}">` +
-        `<span class="trip-head">${check}${score}${dq}${distFlag}<span class="trip-route">${tripId}${when}${t.route ? "<br>" + routeHtml : ""}${mapLink}</span></span>` +
-        `<span class="trip-meta">${t.distance_km} km · ${t.duration_min} min${speed}${kwh}${whkm}${soc}${cost}${tagChip}${editBtn}${diagBtn}</span>${cond}</li>`;
+        `<span class="trip-head">${check}${score}${dq}${distFlag}<span class="trip-route">${when}${t.route ? "<br>" + routeHtml : ""}${mapLink}</span></span>` +
+        `<span class="trip-meta">${tripId}${t.distance_km} km · ${t.duration_min} min${speed}${kwh}${whkm}${soc}${cost}${tagChip}${editBtn}${diagBtn}</span>${cond}</li>`;
     })
     .join("");
   const list = document.getElementById("recentTrips");
