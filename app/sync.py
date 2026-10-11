@@ -2171,6 +2171,44 @@ CHARGE_MIN_KWH = 0.05
 CHARGE_GAP_SEC = 600.0
 
 
+# How long after a charge closes a fresh BatteryLevel can still be its end:
+# the % streams every 60 s, so the last step of a charge that stops between
+# two readings is only reported after the session has already closed.
+CHARGE_END_LEVEL_SEC = 600
+# ...and only while the pack has not moved since: two EnergyRemaining steps.
+CHARGE_END_LEVEL_KWH = 0.04
+# Fewer points than this between a session's two pairs and the per-% rate
+# they give is mostly their own rounding.
+CHARGE_EXTRAPOLATE_MIN_PCT = 5.0
+
+
+def _charge_end_levels(start: dict[str, Any], end: dict[str, Any],
+                       first: list | None, last: list | None,
+                       ) -> tuple[float | None, float | None, str | None]:
+    """The displayed % at the very start and end of a charge.
+
+    BatteryLevel streams every 60 s and EnergyRemaining every 10, so the
+    session closes on an energy reading up to a minute newer than its last %.
+    Charge 92 (11 Oct) stopped at the car's 85% limit and was recorded at 84.0
+    because the step to 85 arrived after the close. Each end is carried from
+    its nearest same-instant pair by the energy that moved since, at the rate
+    this session's own two pairs give. No capacity goes in, so a charge
+    measured this way stays evidence about the pack rather than a restatement
+    of the figure already in use.
+    """
+    if not first or not last or float(last[0]) - float(first[0]) < CHARGE_EXTRAPOLATE_MIN_PCT:
+        return None, None, None
+    per_pct = (float(last[1]) - float(first[1])) / (float(last[0]) - float(first[0]))
+    if per_pct <= 0:
+        return None, None, None
+    e0, e1 = start.get("energy_kwh"), end.get("energy_kwh")
+    lo = (round(float(first[0]) - max(float(first[1]) - float(e0), 0.0) / per_pct, 2)
+          if e0 is not None else None)
+    hi = (round(float(last[0]) + max(float(e1) - float(last[1]), 0.0) / per_pct, 2)
+          if e1 is not None else None)
+    return lo, hi, ("extrapolated" if hi is not None else None)
+
+
 def advance_charge(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, Any] | None:
     """Step the charge machine, then note a displayed-% / energy pair.
 
@@ -2184,6 +2222,28 @@ def advance_charge(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, An
     the ratio at one instant.
     """
     done = _advance_charge(shadow, snap)
+    if done is not None:
+        if done.get("energy_end") is not None:
+            shadow["after"] = {"start_ts": done["start_ts"], "end_ts": done["end_ts"],
+                               "energy": done["energy_end"]}
+        else:
+            shadow.pop("after", None)
+    # Checked on the closing record too: the snapshot that ends the session
+    # (charging no longer true) can itself carry the % it stopped at.
+    after = shadow.get("after")
+    if after and snap.get("ts") is not None:
+        if (shadow.get("open")
+                or float(snap["ts"]) - float(after["end_ts"]) > CHARGE_END_LEVEL_SEC):
+            shadow.pop("after", None)
+        elif (snap.get("level_fresh") and snap.get("battery_level") is not None
+              and snap.get("energy_kwh") is not None):
+            shadow.pop("after", None)
+            # The pack has not moved since the close, so this % is the
+            # one the charge finished on, read rather than worked out.
+            if abs(float(snap["energy_kwh"]) - float(after["energy"])) <= CHARGE_END_LEVEL_KWH:
+                shadow["end_level"] = {"start_ts": after["start_ts"],
+                                       "level": float(snap["battery_level"]),
+                                       "energy": float(snap["energy_kwh"])}
     opening = shadow.get("open")
     if (opening and snap.get("level_fresh")
             and snap.get("battery_level") is not None
@@ -2367,6 +2427,7 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
                                kwh_lifetime) if v is not None), default=0.0)
     if biggest < CHARGE_MIN_KWH or minutes <= 0:
         return None
+    soc_start, soc_end, soc_via = _charge_end_levels(start, end, level_first, level_last)
 
     return {
         "start_ts": float(start["ts"]),
@@ -2414,8 +2475,14 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
         if kwh_wall and kwh_pack_meter is not None and kwh_wall > 0 else None,
         "pack_vs_wall_pct": round(kwh_pack_level / kwh_wall * 100.0, 1)
         if kwh_wall and kwh_pack_level is not None and kwh_wall > 0 else None,
-        "soc_start": start.get("soc"),
-        "soc_end": end.get("soc"),
+        "soc_start": soc_start if soc_start is not None else start.get("soc"),
+        "soc_end": soc_end if soc_end is not None else end.get("soc"),
+        # How soc_end was arrived at: "extrapolated" from the last pair (see
+        # _charge_end_levels), "measured" once the % after the close is read,
+        # None when it is the last Soc reading as it stood.
+        "soc_end_via": soc_via,
+        "energy_start": start.get("energy_kwh"),
+        "energy_end": end.get("energy_kwh"),
         # The % the car's screen shows (BatteryLevel), at both ends. Against
         # kwh_pack_level this measures the pack the way the car's own Energy
         # screen divides it — no charger efficiency, no screenshot — see

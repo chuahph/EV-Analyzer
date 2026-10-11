@@ -4693,6 +4693,28 @@ def _promote_rows_from(staged: list, since: datetime) -> datetime:
     return lo
 
 
+def _apply_charge_end_levels(charges: list[dict], levels: list[dict]) -> list[dict]:
+    """Write each measured end % onto its charge; return the ones not found.
+
+    A charge is matched by its own start_ts. The % replaces soc_end and the
+    session's closing pair, so the stream capacity measure ends on it too —
+    it is the same instant as an energy reading, which is all a pair is.
+    Promotion carries soc_end onto the Charge row on its next pass.
+    """
+    left = []
+    for lv in levels:
+        hit = next((c for c in reversed(charges)
+                    if c.get("start_ts") is not None
+                    and abs(float(c["start_ts"]) - float(lv["start_ts"])) < 0.5), None)
+        if hit is None:
+            left.append(lv)
+            continue
+        hit["soc_end"] = round(float(lv["level"]), 2)
+        hit["soc_end_via"] = "measured"
+        hit["level_pair_end"] = [float(lv["level"]), float(lv["energy"])]
+    return left
+
+
 def _promote_shadow_charges(session: Session, apply: bool = False,
                             days: int = PROMOTE_MAX_DAYS,
                             max_add: int | None = None) -> list[dict]:
@@ -13710,6 +13732,9 @@ def _telemetry_ingest(payload: dict, session: Session):
     except ValueError:
         trip_ends, trip_ends_raw = {}, ""
     new_charges: list[dict] = []
+    # The % a just-closed charge stopped at, read after its close — see
+    # sync.advance_charge. Written onto the stored charge below.
+    end_levels: list[dict] = []
     new_modes: list[dict] = []
     new_gaps: list[dict] = []
     stored_charge_shadows = state.get(session, state.TELEMETRY_CHARGE_SHADOW_KEY)
@@ -13868,6 +13893,9 @@ def _telemetry_ingest(payload: dict, session: Session):
                 finished_charge["vin"] = vin
                 new_charges.append(finished_charge)
                 charged += 1
+            end_level = charge_shadows[vin].pop("end_level", None)
+            if end_level:
+                end_levels.append(end_level)
             was_open = bool(shadow.get("open"))
             finished = sync_mod.advance_shadow(shadow, snap)
             if finished:
@@ -14037,8 +14065,19 @@ def _telemetry_ingest(payload: dict, session: Session):
             trips_written = True
     if new_charges:
         checked.add("charges")
+    pending_levels = _apply_charge_end_levels(new_charges, end_levels)
     append_store(state.TELEMETRY_CHARGES_KEY, new_charges, TELEMETRY_TRIPS_MAX,
                  guarded=True)
+    if pending_levels:
+        # Usually a batch or two after the charge itself, so already stored.
+        try:
+            stored = _json.loads(
+                state.get(session, state.TELEMETRY_CHARGES_KEY) or "[]") or []
+        except ValueError:
+            stored = None
+        if (stored is not None
+                and len(_apply_charge_end_levels(stored, pending_levels)) < len(pending_levels)):
+            state.put(session, state.TELEMETRY_CHARGES_KEY, _json.dumps(stored))
     if unreadable:
         # Said once, and not per batch: a parked car posts one every twenty
         # seconds, and an alert that repeats three thousand times a day is an
@@ -14917,6 +14956,68 @@ def db_maintenance(
             conn.execute(sa_text(f'VACUUM (ANALYZE) "{row["table"]}"'))
         after = _snapshot(conn)
     return {"vacuumed": True, "before": before, "after": after}
+
+
+@router.api_route("/telemetry/charge-end-level", methods=["GET", "POST"])
+def telemetry_charge_end_level(
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Read the newest streamed charge's end % from the car as it stands now.
+
+    For a charge that closed before the post-close reading existed (charge 92
+    was stored at 84.0 against the car's 85). The car's latest BatteryLevel
+    and EnergyRemaining are one same-instant pair, and parking since the
+    charge moves both along the same line, so that pair can end the session's
+    capacity measure. It stands for the end % only while nothing has been
+    driven since: a trip would have used some of it.
+    """
+    import json as _json
+
+    try:
+        charges = _json.loads(
+            state.get(session, state.TELEMETRY_CHARGES_KEY) or "[]") or []
+        latest = _json.loads(state.get(session, state.TELEMETRY_LATEST_KEY) or "{}") or {}
+        trips = _json.loads(state.get(session, state.TELEMETRY_TRIPS_KEY) or "[]") or []
+        cshadows = _json.loads(
+            state.get(session, state.TELEMETRY_CHARGE_SHADOW_KEY) or "{}") or {}
+    except ValueError:
+        return {"applied": False, "why": "a telemetry store would not read"}
+    if not charges:
+        return {"applied": False, "why": "no streamed charge stored"}
+    c = charges[-1]
+    vin = c.get("vin")
+    car = latest.get(vin) if isinstance(latest, dict) else None
+    ts = _telemetry_ts(car.get("_ts")) if isinstance(car, dict) else None
+    out = {"charge_start": c.get("start_time"), "charge_end": c.get("end_time"),
+           "soc_end_was": c.get("soc_end"), "soc_end_via": c.get("soc_end_via"),
+           "level_pair_end_was": c.get("level_pair_end")}
+    if not ts:
+        return {**out, "applied": False, "why": "no current reading from the car"}
+    snap = sync_mod.snapshot_from_telemetry(car, ts)
+    level, energy = snap.get("battery_level"), snap.get("energy_kwh")
+    out["now"] = {"at": sync_mod._dt(ts).isoformat(timespec="seconds"),
+                  "level": level, "energy_kwh": energy}
+    driven = [t for t in trips if t.get("vin") == vin
+              and float(t.get("start_ts") or 0.0) > float(c.get("end_ts") or 0.0)]
+    why = ("the car has been driven since this charge" if driven
+           else "the car is charging again" if (cshadows.get(vin) or {}).get("open")
+           else "no current % and energy from the car" if level is None or energy is None
+           else "the car's reading is older than the charge" if ts <= float(c.get("end_ts") or 0.0)
+           else None)
+    if why:
+        return {**out, "applied": False, "why": why}
+    out["soc_end_now"] = round(float(level), 2)
+    if not apply:
+        return {**out, "applied": False, "would_apply": True}
+    _apply_charge_end_levels(charges, [{"start_ts": c["start_ts"], "level": level,
+                                        "energy": energy}])
+    state.put(session, state.TELEMETRY_CHARGES_KEY, _json.dumps(charges))
+    session.commit()
+    promoted = _promote_shadow_charges(session, apply=True)
+    return {**out, "applied": True,
+            "row": next(({"action": p.get("action"), "corrections": p.get("corrections")}
+                         for p in promoted if p.get("start") == c.get("start_time")), None)}
 
 
 @router.api_route("/telemetry/promote-charges", methods=["GET", "POST"])

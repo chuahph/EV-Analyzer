@@ -2424,6 +2424,73 @@ def test_a_charge_pairs_the_displayed_percent_with_the_energy_at_that_instant():
     assert "level_first" not in shadow and "level_last" not in shadow
 
 
+def test_a_charge_end_percent_is_carried_past_the_last_level_reading():
+    """Charge 92 stopped at 85% and was stored at 84.0: the step to 85 came
+    after the close. The end % is carried from the last pair by the energy
+    since, at the session's own rate, and then replaced by the % read after
+    the close while the pack has not moved."""
+    from app.sync import advance_charge
+
+    def snap(ts, level, kwh, charging=True, fresh=True):
+        s = {"ts": ts, "charging": charging, "battery_level": level,
+             "energy_kwh": kwh, "soc": level, "charger_kw": 11.0,
+             "charge_energy_in_raw": kwh * 1.1}
+        if fresh:
+            s["level_fresh"] = True
+        return s
+
+    shadow: dict = {}
+    advance_charge(shadow, snap(0, 51.0, 35.0))      # 0.68 kWh per %
+    for ts in range(60, 3000, 60):
+        advance_charge(shadow, snap(ts, 51.0, 35.0, fresh=False))
+    advance_charge(shadow, snap(3000, 84.0, 57.44))  # last % before the stop
+    advance_charge(shadow, snap(3040, 84.0, 58.10, fresh=False))
+    done = advance_charge(shadow, snap(3070, 84.0, 58.10, charging=False, fresh=False))
+    assert done["soc_start"] == 51.0
+    assert done["soc_end"] == pytest.approx(84.97, abs=0.01)
+    assert done["soc_end_via"] == "extrapolated"
+    assert done["energy_end"] == 58.10
+
+    # The % the car reports next, with the pack where the charge left it.
+    advance_charge(shadow, snap(3100, 85.0, 58.10, charging=False))
+    assert shadow.pop("end_level") == {"start_ts": 0.0, "level": 85.0, "energy": 58.10}
+    assert "after" not in shadow
+
+
+def test_a_level_read_after_the_pack_moved_is_not_the_charge_end():
+    from app.sync import advance_charge
+
+    def snap(ts, level, kwh, charging=True, fresh=True):
+        s = {"ts": ts, "charging": charging, "battery_level": level,
+             "energy_kwh": kwh, "soc": level, "charger_kw": 11.0,
+             "charge_energy_in_raw": kwh * 1.1}
+        if fresh:
+            s["level_fresh"] = True
+        return s
+
+    shadow: dict = {}
+    advance_charge(shadow, snap(0, 51.0, 35.0))
+    for ts in range(60, 3000, 60):
+        advance_charge(shadow, snap(ts, 51.0, 35.0, fresh=False))
+    advance_charge(shadow, snap(3000, 84.0, 57.44))
+    advance_charge(shadow, snap(3070, 84.0, 58.10, charging=False, fresh=False))
+    advance_charge(shadow, snap(3200, 84.5, 57.70, charging=False))  # driven off
+    assert "end_level" not in shadow and "after" not in shadow
+
+
+def test_a_measured_end_level_is_written_onto_its_stored_charge():
+    from app.api.routes import _apply_charge_end_levels
+
+    charges = [{"start_ts": 10.0, "soc_end": 84.0, "level_pair_end": [84.0, 57.44]}]
+    left = _apply_charge_end_levels(
+        charges, [{"start_ts": 10.0, "level": 85.0, "energy": 58.1},
+                  {"start_ts": 99.0, "level": 70.0, "energy": 40.0}])
+    assert charges[0]["soc_end"] == 85.0
+    assert charges[0]["soc_end_via"] == "measured"
+    assert charges[0]["level_pair_end"] == [85.0, 58.1]
+    assert [lv["start_ts"] for lv in left] == [99.0]
+
+
 def test_a_confirmed_arrival_hands_any_gap_to_the_departure():
     """3177 ended at power-down at 32330.892; 3178 was first seen at
     32330.920. The arrival was confirmed, so the 28 m is pulling out of the
