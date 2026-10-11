@@ -14958,6 +14958,55 @@ def db_maintenance(
     return {"vacuumed": True, "before": before, "after": after}
 
 
+# What a parked car's pack can lose between a charge and a reading of it:
+# about 0.03 kWh an hour here, so a few hours stays well under this.
+CHARGE_END_PARKED_KWH = 0.25
+
+
+@router.api_route("/telemetry/set-charge-end", methods=["GET", "POST"])
+def telemetry_set_charge_end(
+    start: str = Query(..., description="the charge's start_time, as stored"),
+    soc_end: float | None = Query(None, ge=0, le=100),
+    pair_level: float | None = Query(None, ge=0, le=100),
+    pair_energy: float | None = Query(None, ge=0),
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Set a streamed charge's end % (and closing pair) by hand.
+
+    For putting one back after a bad repair — charge 92 was given 81.49% from
+    a reading taken mid-drive. The car's own "charge complete at 85%" is the
+    end % to use when nothing better was read; the pair is left alone unless
+    given, since it is a measurement and the % on its own is not.
+    """
+    import json as _json
+
+    try:
+        charges = _json.loads(
+            state.get(session, state.TELEMETRY_CHARGES_KEY) or "[]") or []
+    except ValueError:
+        return {"applied": False, "why": "the charge store would not read"}
+    c = next((x for x in charges if x.get("start_time") == start), None)
+    if c is None:
+        return {"applied": False, "why": f"no streamed charge started at {start}"}
+    was = {"soc_end": c.get("soc_end"), "soc_end_via": c.get("soc_end_via"),
+           "level_pair_end": c.get("level_pair_end")}
+    new = dict(was)
+    if soc_end is not None:
+        new["soc_end"], new["soc_end_via"] = round(soc_end, 2), "manual"
+    if pair_level is not None and pair_energy is not None:
+        new["level_pair_end"] = [pair_level, pair_energy]
+    if not apply:
+        return {"applied": False, "was": was, "would_be": new}
+    c.update(new)
+    state.put(session, state.TELEMETRY_CHARGES_KEY, _json.dumps(charges))
+    session.commit()
+    promoted = _promote_shadow_charges(session, apply=True)
+    return {"applied": True, "was": was, "now": new,
+            "row": next(({"action": p.get("action"), "corrections": p.get("corrections")}
+                         for p in promoted if p.get("start") == start), None)}
+
+
 @router.api_route("/telemetry/charge-end-level", methods=["GET", "POST"])
 def telemetry_charge_end_level(
     apply: bool = Query(False),
@@ -14981,6 +15030,8 @@ def telemetry_charge_end_level(
         trips = _json.loads(state.get(session, state.TELEMETRY_TRIPS_KEY) or "[]") or []
         cshadows = _json.loads(
             state.get(session, state.TELEMETRY_CHARGE_SHADOW_KEY) or "{}") or {}
+        tshadows = _json.loads(
+            state.get(session, state.TELEMETRY_SHADOW_KEY) or "{}") or {}
     except ValueError:
         return {"applied": False, "why": "a telemetry store would not read"}
     if not charges:
@@ -15000,7 +15051,16 @@ def telemetry_charge_end_level(
                   "level": level, "energy_kwh": energy}
     driven = [t for t in trips if t.get("vin") == vin
               and float(t.get("start_ts") or 0.0) > float(c.get("end_ts") or 0.0)]
+    pair_end = c.get("level_pair_end")
+    # The energy can only have drifted down by what a parked car uses. More
+    # than that and something used it — on 11 Oct a drive still under way,
+    # not yet a finished trip, took charge 92 to 81.49%.
+    drop = (float(pair_end[1]) - float(energy)
+            if pair_end and len(pair_end) == 2 and energy is not None else None)
     why = ("the car has been driven since this charge" if driven
+           else "the car is on a drive now" if (tshadows.get(vin) or {}).get("open")
+           else (f"the pack has used {drop:.2f} kWh since the charge, more than "
+                 "parking accounts for") if drop is not None and drop > CHARGE_END_PARKED_KWH
            else "the car is charging again" if (cshadows.get(vin) or {}).get("open")
            else "no current % and energy from the car" if level is None or energy is None
            else "the car's reading is older than the charge" if ts <= float(c.get("end_ts") or 0.0)
@@ -15010,6 +15070,9 @@ def telemetry_charge_end_level(
     out["soc_end_now"] = round(float(level), 2)
     if not apply:
         return {**out, "applied": False, "would_apply": True}
+    c.setdefault("before_end_level", {"soc_end": c.get("soc_end"),
+                                      "soc_end_via": c.get("soc_end_via"),
+                                      "level_pair_end": c.get("level_pair_end")})
     _apply_charge_end_levels(charges, [{"start_ts": c["start_ts"], "level": level,
                                         "energy": energy}])
     state.put(session, state.TELEMETRY_CHARGES_KEY, _json.dumps(charges))

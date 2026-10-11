@@ -12420,3 +12420,63 @@ def test_fold_p_wait_brings_old_trips_under_the_new_rule():
             s.query(Vehicle).filter(Vehicle.vin == "FOLDPWAIT0000001").delete()
             s.commit()
         settings.app_passcode = old
+
+
+def test_charge_end_level_refuses_a_reading_taken_on_a_drive():
+    """Charge 92 was set to 81.49% from a reading taken mid-drive: refused now
+    while a trip is open or the pack has used more than parking can, and
+    set-charge-end puts a charge back by hand."""
+    import json as _json
+    from app import state
+    from app.database import SessionLocal
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    vin = "CHARGEEND0000001"
+    keys = (state.TELEMETRY_CHARGES_KEY, state.TELEMETRY_LATEST_KEY,
+            state.TELEMETRY_TRIPS_KEY, state.TELEMETRY_SHADOW_KEY,
+            state.TELEMETRY_CHARGE_SHADOW_KEY)
+    charge = {"vin": vin, "start_ts": 1791701258.0, "end_ts": 1791708851.0,
+              "start_time": "2026-10-11T14:47:38", "end_time": "2026-10-11T16:54:11",
+              "soc_end": 84.0, "soc_end_via": None,
+              "level_pair_end": [84.0, 60.12]}
+    with SessionLocal() as s:
+        saved = {k: state.get(s, k) for k in keys}
+        state.put(s, state.TELEMETRY_CHARGES_KEY, _json.dumps([charge]))
+        state.put(s, state.TELEMETRY_LATEST_KEY, _json.dumps({vin: {
+            "_ts": "2026-10-11T09:42:14Z", "BatteryLevel": 81.49,
+            "EnergyRemaining": 58.42}}))
+        state.put(s, state.TELEMETRY_TRIPS_KEY, "[]")
+        state.put(s, state.TELEMETRY_SHADOW_KEY, _json.dumps({vin: {"open": {"ts": 1.0}}}))
+        state.put(s, state.TELEMETRY_CHARGE_SHADOW_KEY, "{}")
+        s.commit()
+    try:
+        with TestClient(app) as client:
+            r = client.get("/api/telemetry/charge-end-level?apply=true").json()
+            assert r["applied"] is False and "drive" in r["why"]
+            with SessionLocal() as s:
+                state.put(s, state.TELEMETRY_SHADOW_KEY, "{}")
+                s.commit()
+            r = client.get("/api/telemetry/charge-end-level?apply=true").json()
+            assert r["applied"] is False and "1.70 kWh" in r["why"]
+
+            dry = client.get("/api/telemetry/set-charge-end?start=2026-10-11T14:47:38"
+                             "&soc_end=85").json()
+            assert dry["would_be"]["soc_end"] == 85.0
+            done = client.get("/api/telemetry/set-charge-end?start=2026-10-11T14:47:38"
+                              "&soc_end=85&apply=true").json()
+            assert done["applied"] is True
+            with SessionLocal() as s:
+                c = _json.loads(state.get(s, state.TELEMETRY_CHARGES_KEY))[0]
+            assert c["soc_end"] == 85.0 and c["soc_end_via"] == "manual"
+            assert c["level_pair_end"] == [84.0, 60.12]
+    finally:
+        settings.app_passcode = old
+        with SessionLocal() as s:
+            for k, v in saved.items():
+                state.put(s, k, v or ("{}" if k in (state.TELEMETRY_LATEST_KEY,
+                                                    state.TELEMETRY_SHADOW_KEY,
+                                                    state.TELEMETRY_CHARGE_SHADOW_KEY)
+                                      else "[]"))
+            s.commit()
