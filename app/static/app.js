@@ -4138,6 +4138,26 @@ function glVBars(items, { mark = null, digits = 0 } = {}) {
   return `<div class="gl-vbars"><div class="gl-vplot">${m}${cols}</div></div>`;
 }
 
+// Horizontal bars that grow from the rated line: left and green for below
+// rated, right and amber for above, each labelled with its Wh/km and its
+// difference. Bars from zero all look alike when every value is 150-180;
+// from the rated line the difference is the length.
+function glHBars(items, { mark, digits = 0 } = {}) {
+  const diffs = items.map((it) => (Number.isFinite(+it.value) && mark ? (+it.value - mark) / mark * 100 : null));
+  const span = Math.max(10, ...diffs.filter((x) => x != null).map(Math.abs)) * 1.1;
+  const rows = items.map((it, k) => {
+    const d = diffs[k], w = d == null ? 0 : Math.abs(d) / span * 50;
+    const bar = d == null ? "" : `<span class="gl-hbar ${d > 0 ? "up" : "down"}"
+      style="${d > 0 ? "left:50%" : `right:50%`};width:${w.toFixed(1)}%"></span>`;
+    return `<div class="gl-hrow"><span class="gl-hlab">${h(it.label)}</span>
+      <strong>${d == null ? "—" : fmt(+it.value, digits)} <small class="${d > 0 ? "tone-warn" : "tone-good"}">${
+        d == null ? "" : `${d > 0 ? "+" : ""}${fmt(d, 0)}%`}</small></strong>
+      <span class="gl-htrack">${bar}<i class="gl-hmark"></i></span></div>`;
+  }).join("");
+  return `<div class="gl-hbars">${rows}
+    <div class="gl-hnote"><span>◂ better</span><span>rated ${fmt(mark)}</span><span>worse ▸</span></div></div>`;
+}
+
 function glBox(label, value, unit, tone = "") {
   return `<div class="gl-box ${tone}"><span class="gl-box-l">${h(label)}</span>
     <span class="gl-box-v">${value}<small>${h(unit || "")}</small></span></div>`;
@@ -4358,16 +4378,18 @@ function renderGlance(d) {
     eff: () => {
       const bands = Object.entries(drv.efficiency_by_speed_band || {});
       const daily = Object.entries(eff.daily_efficiency || {}).slice(-7);
+      // A scale of whole numbers: ±30, ±40, ... with a tick every 5 or 10.
       const r = vsRated ?? 0, lim = Math.max(30, Math.ceil(Math.abs(r) / 10) * 10);
+      const effStep = lim <= 30 ? 5 : 10;
       return page(
-        panel("By speed", bands.length ? glVBars(bands.map(([k, x]) => ({ label: k.replace(/\s*\(.*\)/, ""), value: x,
+        panel("By speed · Wh/km", bands.length ? glHBars(bands.map(([k, x]) => ({ label: k.replace(/\s*\(.*\)/, ""), value: x,
           colour: rated && x > rated ? "var(--amber)" : "var(--green)" })), { mark: rated }) : none("No speed data")),
-        glDial({ value: vsRated, min: -lim, max: lim, step: lim / 6,
+        glDial({ value: vsRated, min: -lim, max: lim, step: effStep,
           bands: [{ from: -lim, to: 0, colour: "var(--green)" }, { from: 0, to: lim, colour: "var(--amber)" }],
           mark: 0, centre: vsRated == null ? "—" : `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}%`, unit: "vs rated",
           colour: r > 0 ? "var(--amber)" : "var(--green)",
           sub: { text: `${n(whkm)} Wh/km · rated ${n(rated)}` }, label: "Versus rated" }),
-        panel("By day", daily.length ? glVBars(daily.map(([k, x]) => ({ label: k.slice(8), value: x,
+        panel(rated ? `By day · - - rated ${n(rated)}` : "By day", daily.length ? glVBars(daily.map(([k, x]) => ({ label: k.slice(8), value: x,
           colour: rated && x > rated ? "var(--amber)" : "var(--teal)" })), { mark: rated }) : none("No daily data")),
         `<span class="gl-chip">best ${n(eff.best_efficiency_wh_per_km)} Wh/km</span>
          <span class="gl-chip">worst ${n(eff.worst_efficiency_wh_per_km)} Wh/km</span>`);
@@ -4399,7 +4421,7 @@ function renderGlance(d) {
     trips: () => {
       const rec = (drv.recent_trips || []).slice(0, 6).reverse();
       return page(
-        panel("Recent · Wh/km", rec.length ? glVBars(rec.map((t) => ({
+        panel(rated ? `Recent · Wh/km · - - rated ${n(rated)}` : "Recent · Wh/km", rec.length ? glVBars(rec.map((t) => ({
           label: t.id != null ? `#${t.id}` : tripWhen(t.start_time).slice(0, 6),
           value: t.wh_per_km, colour: bandColour(t.efficiency_band) })), { mark: rated }) : none("No trips")),
         glDial({ value: score, min: 0, max: 100, step: 10,
