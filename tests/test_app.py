@@ -12545,14 +12545,33 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
                         "speed_kmh": 60.0}
                 state.put(s, state.TELEMETRY_SHADOW_KEY, _json.dumps({vin: {"open": start, "last": last}}))
                 s.commit()
-            # Setting off: the parked check was 3 s ago and found no trip; the
-            # stream now shows Drive, so the trip must not wait out the 30 s.
+            # Setting off: the stream shows the car leave Park. The trip shows
+            # at once, worked out from memory, with no database read at all:
+            # the start is the last parked reading, the clock from leaving P.
             import time as _time
-            from datetime import datetime as _dtm, timezone as _tz
-            routes_mod._live_mem_fold(vin, _dtm.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                      {"Gear": "D", "VehicleSpeed": 5.0})
+            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+            t0 = _dtm.now(_tz.utc)
+            at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            mi = 1.609344
+            routes_mod._LIVE_MEM.pop(vin, None)
+            routes_mod._live_mem_fold(vin, at(-80), {"Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+                                      "Odometer": 100.0 / mi, "EnergyRemaining": 60.0})
+            routes_mod._live_mem_fold(vin, at(-60), {"Gear": "ShiftStateD", "VehicleSpeed": 8.0,
+                                      "Odometer": 100.05 / mi, "EnergyRemaining": 59.98})
+            routes_mod._live_mem_fold(vin, at(0), {"VehicleSpeed": 30.0,
+                                      "Odometer": 100.5 / mi, "EnergyRemaining": 59.9})
             routes_mod._LIVE_TRIP_CACHE[vin] = (_time.time() - 3.0, None)
-            assert client.get("/api/live?capacity_kwh=68.3").json()["driving"] is True
+            reads, real = [], routes_mod._live_from_stream
+            routes_mod._live_from_stream = lambda *a: reads.append(1) or real(*a)
+            try:
+                go = client.get("/api/live?capacity_kwh=68.3").json()
+            finally:
+                routes_mod._live_from_stream = real
+            assert go["driving"] is True and go["trip"]["provisional"] is True
+            assert reads == []
+            assert go["trip"]["distance_km"] == 0.5
+            assert go["trip"]["energy_kwh"] == 0.1
+            assert go["trip"]["duration_min"] == 1
             routes_mod._LIVE_MEM.pop(vin, None); routes_mod._LIVE_TRIP_CACHE.clear()
             moving = client.get("/api/live?capacity_kwh=68.3").json()
             assert moving["driving"] is True

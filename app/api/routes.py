@@ -15089,6 +15089,26 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
         car["_t"] = ts
         car["_ts"] = created_at
     car["_seen"] = time.time()
+    # Where a drive starts, kept in memory so the live page can show the trip
+    # the moment the car leaves Park — before the stored trip machine has
+    # opened it. While parked, the newest reading is the would-be start;
+    # once in gear or rolling, that reading is frozen as the start.
+    from .. import sync as sync_mod
+    stamp = float(car.get("_t") or 0.0)
+    if not stamp:
+        return
+    snap = sync_mod.snapshot_from_telemetry(car, stamp)
+    moving = (snap.get("shift") or "P") != "P" or float(snap.get("speed_kmh") or 0.0) > 0.0
+    if not moving:
+        car["_park"] = {k: snap.get(k) for k in (
+            "ts", "odo_km", "energy_kwh", "soc", "range_km", "battery_level")}
+        car.pop("_go", None)
+    elif "_go" not in car:
+        base = car.get("_park") or {k: snap.get(k) for k in (
+            "ts", "odo_km", "energy_kwh", "soc", "range_km", "battery_level")}
+        # Odometer and energy from the last parked reading; the clock from the
+        # moment the car left Park, so a wait awake in P is not drive time.
+        car["_go"] = {**base, "ts": snap.get("ts"), "max_speed": 0.0}
 
 
 @router.post("/telemetry/live")
@@ -15170,13 +15190,12 @@ def live_now(
     # fast lane's in-memory readings, so distance, time and energy are as
     # fresh as the stream (the car sends them every 2 s).
     cached = _LIVE_TRIP_CACHE.get(vin)
-    # Parked, the trip check waits 30 s — but not once the stream shows the
-    # car in gear or rolling: then it is re-made every 2 s until the drive
-    # opens, so the trip appears seconds after setting off.
-    setting_off = bool(now) and now.get("age_sec", 999) < 30 and (
-        float(now.get("speed_kmh") or 0.0) > 0.0
-        or str(now.get("shift") or "").upper() in ("D", "R", "N"))
-    max_age = 8.0 if cached and cached[1] else (2.0 if setting_off else 30.0)
+    # A drive the stream has seen start but the stored machine has not yet
+    # opened: shown at once from memory (see _live_mem_fold), while the
+    # stored trip is looked for at the driving cadence rather than every 30 s.
+    go = (car.get("_go") if source == "memory" and isinstance(car, dict)
+          and now and now.get("age_sec", 999) < 30 else None)
+    max_age = 8.0 if (cached and cached[1]) or go else 30.0
     if cached and time.time() - cached[0] < max_age:
         pair = cached[1]
     else:
@@ -15194,6 +15213,12 @@ def live_now(
                     "odo_km", "energy_kwh", "soc", "battery_level", "range_km",
                     "speed_kmh", "out_temp") if mem.get(k) is not None}}
         trip = sync_mod.live_trip(open_trip, snap, cap, get_settings().drive_min_km)
+    elif go:
+        mem_ts = _telemetry_ts(car.get("_ts"))
+        trip = sync_mod.live_trip(go, sync_mod.snapshot_from_telemetry(car, mem_ts),
+                                  cap, get_settings().drive_min_km)
+        if trip:
+            trip["provisional"] = True
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "server_ts": time.time()}
 
