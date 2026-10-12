@@ -4463,7 +4463,9 @@ async function glLivePoll() {
           kw: glLiveState.inst && glLiveState.inst.kw != null ? glLiveState.inst.kw : null });
         while (hst.length && hst[0].t < nw.ts - 180) hst.shift();
       } else if (!L.driving) glLiveState.hist = [];
-      if (L.driving) wait = 2000;
+      // Every second while driving: the server answers from memory, so the
+      // trip and speed are never more than a second or two behind the car.
+      if (L.driving) wait = 1000;
       if (lastData && glanceTab === "live") renderGlance(lastData);
     }
   } catch (_) { /* offline: try again later */ }

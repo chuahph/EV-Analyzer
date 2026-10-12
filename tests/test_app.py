@@ -12551,6 +12551,14 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
             assert moving["driving"] is True
             assert moving["trip"]["distance_km"] == 10.0
             assert moving["trip"]["duration_min"] == 10
+            # Two seconds later the fast lane brings the next reading: the trip
+            # moves on this poll, without waiting for the 8 s database re-read.
+            routes_mod._live_mem_fold(vin, "2026-10-11T12:10:02Z", {"Odometer": 18.4 / 1.609344,
+                                      "EnergyRemaining": 49.4, "VehicleSpeed": 62.0})
+            fresh = client.get("/api/live?capacity_kwh=68.3").json()
+            assert fresh["trip"]["distance_km"] == 10.4
+            assert fresh["trip"]["energy_kwh"] == 1.6
+            routes_mod._LIVE_MEM.pop(vin, None)
     finally:
         settings.app_passcode = old
         with SessionLocal() as s:
