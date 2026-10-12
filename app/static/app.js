@@ -4477,21 +4477,47 @@ function renderGlance(d) {
           foot);
       }
       const tw = t.driving_wh_per_km ?? t.wh_per_km;
-      const instTone = inst && rated ? (inst.whkm > rated ? "tone-warn" : "tone-good") : "";
+      // Left: one trip-computer panel of readouts (not three boxes). Right: a
+      // power meter, a Wh/km strip against rated, and a battery bar, so the
+      // two sides of the speedometer read differently.
+      const kw = inst && inst.kw != null ? inst.kw : null;
+      const kwMin = -60, kwMax = 150, zero = -kwMin / (kwMax - kwMin) * 100;
+      const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
+      const powerBar = `<div class="gl-power">
+          <div class="gl-power-top"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span>
+            <strong class="${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></strong></div>
+          <div class="gl-power-track">
+            ${kwPos == null ? "" : `<i class="gl-power-fill ${kw < 0 ? "regen" : kw > 60 ? "hard" : ""}"
+              style="left:${Math.min(zero, kwPos).toFixed(1)}%;width:${Math.abs(kwPos - zero).toFixed(1)}%"></i>`}
+            <b style="left:${zero.toFixed(1)}%"></b></div>
+          <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
+          ${inst && inst.whkm != null ? `<div class="gl-power-sub">${n(inst.whkm)} Wh/km right now</div>` : ""}
+        </div>`;
+      const whShare = tw && rated ? Math.min(1, tw / (rated * 1.6)) : 0;
+      const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
+      const battBar = `<div class="gl-battbar">
+          <div class="gl-battbar-top"><span>Battery</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
+          <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
+          <div class="gl-power-sub">used ${n(t.soc_used, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
+      const readout = (label, value, unit) => `<div class="gl-read"><span>${h(label)}</span>
+          <strong>${value}<small>${h(unit)}</small></strong></div>`;
       return page(
-        boxes(glBox("Distance", n(t.distance_km, 1), "km"), glBox("Time", n(t.duration_min), "min"),
-          glBox("Avg speed", n(t.avg_speed_kmh), "km/h")),
+        `<div class="gl-trip">
+          <div class="gl-trip-h">Trip computer</div>
+          ${readout("Distance", n(t.distance_km, 1), "km")}
+          ${readout("Time", n(t.duration_min), "min")}
+          ${readout("Avg speed", n(t.avg_speed_kmh), "km/h")}
+          ${readout("Started", h(tripWhen(t.start_time).split(" ").pop()), "")}
+        </div>`,
         glDial({ value: spd ?? t.avg_speed_kmh, min: 0, max: 160, step: 10,
           bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
           mark: t.max_speed_kmh, centre: spd != null ? n(spd) : "—", unit: "km/h now",
           colour: spd != null && spd > 110 ? "var(--amber)" : "#22d3ee",
           sub: { text: `max ${n(t.max_speed_kmh)} km/h` }, label: "Speed" }),
-        boxes(glBox("Trip Wh/km", n(tw), "", rated && tw ? (tw > rated ? "tone-warn" : "tone-good") : ""),
-          glBox(inst ? (inst.regen ? "Regen now" : "Power now") : "Energy",
-            inst ? (inst.kw != null ? n(Math.abs(inst.kw), 1) : "—") : n(t.energy_kwh, 2),
-            inst ? `kW${inst.whkm != null ? ` · ${n(inst.whkm)} Wh/km` : ""}` : "kWh",
-            inst && inst.regen ? "tone-good" : instTone),
-          glBox("Battery", lvl != null ? n(lvl, 1) : "—", `% · used ${n(t.soc_used, 1)}`)),
+        `${powerBar}
+         ${glSegs([{ label: "Trip Wh/km", text: `${n(tw)}${rated ? ` · rated ${n(rated)}` : ""}`, share: whShare,
+            colour: (q) => rated && q * rated * 1.6 > rated ? "var(--amber)" : "var(--green)" }])}
+         ${battBar}`,
         foot);
     },
     // Drive: boxes, the Wh/km dial, and how the distance splits by speed.
