@@ -4013,9 +4013,11 @@ document.getElementById("quick-nav")?.addEventListener("click", (e) => {
 // cards use, so it costs no chart instances and redraws instantly on rotate.
 // A cluster dial: a 240° sweep with ticks, coloured bands, a needle and an
 // optional marker (e.g. the rated line). Drawn on a 200x200 box.
+let glDialSeq = 0;
 function glDial({ value, min, max, step, bands = [], mark = null, centre, unit, sub,
   colour = "var(--text)", label = "" }) {
   const A0 = 150, SWEEP = 240, cx = 100, cy = 100;
+  const uid = `gld${++glDialSeq}`;
   const clamp = (x) => Math.max(min, Math.min(max, x));
   const ang = (x) => (A0 + (clamp(x) - min) / (max - min) * SWEEP) * Math.PI / 180;
   const pt = (a, r) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
@@ -4048,13 +4050,41 @@ function glDial({ value, min, max, step, bands = [], mark = null, centre, unit, 
   let needle = "";
   if (value != null && Number.isFinite(+value)) {
     const a = ang(+value), [nx, ny] = pt(a, 76), [bx1, by1] = pt(a + Math.PI / 2, 4), [bx2, by2] = pt(a - Math.PI / 2, 4);
-    needle = `<polygon points="${nx.toFixed(1)},${ny.toFixed(1)} ${bx1.toFixed(1)},${by1.toFixed(1)} ${bx2.toFixed(1)},${by2.toFixed(1)}"
-        fill="${colour}" class="gl-needle"/>
-      <circle cx="${cx}" cy="${cy}" r="7" fill="var(--panel-2)" stroke="${colour}" stroke-width="2"/>`;
+    // The needle in two halves, lit and shaded along its length, over a
+    // drop shadow offset down-right; the hub is a domed cap.
+    const pts = (a1, a2) => `${nx.toFixed(1)},${ny.toFixed(1)} ${a1.toFixed(1)},${a2.toFixed(1)} ${cx},${cy}`;
+    needle = `<g filter="url(#${uid}-sh)">
+        <polygon points="${pts(bx1, by1)}" fill="${colour}"/>
+        <polygon points="${pts(bx2, by2)}" fill="${colour}"/>
+        <polygon points="${pts(bx2, by2)}" fill="#000" opacity=".28"/>
+      </g>
+      <circle cx="${cx}" cy="${cy}" r="9" fill="url(#${uid}-hub)" stroke="${colour}" stroke-width="1.6"
+        filter="url(#${uid}-sh)"/>
+      <circle cx="${cx - 2.5}" cy="${cy - 3}" r="2.6" fill="#fff" opacity=".35"/>`;
   }
-  return `<svg class="gl-dial" viewBox="0 0 200 175" role="img" aria-label="${h(label)} ${h(centre)}">
-    <path d="${arc(min, max, 87)}" fill="none" stroke="var(--panel-2)" stroke-width="5"/>
-    ${bandArcs}${ticks}${markLine}${needle}
+  // A recessed face inside a bevelled metal rim, so the dial reads as an
+  // object with depth rather than lines on the page.
+  return `<svg class="gl-dial" viewBox="0 0 200 200" role="img" aria-label="${h(label)} ${h(centre)}">
+    <defs>
+      <radialGradient id="${uid}-face" cx="50%" cy="42%" r="60%">
+        <stop offset="0" stop-color="#1c2533"/><stop offset=".7" stop-color="#0f141c"/>
+        <stop offset="1" stop-color="#070a0f"/></radialGradient>
+      <linearGradient id="${uid}-rim" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#6b7686"/><stop offset=".45" stop-color="#2a313c"/>
+        <stop offset=".55" stop-color="#1a1f27"/><stop offset="1" stop-color="#4a5361"/></linearGradient>
+      <radialGradient id="${uid}-hub" cx="35%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#4b5565"/><stop offset="1" stop-color="#0d1117"/></radialGradient>
+      <filter id="${uid}-sh" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="1.6" dy="2.4" stdDeviation="1.6" flood-color="#000" flood-opacity=".7"/></filter>
+      <filter id="${uid}-glow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <circle cx="100" cy="100" r="98" fill="url(#${uid}-rim)"/>
+    <circle cx="100" cy="100" r="93" fill="url(#${uid}-face)"/>
+    <circle cx="100" cy="100" r="93" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="3"/>
+    <path d="M30 62 A78 78 0 0 1 170 62" fill="none" stroke="#fff" stroke-opacity=".06" stroke-width="10"/>
+    <path d="${arc(min, max, 87)}" fill="none" stroke="#05070a" stroke-width="7"/>
+    <g filter="url(#${uid}-glow)">${bandArcs}</g>${ticks}${markLine}${needle}
     <text x="100" y="140" text-anchor="middle" font-size="26" font-weight="760" fill="var(--text)">${h(centre)}</text>
     <text x="100" y="156" text-anchor="middle" font-size="10" fill="var(--muted)">${h(unit || "")}</text>
     ${sub ? `<text x="100" y="171" text-anchor="middle" font-size="10" font-weight="650" fill="${sub.colour || "var(--muted)"}">${h(sub.text)}</text>` : ""}
