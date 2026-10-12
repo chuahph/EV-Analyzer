@@ -323,6 +323,20 @@ if [ -z "${TELEMETRY_FORCE:-}" ]; then
   [ -n "$HAVE" ] && echo "  car is currently streaming the V$HAVE set" || true
 fi
 
+# The live page's fields stream fast (speed, distance and energy every 2 s;
+# level and range every 10 s) only when this box's bridge paces the stored
+# path back down to the cadence the rest of the app was built on (DB_INTERVALS
+# in bridge.py). An older bridge would pass the fast stream straight into the
+# database, so with one the classic intervals are kept.
+if grep -q '^DB_INTERVALS' /opt/tesla-bridge/bridge.py 2>/dev/null; then
+  FAST_DRIVE=2 FAST_LEVEL=10 FAST_RANGE=10
+  say "Fast live stream: speed, distance and energy every 2 s (stored history stays at 10 s)"
+else
+  FAST_DRIVE=10 FAST_LEVEL=60 FAST_RANGE=300
+  say "Bridge has no pacer yet: keeping the classic intervals. Update it first:
+     sudo curl -sL $APP_URL/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.py && sudo systemctl restart tesla-bridge"
+fi
+
 say "Building the configuration"
 CA=$(sed ':a;N;$!ba;s/\n/\\n/g' "/etc/letsencrypt/live/$TELEMETRY_HOST/chain.pem")
 cat > "$WORK/config.json" <<EOF
@@ -336,14 +350,14 @@ cat > "$WORK/config.json" <<EOF
       "Gear":                      {"interval_seconds": 5},
       "DriverSeatOccupied":        {"interval_seconds": 10},
       "DoorState":                 {"interval_seconds": 10},
-      "VehicleSpeed":              {"interval_seconds": 10},
-      "Odometer":                  {"interval_seconds": 10},
+      "VehicleSpeed":              {"interval_seconds": $FAST_DRIVE},
+      "Odometer":                  {"interval_seconds": $FAST_DRIVE},
       "Location":                  {"interval_seconds": 30},
 $DEFAULT_DRIVE_COUNTER
-      "EnergyRemaining":           {"interval_seconds": 10},
-      "Soc":                       {"interval_seconds": 60},
-      "BatteryLevel":              {"interval_seconds": 60},
-      "RatedRange":                {"interval_seconds": 300},
+      "EnergyRemaining":           {"interval_seconds": $FAST_DRIVE},
+      "Soc":                       {"interval_seconds": $FAST_LEVEL},
+      "BatteryLevel":              {"interval_seconds": $FAST_LEVEL},
+      "RatedRange":                {"interval_seconds": $FAST_RANGE},
       "DetailedChargeState":       {"interval_seconds": 30},
       "ChargePortLatch":           {"interval_seconds": 60},
       "ACChargingPower":           {"interval_seconds": 60},

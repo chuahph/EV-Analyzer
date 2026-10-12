@@ -134,3 +134,39 @@ def test_live_only_fields_never_reach_the_database_batch():
     assert [e["key"] for e in bridge._for_db(mixed)["data"]] == ["VehicleSpeed"]
     assert bridge._for_db(plain) is plain
     assert bridge._keys(mixed) & bridge.LIVE_FIELDS == {"VehicleSpeed", "PackCurrent"}
+
+
+def _rec(t, **fields):
+    from datetime import datetime, timezone
+    return {"vin": "V", "createdAt": datetime.fromtimestamp(t, timezone.utc).isoformat(),
+            "data": [{"key": k, "value": {"doubleValue": v}} for k, v in fields.items()]}
+
+
+def test_the_pacer_holds_the_stored_path_to_the_classic_intervals():
+    """Speed every 2 s from the car reaches storage at most every 10 s, and a
+    value held back (the car slowing to a stop) is still sent when its
+    interval is up — as the car itself would at a 10 s interval."""
+    p = bridge.Pacer()
+    t0 = 1_800_000_000.0
+    assert p.pace(_rec(t0, VehicleSpeed=50.0)) is not None
+    assert p.pace(_rec(t0 + 2, VehicleSpeed=30.0)) is None
+    assert p.pace(_rec(t0 + 4, VehicleSpeed=0.0, Gear=1.0))["data"] == [
+        {"key": "Gear", "value": {"doubleValue": 1.0}}]
+    assert p.due(now=0) == []                       # not yet
+    late = p.due(now=float("inf"))
+    assert [r["data"][0]["value"]["doubleValue"] for r in late] == [0.0]
+    assert p.pace(_rec(t0 + 12, VehicleSpeed=10.0)) is not None
+
+
+def test_a_level_reading_takes_its_energy_reading_with_it():
+    p = bridge.Pacer()
+    t0 = 1_800_000_000.0
+    p.pace(_rec(t0, EnergyRemaining=50.0))
+    r = p.pace(_rec(t0 + 3, EnergyRemaining=50.1, BatteryLevel=70.0))
+    assert {e["key"] for e in r["data"]} == {"BatteryLevel", "EnergyRemaining"}
+
+
+def test_replays_pass_unpaced():
+    p = bridge.Pacer()
+    r = dict(_rec(1_800_000_000.0, VehicleSpeed=5.0), isResend=True)
+    assert p.pace(r) is r and p.pace(r) is r

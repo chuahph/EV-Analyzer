@@ -243,6 +243,80 @@ def _keys(record: dict) -> set:
     return {e.get("key") for e in data if isinstance(e, dict)} if isinstance(data, list) else set()
 
 
+# The car streams the live page's fields fast (every 2 s). Everything else in
+# the app was built on, and measured against, the slower cadence below, so the
+# database path is paced back down to it: a field is passed on at most once
+# per its interval, and a value held back is sent when its interval is up —
+# exactly what the car itself does at a longer interval. The live page gets
+# every reading through the fast lane; the stored history sees what it always
+# saw. 02-configure-vehicle.sh only asks the car for the fast intervals when
+# this bridge carries DB_INTERVALS.
+DB_INTERVALS = {"VehicleSpeed": 10, "Odometer": 10, "EnergyRemaining": 10,
+                "BatteryLevel": 60, "Soc": 60, "RatedRange": 300}
+# Read with BatteryLevel/Soc by the charge-capacity pairing: when one of them
+# is passed on, the energy reading from the same record goes with it.
+PAIR_WITH_LEVEL = "EnergyRemaining"
+
+
+def _record_ts(record: dict) -> float:
+    from datetime import datetime
+    raw = record.get("createdAt") or record.get("created_at")
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    return time.time()
+
+
+class Pacer:
+    """Hold the database path to DB_INTERVALS; see the note above."""
+
+    def __init__(self):
+        self.last: dict = {}      # (vin, key) -> record time last passed on
+        self.held: dict = {}      # (vin, key) -> (due wall time, created_at, entry)
+
+    def pace(self, record: dict) -> dict | None:
+        data = record.get("data")
+        if not isinstance(data, list) or record.get("isResend"):
+            return record   # replays pass as they are: the car already paced them
+        vin, t = record.get("vin"), _record_ts(record)
+        keep, passed = [], set()
+        for e in data:
+            key = e.get("key") if isinstance(e, dict) else None
+            step = DB_INTERVALS.get(key)
+            if step is None:
+                keep.append(e)
+                continue
+            last = self.last.get((vin, key))
+            if last is None or t - last >= step:
+                self.last[(vin, key)] = t
+                self.held.pop((vin, key), None)
+                keep.append(e)
+                passed.add(key)
+            else:
+                self.held[(vin, key)] = (time.time() + (last + step - t),
+                                         record.get("createdAt") or record.get("created_at"), e)
+        if passed & {"BatteryLevel", "Soc"} and PAIR_WITH_LEVEL not in passed:
+            e = next((x for x in data if isinstance(x, dict) and x.get("key") == PAIR_WITH_LEVEL), None)
+            if e is not None:
+                keep.append(e)
+        if not keep:
+            return None
+        return record if len(keep) == len(data) else {**record, "data": keep}
+
+    def due(self, now: float | None = None) -> list:
+        """Held values whose interval is up, as records of their own."""
+        now = time.time() if now is None else now
+        out = []
+        for (vin, key), (when, created, e) in list(self.held.items()):
+            if when <= now:
+                del self.held[(vin, key)]
+                self.last[(vin, key)] = when
+                out.append({"vin": vin, "createdAt": created, "data": [e]})
+        return out
+
+
 def _for_db(record: dict):
     """The record without its live-only fields; None if nothing else is left."""
     data = record.get("data")
@@ -283,6 +357,7 @@ def main() -> int:
         threading.Thread(target=_live_worker, args=(live,), daemon=True).start()
         LOG.info("fast lane on -> %s/api/telemetry/live", APP_URL)
 
+    pacer = Pacer()
     batch: list = []
     last_flush = last_drain = time.monotonic()
     while True:
@@ -295,8 +370,11 @@ def main() -> int:
                     live["pending"].append(record)
                     live["event"].set()
                 record = _for_db(record)
+                if record is not None:
+                    record = pacer.pace(record)
             if record is not None:
                 batch.append(record)
+        batch.extend(pacer.due())
         now = time.monotonic()
         if batch and (len(batch) >= BATCH_MAX or now - last_flush >= BATCH_SECONDS):
             send(batch)
