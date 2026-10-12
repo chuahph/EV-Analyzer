@@ -351,16 +351,14 @@ async function openCar(vin) {
 }
 
 // After a car is opened: a short card showing the two ways to hold the phone —
-// sideways for the live dashboard, upright for the full data. Shown the first
-// three times (or until "don't show again"), only when the phone is upright,
-// and gone the moment it is turned sideways.
-const ORIENT_KEY = "orientHint";
+// sideways for the live dashboard, upright for the full data. Shown every time
+// until "don't show again" is ticked, only when the phone is upright, and gone
+// the moment it is turned sideways.
+const ORIENT_KEY = "orientHintOff";
 function showOrientHint() {
-  let seen = 0;
-  try { seen = +(localStorage.getItem(ORIENT_KEY) || 0); } catch (_) { /* private mode */ }
-  if (seen >= 3 || seen < 0) return;
-  if (glanceVisible() || document.getElementById("orient-hint")) return;
-  try { localStorage.setItem(ORIENT_KEY, String(seen + 1)); } catch (_) { /* private mode */ }
+  let off = false;
+  try { off = localStorage.getItem(ORIENT_KEY) === "1"; } catch (_) { /* private mode */ }
+  if (off || glanceVisible() || document.getElementById("orient-hint")) return;
   const el = document.createElement("div");
   el.id = "orient-hint";
   el.setAttribute("role", "dialog");
@@ -397,7 +395,7 @@ function showOrientHint() {
   document.body.appendChild(el);
   const close = () => {
     const never = el.querySelector(".oh-never input");
-    if (never && never.checked) { try { localStorage.setItem(ORIENT_KEY, "-1"); } catch (_) { /* private mode */ } }
+    if (never && never.checked) { try { localStorage.setItem(ORIENT_KEY, "1"); } catch (_) { /* private mode */ } }
     el.classList.add("out");
     clearTimeout(timer);
     window.removeEventListener("resize", onTurn);
