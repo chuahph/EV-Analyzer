@@ -2223,3 +2223,36 @@ header::after {
 .card h2 { border-bottom-color: #1b2632; }
 .card h2::after { width: 64px; background: linear-gradient(90deg, var(--hud), var(--accent-2)); box-shadow: 0 0 8px rgba(34,211,238,.6); }
 .sep { background: linear-gradient(90deg, transparent, rgba(34,211,238,.25) 50%, transparent); }
+
+/* --- Fit any phone -----------------------------------------------------------
+   Glance: the tab rail takes the body's height and its tabs shrink to share it,
+   so nine tabs fit an iPhone Pro in Safari (about 340px tall) as well as a Pro
+   Max; on short screens the frame, padding and type tighten a step. */
+.gl-rail { align-self: stretch; justify-content: center; min-height: 0; }
+.gl-rail::before { top: 4px; bottom: 4px; }
+.gl-tab { flex: 0 1 28px; height: auto; min-height: 15px; }
+.gl-tab svg { max-height: 72%; }
+@media (orientation: landscape) and (max-height: 380px) {
+  .gl-main { padding: 16px 26px 14px; gap: 4px; }
+  .gl-rail { gap: 2px; }
+  .gl-head h2 { font-size: 14px; }
+  .gl-head .gl-sub { font-size: 11px; }
+  .gl-page, .gl-side { gap: 7px; }
+  .gl-frame .c { width: 96px; height: 60px; }
+  .gl-frame .strip { left: 104px; right: 104px; }
+  .gl-frame .vent { top: 76px; bottom: 76px; }
+}
+@media (orientation: landscape) and (max-height: 330px) {
+  .gl-main { padding: 12px 22px 10px; }
+  .gl-foot { font-size: 11px; }
+  .gl-tab.on { width: 46px; }
+}
+/* Portrait on the narrower phones (iPhone mini, SE, Pro): the header row gives
+   the window picker the room, the badges shrink to their text. */
+@media (max-width: 400px) {
+  .controls #odo-badge, .controls #mode-badge { min-width: 0; padding: 0 8px; }
+  .controls .btn { padding: 0 8px; }
+  .kpi .value { font-size: clamp(18px, 5.6vw, 22px); }
+  .score-ring { width: 74px; height: 74px; }
+  .score-ring b { font-size: 24px; }
+}
