@@ -2418,24 +2418,16 @@ main > .card { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { .oh-phone.land, .oh-timer { animation: none; } }
 @media (orientation: landscape) and (max-height: 560px) { #orient-hint { display: none; } }
 
-/* Live page: the trip panels stretch to the height of the speed panel, their
-   tiles share it, and the figures grow with it. */
-.gl-side > .gl-trip { flex: 1 1 auto; max-height: 96%; margin-block: auto; }
-.gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; align-content: stretch; }
-.gl-side > .gl-trip .gl-rt { padding-top: 10px; padding-bottom: 10px; }
-.gl-side > .gl-trip .gl-rt strong { font-size: clamp(20px, 6.2vh, 30px); }
-.gl-side > .gl-trip .gl-rt strong small { font-size: .38em; }
-.gl-side > .gl-trip .gl-rt i { width: 26px; height: 26px; }
-.gl-side > .gl-trip .gl-rt i svg { width: 16px; height: 16px; }
-.gl-side > .gl-trip .gl-rt span { font-size: 10px; }
-.gl-side > .gl-trip .gl-trip-h { font-size: 10.5px; letter-spacing: .1em; padding-bottom: 8px; min-width: 0; }
+/* Live page: the trip panels stay compact, a 2 x 2 grid of tiles on every
+   screen size; the heading is kept inside the panel. */
+.gl-side > .gl-trip .gl-trip-h { font-size: 10.5px; letter-spacing: .1em; min-width: 0; }
 .gl-side > .gl-trip .gl-trip-h em { font-size: 9.5px; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
-/* Narrow sideways screens (SE-size): one column of wide tiles, so figures and
-   labels are never clipped. */
 @media (orientation: landscape) and (max-width: 740px) {
-  .gl-side > .gl-trip .gl-rts { grid-template-columns: 1fr; gap: 6px; }
-  .gl-side > .gl-trip .gl-rt { grid-template-rows: auto; grid-template-columns: auto 1fr auto; align-items: center; padding: 6px 10px; }
-  .gl-side > .gl-trip .gl-rt i { grid-row: auto; width: 22px; height: 22px; }
-  .gl-side > .gl-trip .gl-rt strong { grid-column: auto; text-align: right; font-size: clamp(16px, 5.2vh, 22px); }
-  .gl-side > .gl-trip .gl-rt.wide { grid-column: auto; }
+  .gl-side > .gl-trip { padding: 8px 10px; }
+  .gl-side > .gl-trip .gl-trip-h em { display: none; }
+  .gl-side > .gl-trip .gl-rts { gap: 6px; padding-top: 6px; }
+  .gl-side > .gl-trip .gl-rt { padding: 6px 7px; column-gap: 5px; }
+  .gl-side > .gl-trip .gl-rt i { width: 18px; height: 18px; }
+  .gl-side > .gl-trip .gl-rt i svg { width: 12px; height: 12px; }
+  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, 4.4vh, 18px); }
 }
