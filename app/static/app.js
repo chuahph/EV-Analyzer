@@ -4207,7 +4207,11 @@ async function glLivePoll() {
   let wait = 30000;
   try {
     const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
-    const r = await fetch("/api/live" + (cap ? `?capacity_kwh=${cap}` : ""), { credentials: "same-origin" });
+    // The vin too, so the app need not look the car up on every poll.
+    const q = new URLSearchParams();
+    if (cap) q.set("capacity_kwh", cap);
+    if (lastData && lastData.vehicle && lastData.vehicle.vin) q.set("vin", lastData.vehicle.vin);
+    const r = await fetch("/api/live?" + q, { credentials: "same-origin" });
     if (r.ok) {
       const L = await r.json();
       const nw = L.now || {};

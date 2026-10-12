@@ -15164,8 +15164,10 @@ def live_now(
                 "climate_on": snap.get("climate_on"), "charging": snap.get("charging"),
                 "power_kw": power,
             }
+    # Re-read from the database at most every 8 s while driving and every
+    # 30 s parked: the only database reads a live poll ever makes.
     cached = _LIVE_TRIP_CACHE.get(vin)
-    if cached and time.time() - cached[0] < 8.0:
+    if cached and time.time() - cached[0] < (8.0 if cached[1] else 30.0):
         trip = cached[1]
     else:
         open_trip, snap = _live_from_stream(session, vin)
