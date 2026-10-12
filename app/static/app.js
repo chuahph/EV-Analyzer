@@ -4088,6 +4088,80 @@ const GL_FRAME = `<div class="gl-frame" aria-hidden="true">
   <i class="vent l"></i><i class="vent r"></i>
 </div>`;
 
+// The Live page's speedometer: a diamond readout with large digits inside a
+// ring of LED segments that light up to the current speed (cyan, amber above
+// 110, red above 140), a pointer on the ring, the top speed as a white tick and
+// the gear selector underneath.
+function glSpeedo({ value, max = 160, mark = null, gear = null, label = "Speed" }) {
+  const uid = `gls${++glDialSeq}`;
+  const A0 = 150, SWEEP = 240, N = 48, cx = 100, cy = 100;
+  const rad = (a) => a * Math.PI / 180;
+  const pt = (a, r) => [cx + r * Math.cos(rad(a)), cy + r * Math.sin(rad(a))];
+  const angOf = (v) => A0 + Math.max(0, Math.min(max, v)) / max * SWEEP;
+  const has = value != null && Number.isFinite(+value);
+  const v = has ? +value : 0;
+  const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 110 ? "#f59e0b" : "#22d3ee");
+  let segs = "";
+  for (let k = 0; k < N; k++) {
+    const mid = (k + 0.5) / N * max, a = A0 + (k + 0.5) / N * SWEEP;
+    const [x1, y1] = pt(a, 70), [x2, y2] = pt(a, 85);
+    const lit = has && v > 0.5 && mid <= v + max / N / 2;
+    segs += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+      stroke="${lit ? colourAt(mid) : "#121b27"}" stroke-width="4.2" stroke-linecap="butt"${lit ? "" : ' opacity=".9"'}/>`;
+  }
+  let labels = "";
+  for (let t = 0; t <= max + 1e-9; t += 40) {
+    const [tx, ty] = pt(angOf(t), 96);
+    labels += `<text x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" text-anchor="middle" font-size="8"
+      fill="#6f7f94" font-weight="600">${Math.round(t)}</text>`;
+  }
+  let markLine = "";
+  if (mark != null && mark > 0) {
+    const [x1, y1] = pt(angOf(mark), 67), [x2, y2] = pt(angOf(mark), 89);
+    markLine = `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+      stroke="#fff" stroke-width="2.2"/>`;
+  }
+  // The pointer: a small triangle on the outside of the ring, aiming in.
+  let pointer = "";
+  if (has) {
+    const a = angOf(v), [tx, ty] = pt(a, 88.5), [lx, ly] = pt(a - 2.6, 95), [rx, ry] = pt(a + 2.6, 95);
+    pointer = `<polygon points="${tx.toFixed(1)},${ty.toFixed(1)} ${lx.toFixed(1)},${ly.toFixed(1)} ${rx.toFixed(1)},${ry.toFixed(1)}"
+      fill="${colourAt(v)}" filter="url(#${uid}-glow)"/>`;
+  }
+  const num = has ? String(Math.round(v)) : "—";
+  const size = num.length >= 3 ? 46 : 58;
+  const gears = ["P", "R", "N", "D"].map((g, k) => {
+    const on = gear === g;
+    return `<text x="${(79 + k * 14).toFixed(0)}" y="173" text-anchor="middle" font-size="10" font-weight="${on ? 800 : 600}"
+      fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>`;
+  }).join("");
+  const gearBox = gear && "PRND".includes(gear)
+    ? `<rect x="${(79 + "PRND".indexOf(gear) * 14 - 6).toFixed(0)}" y="164" width="12" height="13" rx="2" fill="none"
+        stroke="#22d3ee" stroke-width="1" opacity=".8"/>` : "";
+  return `<svg class="gl-dial gl-speedo" viewBox="-6 -6 212 212" role="img" aria-label="${h(label)} ${h(num)} km/h">
+    <defs>
+      <radialGradient id="${uid}-face" cx="50%" cy="45%" r="62%">
+        <stop offset="0" stop-color="#16202e"/><stop offset=".75" stop-color="#0b1018"/><stop offset="1" stop-color="#06090e"/></radialGradient>
+      <linearGradient id="${uid}-dia" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#1b2a3c"/><stop offset="1" stop-color="#0a1119"/></linearGradient>
+      <filter id="${uid}-glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <circle cx="100" cy="100" r="99" fill="url(#${uid}-face)" stroke="#1d2a38" stroke-width="1.4"/>
+    <path d="M${pt(A0, 91).map((q) => q.toFixed(1)).join(" ")} A91 91 0 1 1 ${pt(A0 + SWEEP, 91).map((q) => q.toFixed(1)).join(" ")}"
+      fill="none" stroke="rgba(34,211,238,.35)" stroke-width="1"/>
+    <g filter="url(#${uid}-glow)">${segs}</g>${markLine}${labels}${pointer}
+    <polygon points="100,42 158,100 100,158 42,100" fill="url(#${uid}-dia)" stroke="#22d3ee" stroke-width="1.6"
+      filter="url(#${uid}-glow)"/>
+    <polygon points="100,49 151,100 100,151 49,100" fill="none" stroke="rgba(34,211,238,.28)" stroke-width="1"/>
+    <path d="M100 42v8M158 100h-8M100 158v-8M42 100h8" stroke="#fff" stroke-width="2" opacity=".85"/>
+    <text x="100" y="${num.length >= 3 ? 112 : 118}" text-anchor="middle" font-size="${size}" font-weight="800"
+      fill="#f4fbff" filter="url(#${uid}-glow)" style="font-variant-numeric:tabular-nums">${num}</text>
+    <text x="100" y="134" text-anchor="middle" font-size="8.5" font-weight="650" letter-spacing="1.6" fill="#7e93ab">KM/H</text>
+    ${gearBox}${gears}
+  </svg>`;
+}
+
 let glDialSeq = 0;
 function glDial({ value, min, max, step, bands = [], mark = null, centre, unit, sub,
   colour = "var(--text)", label = "" }) {
@@ -4661,10 +4735,7 @@ function renderGlance(d) {
               ${tile("odo", "Odometer", odo != null ? fmt(odo) : "—", "km", "", "wide")}
             </div>
           </div>`,
-          glDial({ value: spd ?? 0, min: 0, max: 160, step: 10,
-            bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
-            centre: spd != null ? n(spd) : "—", unit: "km/h", colour: "#22d3ee",
-            sub: { text: nw.shift ? `gear ${nw.shift}` : "waiting for the car" }, label: "Speed" }),
+          glSpeedo({ value: spd, max: 160, gear: nw.shift, label: "Speed" }),
           lt ? `<div class="gl-trip">
             <div class="gl-trip-h">Last trip<em>${lt.id != null ? "#" + lt.id + " · " : ""}${h(tripWhen(lt.start_time).split(" ").pop())}</em></div>
             <div class="gl-rts">
@@ -4709,11 +4780,7 @@ function renderGlance(d) {
             ${tile("whkm", "Use", n(tw), "Wh/km", twTone)}
           </div>
         </div>`,
-        glDial({ value: spd ?? t.avg_speed_kmh, min: 0, max: 160, step: 10,
-          bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
-          mark: t.max_speed_kmh, centre: spd != null ? n(spd) : "—", unit: "km/h now",
-          colour: spd != null && spd > 110 ? "var(--amber)" : "#22d3ee",
-          sub: { text: `max ${n(t.max_speed_kmh)} km/h` }, label: "Speed" }),
+        glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, label: "Speed" }),
         `${powerBar}
          ${glTrace(glLiveState.hist)}
          ${battBar}`,
