@@ -110,6 +110,7 @@
       <button class="qn-btn tone-red" data-target="charging-card"><span class="qn-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2.5 4 13.5h7l-1 8 9-11h-7l1-8Z"/></svg></span><span class="qn-label">Charging</span></button>
       <button class="qn-btn tone-teal" data-target="planner-card"><span class="qn-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 6.5 6-3 6 3 6-3v14l-6 3-6-3-6 3v-14Z"/><path d="M9 3.5v14M15 6.5v14"/></svg></span><span class="qn-label">Plan</span></button>
       <button class="qn-btn tone-amber" data-target="recommendations-card"><span class="qn-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9.5 18.5h5M10.5 21.5h3"/><path d="M15.1 14.2c.2-1 .7-1.8 1.4-2.5A4.9 4.9 0 0 0 18 8.2a6 6 0 0 0-12 0c0 1.3.5 2.5 1.5 3.5.7.7 1.2 1.5 1.4 2.5"/></svg></span><span class="qn-label">Tips</span></button>
+      <button class="qn-btn tone-teal qn-glance" data-glance><span class="qn-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 12h18M12 4v16"/></svg></span><span class="qn-label">Glance</span></button>
       <button class="qn-btn tone-blue" data-scroll-top><span class="qn-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20V5M5.5 11.5 12 5l6.5 6.5"/></svg></span><span class="qn-label">Top</span></button>
     </nav>
   </header>
@@ -680,6 +681,10 @@ export default {
   </div>
 
   <main id="dashboard">
+    <!-- Glance: the whole window on one landscape screen, drawn by
+         renderGlance() in app.js. Opens by itself when a phone is turned
+         sideways, and from the Glance shortcut on a wide screen. -->
+    <section id="glance" class="glance" aria-label="Summary at a glance"></section>
     <!-- Driving score for the whole window (above the KPI boxes), filled by app.js. -->
     <section id="score-banner" class="score-banner" style="display:none"></section>
     <hr id="sep-score" class="sep" style="display:none" />

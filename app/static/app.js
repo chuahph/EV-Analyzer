@@ -3817,6 +3817,7 @@ async function load() {
     renderAssessment(d.assessment, d.currency);
     renderRecommendations(d.recommendations, d.currency);
     renderQuickNav();
+    renderGlance(d);
 
     const now = new Date();
     const windowText = d.window_label || `${d.window_days}-day window`;
@@ -3992,7 +3993,7 @@ document.getElementById("show-more-kpis")?.addEventListener("click", () => {
 // change.
 document.getElementById("quick-nav")?.addEventListener("click", (e) => {
   const btn = e.target.closest(".qn-btn");
-  if (!btn) return;
+  if (!btn || btn.hasAttribute("data-glance")) return;
   if (btn.hasAttribute("data-scroll-top")) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
@@ -4007,6 +4008,149 @@ document.getElementById("quick-nav")?.addEventListener("click", (e) => {
 // Show only the shortcuts whose target card is actually on screen right now
 // (Battery Health, Efficiency and Charging cards all hide themselves when
 // their data isn't available) — a shortcut to a hidden card would be dead.
+// --- Glance: the window on one landscape screen ---------------------------
+// Eight tiles from the same /summary payload the cards use, drawn as plain SVG
+// so they cost no chart instances and redraw instantly on rotate.
+function glRing(pct, colour, centre, sub) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const r = 42, c = 2 * Math.PI * r;
+  // No arc at all for nothing: a round cap on a zero-length arc draws a dot.
+  const arc = p > 0 ? `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${colour}" stroke-width="10"
+      stroke-linecap="round" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}"
+      transform="rotate(-90 50 50)"/>` : "";
+  return `<svg viewBox="0 0 100 100" role="img" aria-label="${h(centre)}">
+    <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="10"/>
+    ${arc}
+    <text x="50" y="${sub ? 52 : 57}" text-anchor="middle" font-size="22" font-weight="750"
+      fill="var(--text)">${h(centre)}</text>
+    ${sub ? `<text x="50" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">${h(sub)}</text>` : ""}
+  </svg>`;
+}
+
+function glSpark(values, colour) {
+  const v = values.filter((x) => Number.isFinite(x));
+  if (v.length < 2) return "";
+  const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+  const W = 200, H = 50;
+  const pts = v.map((y, i) => `${(i / (v.length - 1) * W).toFixed(1)},${(H - 4 - (y - lo) / span * (H - 8)).toFixed(1)}`);
+  return `<svg class="gl-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <polygon points="0,${H} ${pts.join(" ")} ${W},${H}" fill="${colour}" fill-opacity=".14"/>
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${colour}" stroke-width="2"
+      vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function glBar(label, value, max, colour, text) {
+  const w = max > 0 ? Math.max(2, Math.min(100, value / max * 100)) : 0;
+  return `<div class="gl-bar"><span>${h(label)}</span>
+    <span class="track"><span class="fill" style="width:${w.toFixed(1)}%;background:${colour}"></span></span>
+    <strong>${h(text)}</strong></div>`;
+}
+
+function renderGlance(d) {
+  const el = document.getElementById("glance");
+  if (!el || !d) return;
+  const drv = d.driving || {}, eff = d.efficiency || {}, bal = d.battery_balance || {};
+  const chg = d.charging || {}, bat = d.battery || {}, v = d.vehicle || {};
+  const cur = d.currency || "";
+  const n = (x, dg = 0) => (x == null || !Number.isFinite(+x) ? "—" : fmt(+x, dg));
+  const tile = (label, body) => `<div class="gl-tile"><div class="gl-label">${h(label)}</div>${body}</div>`;
+
+  // 1 · Battery now, and how much of it this window used.
+  // With no current reading (an imported history), the ring shows what the
+  // window used instead of an empty gauge.
+  const level = bal.current_level_pct ?? bal.current_soc_pct;
+  const used = bal.used_pct;
+  const ring1 = level != null
+    ? glRing(level, "var(--green)", `${Math.round(level)}%`, "now")
+    : glRing(used ?? 0, "var(--amber)", used != null ? `${n(used, 1)}%` : "—", "used");
+  const t1 = tile("Battery", `<div class="gl-ring">${ring1}
+    <div><div class="gl-line">Used <strong>${n(used, 1)}%</strong></div>
+    <div class="gl-line"><strong>${n(bal.used_kwh, 1)}</strong> kWh</div>
+    <div class="gl-line">of ${n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 1)} kWh</div></div></div>`);
+
+  // 2 · Distance and trips.
+  const t2 = tile("Driven", `<div class="gl-big">${n(drv.total_distance_km, 1)}<small>km</small></div>
+    <div class="gl-line"><strong>${n(drv.total_drives)}</strong> trips · <strong>${n(drv.total_duration_h, 1)}</strong> h</div>
+    <div class="gl-line">avg <strong>${n(drv.avg_speed_kmh)}</strong> km/h · longest <strong>${n(drv.longest_trip_km, 1)}</strong> km</div>`);
+
+  // 3 · Efficiency, with its daily trend.
+  const vsRated = eff.vs_rated_pct;
+  const daily = Object.values(eff.daily_efficiency || {}).map(Number);
+  const t3 = tile("Efficiency", `<div class="gl-big">${n(eff.avg_efficiency_wh_per_km ?? drv.avg_efficiency_wh_per_km)}<small>Wh/km</small></div>
+    <div class="gl-line">${vsRated == null ? "" : `<strong class="${vsRated <= 0 ? "tone-good" : "tone-warn"}">${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}%</strong> vs rated`}</div>
+    ${glSpark(daily, "#f59e0b")}`);
+
+  // 4 · Where the energy went: driving against standing still.
+  const tripK = +bal.trip_kwh || +drv.trip_energy_used_kwh || 0, parkK = +bal.vampire_kwh || 0;
+  const tot = tripK + parkK;
+  const t4 = tile("Energy used", `<div class="gl-ring">${
+    glRing(tot > 0 ? tripK / tot * 100 : 0, "var(--accent-2)", `${n(tot, 1)}`, "kWh")}
+    <div><div class="gl-line"><strong style="color:var(--accent-2)">●</strong> Driving <strong>${n(tripK, 1)}</strong></div>
+    <div class="gl-line"><strong style="color:var(--panel-2)">●</strong> Parked <strong>${n(parkK, 2)}</strong></div>
+    <div class="gl-line">${n(bal.vampire_hours, 1)} h parked</div></div></div>`);
+
+  // 5 · Driving score.
+  const score = drv.eco_score;
+  const sc = score == null ? "var(--muted)" : score >= 80 ? "var(--green)" : score >= 60 ? "var(--accent-2)" : "var(--amber)";
+  const t5 = tile("Driving score", `<div class="gl-ring">${
+    glRing(score ?? 0, sc, score != null ? String(Math.round(score)) : "—", drv.eco_grade || "")}
+    <div><div class="gl-line">p95 <strong>${n(drv.p95_speed_kmh)}</strong> km/h</div>
+    <div class="gl-line">max <strong>${n(drv.max_speed_kmh)}</strong> km/h</div></div></div>`);
+
+  // 6 · The last trip.
+  const lt = (drv.recent_trips || [])[0];
+  const t6 = tile("Last trip", lt ? `<div class="gl-big">${n(lt.distance_km, 1)}<small>km</small></div>
+    <div class="gl-line"><strong>${n(lt.wh_per_km)}</strong> Wh/km · <strong>${n(lt.duration_min)}</strong> min${lt.id != null ? ` · #${lt.id}` : ""}</div>
+    <div class="gl-line">${h(lt.route || tripWhen(lt.start_time))}</div>
+    ${lt.efficiency_band ? `<div class="gl-line">${h(lt.efficiency_band)}${lt.vs_expected_pct != null ? ` · ${lt.vs_expected_pct > 0 ? "+" : ""}${n(lt.vs_expected_pct, 0)}% vs expected` : ""}</div>` : ""}`
+    : `<div class="gl-line">No trips in this window</div>`);
+
+  // 7 · Cost.
+  const t7 = tile("Cost", `<div class="gl-big">${h(cur)} ${n(drv.total_cost, 2)}</div>
+    <div class="gl-line"><strong>${h(cur)} ${n(drv.cost_per_km, 3)}</strong> per km</div>
+    <div class="gl-line">charging paid <strong>${h(cur)} ${n(chg.total_cost, 2)}</strong></div>`);
+
+  // 8 · This week against last, or battery health when there is no week yet.
+  const wk = d.week_compare;
+  let t8;
+  if (wk && wk.this && wk.last) {
+    const mx = Math.max(wk.this.distance_km || 0, wk.last.distance_km || 0);
+    t8 = tile("7 days vs previous", `<div class="gl-bars">
+      ${glBar("This wk", wk.this.distance_km || 0, mx, "var(--accent-2)", `${n(wk.this.distance_km)} km`)}
+      ${glBar("Last wk", wk.last.distance_km || 0, mx, "var(--panel-2)", `${n(wk.last.distance_km)} km`)}
+      <div class="gl-line">Wh/km <strong>${n(wk.this.wh_per_km)}</strong> vs <strong>${n(wk.last.wh_per_km)}</strong></div></div>`);
+  } else if (bat.capacity_health || bat.available) {
+    const ch = bat.capacity_health;
+    const hp = ch ? ch.health_pct : bat.health_pct;
+    t8 = tile("Battery health", `<div class="gl-ring">${
+      glRing(hp ?? 0, "var(--teal)", hp != null ? `${n(hp, 1)}%` : "—", "health")}
+      <div><div class="gl-line">${ch ? `<strong>${n(ch.measured_kwh, 1)}</strong> of ${n(ch.new_kwh, 1)} kWh` : `${n(bat.est_full_range_km)} km full`}</div></div></div>`);
+  } else {
+    t8 = tile("Charging", `<div class="gl-big">${n(chg.total_energy_kwh, 1)}<small>kWh</small></div>
+      <div class="gl-line"><strong>${n(chg.total_sessions)}</strong> session${chg.total_sessions === 1 ? "" : "s"} · avg to <strong>${n(chg.avg_end_soc)}%</strong></div>
+      <div class="gl-line">DC <strong>${n(chg.dc_energy_share_pct)}%</strong> of energy</div>`);
+  }
+
+  const name = v.name || v.model || "Tesla";
+  el.innerHTML = `<div class="gl-head"><h2>${h(name)}</h2>
+      <span class="gl-sub">${h(d.window_label || `${d.window_days}-day window`)}</span>
+      <button class="gl-close" type="button" data-glance-close>Close</button></div>
+    ${t1}${t2}${t3}${t4}${t5}${t6}${t7}${t8}`;
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-glance]")) {
+    if (lastData) renderGlance(lastData);
+    document.body.classList.add("glance-on");
+  } else if (e.target.closest("[data-glance-close]")) {
+    document.body.classList.remove("glance-on");
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.body.classList.remove("glance-on");
+});
+
 function renderQuickNav() {
   document.querySelectorAll("#quick-nav .qn-btn[data-target]").forEach((btn) => {
     const target = document.getElementById(btn.dataset.target);

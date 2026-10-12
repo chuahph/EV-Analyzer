@@ -1619,3 +1619,67 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
 .rm-table td { text-align: right; padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.08); vertical-align: top; }
 .rm-table th:first-child, .rm-table td:first-child { text-align: left; }
 #range-model .mx-sub { display: block; font-size: 11px; opacity: .6; }
+
+/* --- Glance: a one-screen landscape summary ---------------------------------
+   Fixed over the dashboard rather than in its flow, so turning a phone back
+   upright returns to exactly the scroll position it left. Shown by the
+   landscape-phone media query below, or by body.glance-on (the Glance
+   shortcut, offered on wide screens only). */
+.glance {
+  display: none; position: fixed; inset: 0; z-index: 60;
+  background: var(--bg); overflow: auto;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+           max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: auto repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+/* On a wide screen the tiles keep a card's proportions instead of
+   stretching to the window, centred as one block. */
+body.glance-on .glance {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 290px));
+  grid-template-rows: auto repeat(2, 200px); justify-content: center;
+  align-content: center; gap: 14px;
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  body:not(.view-home) .glance { display: grid; }
+  body:not(.view-home) .glance .gl-close { display: none; }
+}
+/* The shortcut only where a phone cannot simply be turned sideways. */
+.qn-btn.qn-glance { display: none; }
+@media (min-width: 900px) { .qn-btn.qn-glance { display: flex; } }
+.gl-head {
+  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px;
+  min-width: 0;
+}
+.gl-head h2 { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.gl-head .gl-sub { color: var(--muted); font-size: 12px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.gl-close { margin-left: auto; background: none; border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 2px 10px; font-size: 13px; }
+.gl-tile {
+  background: linear-gradient(180deg, #1c222c, var(--panel));
+  border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--edge-hi), var(--elev-1);
+  padding: 10px 12px; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+}
+.gl-label { color: var(--muted); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em; }
+.gl-big { font-size: clamp(20px, 4.2vh, 30px); font-weight: 750; line-height: 1.1;
+  font-variant-numeric: tabular-nums; }
+.gl-big small { font-size: .5em; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.gl-line { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-line strong { color: var(--text); font-weight: 650; }
+.gl-ring { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-height: 0; }
+.gl-ring svg { width: min(44%, 118px); height: auto; max-height: 100%; aspect-ratio: 1; flex: 0 0 auto; }
+.gl-ring > div { min-width: 0; }
+.gl-spark { flex: 1 1 auto; min-height: 30px; max-height: 80px; width: 100%; margin-top: auto; }
+.gl-bars { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; justify-content: center; }
+.gl-bar { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gl-bar .track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.gl-bar .fill { height: 100%; border-radius: 4px; }
+.gl-tile .tone-good { color: var(--green); } .gl-tile .tone-warn { color: var(--amber); }
