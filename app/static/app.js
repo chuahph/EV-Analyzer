@@ -4172,8 +4172,32 @@ function glanceVisible() {
   const el = document.getElementById("glance");
   return !!el && getComputedStyle(el).display !== "none";
 }
+// Keep the screen on while the Live page is showing (Screen Wake Lock), so a
+// phone in a mount does not dim and lock mid-drive. Released as soon as the
+// page is left, the phone turned upright or the app put away; the browser
+// drops the lock itself when the app is hidden, so it is asked for again on
+// return. Unsupported browsers just carry on and the page says so.
+const glWake = { lock: null, supported: "wakeLock" in navigator, failed: false };
+async function glWakeSync() {
+  const want = glanceTab === "live" && glanceVisible() && !document.hidden;
+  if (want && !glWake.lock && glWake.supported) {
+    try {
+      glWake.lock = await navigator.wakeLock.request("screen");
+      glWake.failed = false;
+      glWake.lock.addEventListener("release", () => { glWake.lock = null; });
+    } catch (_) { glWake.failed = true; }
+  } else if (!want && glWake.lock) {
+    try { await glWake.lock.release(); } catch (_) { /* already gone */ }
+    glWake.lock = null;
+  }
+}
+document.addEventListener("visibilitychange", () => { glWakeSync(); });
+window.addEventListener("orientationchange", () => setTimeout(glWakeSync, 400));
+window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
+
 async function glLivePoll() {
   clearTimeout(glLiveState.timer);
+  glWakeSync();
   if (glanceTab !== "live" || !glanceVisible() || document.hidden) {
     glLiveState.timer = setTimeout(glLivePoll, 3000);
     return;
@@ -4263,6 +4287,8 @@ function renderGlance(d) {
         : t ? (fresh ? `live · updated ${nw.age_sec}s ago` : `drive open · last heard ${Math.round(nw.age_sec / 60)} min ago`)
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
+        ${glWake.lock ? '<span class="gl-chip">screen kept on</span>'
+          : !glWake.supported || glWake.failed ? '<span class="gl-chip tone-warn">screen may sleep</span>' : ""}
         ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
@@ -4468,7 +4494,7 @@ document.addEventListener("click", (e) => {
     glanceTab = tab.dataset.glTab;
     glSave("glanceTab", glanceTab);
     if (lastData) renderGlance(lastData);
-    if (glanceTab === "live") glLivePoll();
+    if (glanceTab === "live") glLivePoll(); else glWakeSync();
     return;
   }
   if (e.target.closest("[data-gl-swap]")) {
@@ -4481,6 +4507,7 @@ document.addEventListener("click", (e) => {
     document.body.classList.add("glance-on");
   } else if (e.target.closest("[data-glance-close]")) {
     document.body.classList.remove("glance-on");
+    glWakeSync();
   }
 });
 document.addEventListener("keydown", (e) => {
