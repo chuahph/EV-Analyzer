@@ -1696,10 +1696,17 @@ body.glance-on .glance > .gl-main { flex: 0 1 1040px; height: min(560px, 100%); 
 .gl-page { flex: 1 1 auto; min-height: 0; display: grid; gap: 10px; }
 .gl-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto; }
-.gl-side { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+.gl-side { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; justify-content: center;
+  padding: 4px 0; }
 .gl-side > .gl-panel { flex: 1 1 auto; }
 .gl-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
-.gl-stack { display: flex; flex-direction: column; gap: 8px; }
+/* Boxes in a side column share its height, so they read as tall tiles
+   beside the dial rather than thin strips. */
+.gl-stack { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; }
+.gl-stack > .gl-box { flex: 1 1 0; justify-content: center; min-height: 54px; max-height: 120px; gap: 3px;
+  padding: 8px 12px; }
+.gl-stack > .gl-box .gl-box-v { font-size: clamp(18px, 6.2vh, 30px); }
+.gl-stack > .gl-box .gl-box-l { font-size: 10.5px; }
 .gl-panel { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px;
   background: linear-gradient(180deg, #19202a, var(--panel)); border: 1px solid var(--border);
   border-radius: 14px; padding: 8px 10px; box-shadow: var(--edge-hi); }
