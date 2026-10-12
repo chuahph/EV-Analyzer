@@ -5202,3 +5202,15 @@ wireInfoButtons(document);
 
 // First load lands on the home (garage) page for car selection.
 showHome();
+
+// No zoom. iOS Safari ignores user-scalable=no in the viewport tag, so the
+// pinch gesture itself is cancelled here; touch-action in style.css covers
+// double-tap and every other browser. One-finger scrolling is untouched.
+(() => {
+  const stop = (e) => e.preventDefault();
+  ["gesturestart", "gesturechange", "gestureend"].forEach((t) =>
+    document.addEventListener(t, stop, { passive: false }));
+  document.addEventListener("touchmove", (e) => {
+    if (e.touches && e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+})();

@@ -39,6 +39,12 @@
 }
 
 html { -webkit-text-size-adjust: 100%; }
+/* The layout is fixed to the screen: no pinch or double-tap zoom, and nothing
+   wider than the screen to pan to. Panning stays on, so the matrix and other
+   wide tables still scroll sideways inside their own boxes. clip, not hidden,
+   so body does not become a scroll container and sticky headers keep working. */
+html, body { touch-action: pan-x pan-y; overflow-x: clip; }
+button, a, input, select, textarea, label { touch-action: manipulation; }
 /* Tame the native rubber-band so the custom pull-to-refresh reads cleanly. */
 html, body { overscroll-behavior-y: none; }
 
