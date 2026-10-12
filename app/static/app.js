@@ -4320,7 +4320,7 @@ function renderGlance(d) {
   el.classList.toggle("gl-rail-right", side === "right");
   const rail = `<nav class="gl-rail" aria-label="Glance pages">
       ${GLANCE_TABS.map((t) => `<button type="button" class="gl-tab${t.id === glanceTab ? " on" : ""}" data-gl-tab="${t.id}"
-        style="--tc:${t.c}" title="${t.label}" aria-label="${t.label}"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ico}</svg></button>`).join("")}
+        style="--tc:${t.c}" title="${t.label}" aria-label="${t.label}"><span class="gl-tab-face"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ico}</svg></span></button>`).join("")}
     </nav>`;
   const cur_tab = GLANCE_TABS.find((t) => t.id === glanceTab);
   const name = v.name || v.model || "Tesla";

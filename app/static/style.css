@@ -1871,3 +1871,101 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 /* Bars as cylinders: a highlight down the left, shade on the right. */
 .gl-vbar::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background: linear-gradient(90deg, rgba(255,255,255,.22), rgba(255,255,255,0) 40%, rgba(0,0,0,.28)); }
+
+/* --- Glance, futuristic pass ------------------------------------------------
+   Tabs as bevelled 3D chevrons: the button is the lit rim, the inner face is
+   inset 2px with its own shading, and a dark lower edge reads as thickness. */
+.gl-tab {
+  position: relative; width: 40px; height: 28px; padding: 0;
+  background: linear-gradient(180deg, #5c6878 0%, #2a323d 45%, #0b0e13 100%);
+}
+.gl-tab-face {
+  position: absolute; inset: 2px 2px 3px 1px; display: flex; align-items: center;
+  padding-left: 7px; clip-path: inherit;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 45%, rgba(0,0,0,.35)),
+    linear-gradient(90deg, #1c232e, #10151c);
+}
+.gl-rail-right .gl-tab-face { inset: 2px 1px 3px 2px; padding-left: 0; padding-right: 7px; justify-content: flex-end; }
+.gl-tab:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 70%, #fff) 0%, color-mix(in srgb, var(--tc) 35%, #1b2029) 50%, #0b0e13 100%); }
+.gl-tab.on {
+  width: 52px; color: #071018;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 55%, #ffffff) 0%, var(--tc) 45%, color-mix(in srgb, var(--tc) 45%, #000) 100%);
+}
+.gl-tab.on .gl-tab-face {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 48%, rgba(0,0,0,.22)),
+    linear-gradient(90deg, color-mix(in srgb, var(--tc) 80%, #fff), var(--tc));
+}
+.gl-tab.on::after {   /* light thrown onto the page from the open tab */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: 0 0 18px 2px var(--tc);
+}
+.gl-rail { filter: drop-shadow(0 3px 0 #05070a) drop-shadow(0 8px 10px rgba(0,0,0,.7)); position: relative; }
+/* A slim lit spine the tabs hang from. */
+.gl-rail::before {
+  content: ""; position: absolute; left: 0; top: -14px; bottom: -14px; width: 3px; border-radius: 2px;
+  background: linear-gradient(180deg, transparent, var(--tc, var(--accent-2)) 20%, var(--tc, var(--accent-2)) 80%, transparent);
+  box-shadow: 0 0 10px var(--tc, var(--accent-2));
+}
+.gl-rail-right .gl-rail::before { left: auto; right: 0; }
+
+/* HUD frame: a thin chamfered border round the whole view, corner brackets
+   in the page colour, a faint grid and a slow scan line. */
+.gl-main { --tc: var(--accent-2); padding: 14px 18px 10px; isolation: isolate; }
+.gl-main::before {
+  content: ""; position: absolute; inset: 0; z-index: -2; pointer-events: none;
+  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% calc(100% - 22px),
+                     calc(100% - 22px) 100%, 22px 100%, 0 calc(100% - 22px), 0 22px);
+  background:
+    linear-gradient(rgba(120,160,220,.045) 1px, transparent 1px) 0 0 / 100% 22px,
+    linear-gradient(90deg, rgba(120,160,220,.045) 1px, transparent 1px) 0 0 / 22px 100%,
+    linear-gradient(180deg, rgba(14,20,30,.85), rgba(8,11,17,.9));
+  border: 1px solid color-mix(in srgb, var(--tc) 35%, #2b3442);
+  box-shadow: inset 0 0 40px rgba(0,0,0,.6);
+}
+.gl-main::after {
+  content: ""; position: absolute; inset: -1px; z-index: -1; pointer-events: none;
+  --l: 34px; --w: 2px;
+  background:
+    linear-gradient(var(--tc), var(--tc)) 0 0 / var(--l) var(--w),
+    linear-gradient(var(--tc), var(--tc)) 0 0 / var(--w) var(--l),
+    linear-gradient(var(--tc), var(--tc)) 100% 0 / var(--l) var(--w),
+    linear-gradient(var(--tc), var(--tc)) 100% 0 / var(--w) var(--l),
+    linear-gradient(var(--tc), var(--tc)) 0 100% / var(--l) var(--w),
+    linear-gradient(var(--tc), var(--tc)) 0 100% / var(--w) var(--l),
+    linear-gradient(var(--tc), var(--tc)) 100% 100% / var(--l) var(--w),
+    linear-gradient(var(--tc), var(--tc)) 100% 100% / var(--w) var(--l),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--tc) 80%, transparent), transparent) 50% 0 / 40% 1px,
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--tc) 80%, transparent), transparent) 50% 100% / 40% 1px;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 4px var(--tc));
+}
+.gl-body::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 40px; top: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--tc) 9%, transparent), transparent);
+  animation: gl-scan 7s linear infinite;
+}
+@keyframes gl-scan { from { transform: translateY(-40px); } to { transform: translateY(420px); } }
+@media (prefers-reduced-motion: reduce) { .gl-body::after { display: none; } }
+
+/* Header as a HUD strip: chamfered page badge, a lit rule underneath. */
+.gl-head { position: relative; padding-bottom: 6px; }
+.gl-head::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: linear-gradient(90deg, var(--tc), color-mix(in srgb, var(--tc) 30%, transparent) 40%, transparent);
+}
+.gl-tabname { border-radius: 0; padding: 2px 14px;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
+.gl-head h2 { letter-spacing: .02em; }
+
+/* Boxes: a cut corner and a corner tick, in the page colour. */
+.gl-box::before {
+  content: ""; position: absolute; top: 0; right: 0; width: 16px; height: 16px; pointer-events: none;
+  background: linear-gradient(225deg, color-mix(in srgb, var(--tc) 70%, #fff) 0 2px, transparent 2px),
+              linear-gradient(225deg, #0b0f15 0 50%, transparent 50%);
+  opacity: .9;
+}
+.gl-box-l { letter-spacing: .09em; }
+.gl-box-l::before { content: "▸ "; color: var(--tc); }
