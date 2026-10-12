@@ -249,6 +249,13 @@ kill -0 $PROXY_PID 2>/dev/null || die "the proxy exited on startup (see $LOG)"
 # to a car is how a stolen Tesla is prepared, and nothing else in 270 fields
 # would show it.
 #
+# PackVoltage and PackCurrent, every 2 s, are for the live page only: their
+# product is the power the pack is giving out this second, so instant kW and
+# Wh/km no longer wait for a 0.02 kWh step in EnergyRemaining. The bridge
+# sends them to the app's memory and strips them from what it stores, so they
+# never reach the database. They change constantly only while driving or
+# charging; a parked car sends next to none.
+#
 # ChargePortDoorOpen and DriverSeatBelt are cheaper evidence of the same
 # question: somebody opened the port, or somebody got in and buckled up. All
 # of these change only when something happens, so they cost almost no stream.
@@ -286,8 +293,10 @@ if [ "${TELEMETRY_V3:-0}" = "1" ]; then
       \"RpWindow\":                  {\"interval_seconds\": 10},
       \"PairedPhoneKeyAndKeyFobQty\": {\"interval_seconds\": 300},
       \"ChargePortDoorOpen\":         {\"interval_seconds\": 60},
-      \"DriverSeatBelt\":             {\"interval_seconds\": 30}"
-  say "Level 3: four windows, paired-key count, charge port door, driver seat belt"
+      \"DriverSeatBelt\":             {\"interval_seconds\": 30},
+      \"PackVoltage\":                {\"interval_seconds\": 2},
+      \"PackCurrent\":                {\"interval_seconds\": 2}"
+  say "Level 3: four windows, paired-key count, charge port door, driver seat belt, pack power (live page)"
 fi
 
 # Belt and braces behind the level file, because the level file is local state

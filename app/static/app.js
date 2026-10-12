@@ -4164,10 +4164,12 @@ const GLANCE_TABS = [
   { id: "cost", label: "Cost", c: "#ff6b70", ico: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v1.5M12 16v1.5"/>' },
   { id: "tips", label: "Tips", c: "#facc15", ico: '<path d="M9.5 18.5h5M10.5 21.5h3"/><path d="M15.1 14.2c.2-1 .7-1.8 1.4-2.5A4.9 4.9 0 0 0 18 8.2a6 6 0 0 0-12 0c0 1.3.5 2.5 1.5 3.5.7.7 1.2 1.5 1.4 2.5"/>' },
 ];
-// Live polling: only while the Live page is on screen, every 5 s during a
-// drive and every 30 s parked. Instant kW and Wh/km come from the change in
-// energy and odometer between two polls at least 20 s apart.
-const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null };
+// Live polling: only while the Live page is on screen, every 2 s during a
+// drive (the app answers from memory, see /api/live) and every 30 s parked.
+// Instant kW and Wh/km come from pack voltage x current when the car streams
+// them, else from the change in energy and odometer between two polls at
+// least 20 s apart.
+const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0 };
 function glanceVisible() {
   const el = document.getElementById("glance");
   return !!el && getComputedStyle(el).display !== "none";
@@ -4210,6 +4212,13 @@ async function glLivePoll() {
       const L = await r.json();
       const nw = L.now || {};
       const p = glLiveState.prev;
+      // Pack power, when the car streams voltage and current: the power this
+      // second. Its sign convention is learned rather than assumed — at
+      // cruising speed the pack is mostly giving power out, so whichever sign
+      // dominates there is "discharge"; the other is regen.
+      if (nw.power_kw != null && (nw.speed_kmh || 0) > 30) {
+        glLiveState.sign = Math.max(-20, Math.min(20, glLiveState.sign + Math.sign(nw.power_kw)));
+      }
       if (L.driving && p && nw.ts && nw.ts - p.ts >= 20 && nw.energy_kwh != null && p.energy_kwh != null) {
         const dkwh = p.energy_kwh - nw.energy_kwh, dkm = (nw.odo_km || 0) - (p.odo_km || 0);
         const hours = (nw.ts - p.ts) / 3600;
@@ -4220,7 +4229,12 @@ async function glLivePoll() {
         if (!L.driving) glLiveState.inst = null;
       }
       glLiveState.data = L;
-      if (L.driving) wait = 5000;
+      if (nw.power_kw != null) {
+        const kw = nw.power_kw * (glLiveState.sign < 0 ? -1 : 1);
+        const v = nw.speed_kmh || 0;
+        glLiveState.inst = { kw, regen: kw < 0, whkm: v > 5 && kw > 0 ? kw * 1000 / v : null, measured: true };
+      }
+      if (L.driving) wait = 2000;
       if (lastData && glanceTab === "live") renderGlance(lastData);
     }
   } catch (_) { /* offline: try again later */ }
@@ -4315,8 +4329,10 @@ function renderGlance(d) {
           colour: spd != null && spd > 110 ? "var(--amber)" : "#22d3ee",
           sub: { text: `max ${n(t.max_speed_kmh)} km/h` }, label: "Speed" }),
         boxes(glBox("Trip Wh/km", n(tw), "", rated && tw ? (tw > rated ? "tone-warn" : "tone-good") : ""),
-          glBox(inst ? "Now" : "Energy", inst ? (inst.kw != null ? n(inst.kw, 1) : "—") : n(t.energy_kwh, 2),
-            inst ? `kW${inst.whkm != null ? ` · ${n(inst.whkm)} Wh/km` : ""}` : "kWh", instTone),
+          glBox(inst ? (inst.regen ? "Regen now" : "Power now") : "Energy",
+            inst ? (inst.kw != null ? n(Math.abs(inst.kw), 1) : "—") : n(t.energy_kwh, 2),
+            inst ? `kW${inst.whkm != null ? ` · ${n(inst.whkm)} Wh/km` : ""}` : "kWh",
+            inst && inst.regen ? "tone-good" : instTone),
           glBox("Battery", lvl != null ? n(lvl, 1) : "—", `% · used ${n(t.soc_used, 1)}`)),
         foot);
     },

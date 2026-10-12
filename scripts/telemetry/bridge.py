@@ -209,6 +209,53 @@ def parse(frames: list) -> dict | None:
         return None
 
 
+# The fast lane. Records that carry something the live page shows are also
+# sent at once, one at a time, to /api/telemetry/live, which holds them in
+# memory only — so the live view is a second or two behind the car instead of
+# a batch behind. The normal batches below are untouched and remain the only
+# path to the database. Best effort on purpose: a short timeout, never
+# retried or spooled (a stale live value is worthless), and sent from its own
+# thread with a queue of one, so a slow app can never hold up the batches.
+LIVE_PUSH = os.environ.get("LIVE_PUSH", "1") != "0"
+LIVE_FIELDS = {"VehicleSpeed", "Gear", "Odometer", "EnergyRemaining", "BatteryLevel",
+               "Soc", "PackVoltage", "PackCurrent", "RatedRange"}
+# Shown on the live page and nowhere else: kept out of the database batches.
+LIVE_ONLY_FIELDS = {"PackVoltage", "PackCurrent"}
+
+
+def _live_worker(box: dict) -> None:
+    session = requests.Session()
+    while True:
+        box["event"].wait()
+        box["event"].clear()
+        records, box["pending"] = box["pending"], []
+        if not records:
+            continue
+        try:
+            session.post(f"{APP_URL}/api/telemetry/live", json={"records": records[-20:]},
+                         headers={"x-sync-key": SYNC_KEY}, timeout=4)
+        except requests.RequestException:
+            pass
+
+
+def _keys(record: dict) -> set:
+    data = record.get("data")
+    return {e.get("key") for e in data if isinstance(e, dict)} if isinstance(data, list) else set()
+
+
+def _for_db(record: dict):
+    """The record without its live-only fields; None if nothing else is left."""
+    data = record.get("data")
+    if not isinstance(data, list):
+        return record
+    kept = [e for e in data if not (isinstance(e, dict) and e.get("key") in LIVE_ONLY_FIELDS)]
+    if not kept and data:
+        return None
+    if len(kept) == len(data):
+        return record
+    return {**record, "data": kept}
+
+
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
@@ -229,12 +276,25 @@ def main() -> int:
     poller = zmq.Poller()
     poller.register(sock, zmq.POLLIN)
 
+    live = {"pending": [], "event": None}
+    if LIVE_PUSH:
+        import threading
+        live["event"] = threading.Event()
+        threading.Thread(target=_live_worker, args=(live,), daemon=True).start()
+        LOG.info("fast lane on -> %s/api/telemetry/live", APP_URL)
+
     batch: list = []
     last_flush = last_drain = time.monotonic()
     while True:
         events = dict(poller.poll(timeout=1000))
         if sock in events:
             record = parse(sock.recv_multipart())
+            if record is not None:
+                if live["event"] is not None and not record.get("isResend") \
+                        and _keys(record) & LIVE_FIELDS:
+                    live["pending"].append(record)
+                    live["event"].set()
+                record = _for_db(record)
             if record is not None:
                 batch.append(record)
         now = time.monotonic()

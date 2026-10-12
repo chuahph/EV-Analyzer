@@ -13687,6 +13687,16 @@ def _telemetry_ingest(payload: dict, session: Session):
         if not isinstance(record, dict):
             continue
         data = record.get("data")
+        # Every field updates the in-memory live view; the live-only ones go
+        # no further (see LIVE_ONLY_FIELDS), and a record carrying nothing
+        # else is not stored at all.
+        flat = ({e.get("key"): _telemetry_value(e) for e in data
+                 if isinstance(e, dict) and e.get("key")} if isinstance(data, list) else None)
+        if flat is not None:
+            _live_mem_fold(record.get("vin"), record.get("createdAt") or record.get("created_at"), flat)
+            flat = {k: v for k, v in flat.items() if k not in LIVE_ONLY_FIELDS}
+            if not flat and isinstance(data, list) and data:
+                continue
         kept.append({
             "received_at": now.isoformat(timespec="seconds"),
             "vin": record.get("vin"),
@@ -13697,9 +13707,7 @@ def _telemetry_ingest(payload: dict, session: Session):
             # size of the one blob written on every single batch. What the
             # original carried that the flat form does not is one flag, so
             # that is what is carried.
-            "fields": {e.get("key"): _telemetry_value(e)
-                       for e in data if isinstance(e, dict) and e.get("key")}
-            if isinstance(data, list) else None,
+            "fields": flat,
             # Whether the car buffered this while out of coverage. Measured to
             # matter: an entire 35-minute drive arrived 36 minutes late this
             # way, and without the flag a replay is indistinguishable from a
@@ -15053,54 +15061,118 @@ def telemetry_set_charge_end(
                          for p in promoted if p.get("start") == start), None)}
 
 
+# --- Live view, in memory ----------------------------------------------------
+# The live page wants the car as it is this second; nothing else does. So the
+# newest value of every field is kept in this process as well as folded into
+# the stored composite, and the live page reads it from here: no database read
+# on its poll. Fields only the live page uses (pack voltage and current, for
+# instant power) are kept here only and never written anywhere. One worker
+# process serves the app (run.py), so one dict is the whole picture; after a
+# restart it refills from the next record, and the page falls back to the
+# stored composite until it has.
+LIVE_ONLY_FIELDS = frozenset({"PackVoltage", "PackCurrent"})
+_LIVE_MEM: dict[str, dict] = {}
+_LIVE_TRIP_CACHE: dict[str, tuple[float, Any]] = {}
+
+
+def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
+    if not vin or not fields:
+        return
+    ts = _telemetry_ts(created_at)
+    car = _LIVE_MEM.setdefault(vin, {})
+    if ts and ts < float(car.get("_t") or 0.0):
+        return   # a replayed record is older than what is shown
+    for k, v in fields.items():
+        if v is not None:
+            car[k] = v
+    if ts:
+        car["_t"] = ts
+        car["_ts"] = created_at
+    car["_seen"] = time.time()
+
+
+@router.post("/telemetry/live")
+def telemetry_live_push(payload: dict = Body(...)):
+    """The bridge's fast lane: records forwarded the moment they arrive, kept
+    in memory for the live page only. Nothing here touches the database —
+    the same records still reach /api/telemetry in the bridge's normal
+    batches, which is where trips, charges and history come from."""
+    records = payload.get("records")
+    if not isinstance(records, list):
+        raise HTTPException(400, "Expected {'records': [...]}.")
+    for r in records[:50]:
+        if not isinstance(r, dict) or not isinstance(r.get("data"), list):
+            continue
+        _live_mem_fold(r.get("vin"), r.get("createdAt") or r.get("created_at"),
+                       {e.get("key"): _telemetry_value(e) for e in r["data"]
+                        if isinstance(e, dict) and e.get("key")})
+    return {"ok": True}
+
+
 @router.get("/live")
 def live_now(
+    vin: str | None = Query(None),
     capacity_kwh: float | None = Query(None, gt=20, lt=200),
     session: Session = Depends(get_session),
 ):
-    """The car right now, from the stream, for the live driving view.
+    """The car right now, for the live driving view.
 
-    Small and cheap on purpose: the view polls it every few seconds while a
-    drive is open. It reads only the two stored stream blobs (no history, no
-    analysis), and takes the pack size from the caller, which already has it
-    from /summary, rather than working it out again on every poll.
-
-    ``trip`` is sync.live_trip's readout when a drive is in progress, else
-    None. ``now`` is the newest composite the car sent: current speed, gear,
-    level and energy, so the page can show instant power and Wh/km from the
-    change between two polls.
+    Read from memory (_LIVE_MEM) where the stream has filled it, so a poll
+    every two seconds costs no database read; the stored composite is the
+    fallback after a restart. The trip readout (distance, time, energy so
+    far) comes from the stored trip machine, re-read at most every 8 s.
+    ``power_kw`` is pack voltage x current when the car streams them,
+    discharge positive.
     """
     import json as _json
 
     from .. import sync as sync_mod
 
-    vehicle = _first_vehicle(session)
-    if vehicle is None:
-        return {"driving": False, "trip": None, "now": None}
-    cap = capacity_kwh or float(vehicle.battery_capacity_kwh or 75.0)
-    try:
-        latest = _json.loads(state.get(session, state.TELEMETRY_LATEST_KEY) or "{}") or {}
-    except ValueError:
-        latest = {}
-    car = latest.get(vehicle.vin) if isinstance(latest, dict) else None
+    if not vin:
+        vehicle = _first_vehicle(session)
+        if vehicle is None:
+            return {"driving": False, "trip": None, "now": None}
+        vin = vehicle.vin
+        cap = capacity_kwh or float(vehicle.battery_capacity_kwh or 75.0)
+    else:
+        cap = capacity_kwh or 75.0
+    car = _LIVE_MEM.get(vin)
+    source = "memory"
+    if not car or not car.get("_ts"):
+        source = "stored"
+        try:
+            latest = _json.loads(state.get(session, state.TELEMETRY_LATEST_KEY) or "{}") or {}
+        except ValueError:
+            latest = {}
+        car = latest.get(vin) if isinstance(latest, dict) else None
     now = None
     if isinstance(car, dict):
         ts = _telemetry_ts(car.get("_ts"))
         if ts:
             snap = sync_mod.snapshot_from_telemetry(car, ts)
+            v, a = car.get("PackVoltage"), car.get("PackCurrent")
+            try:
+                power = round(float(v) * float(a) / 1000.0, 2) if v is not None and a is not None else None
+            except (TypeError, ValueError):
+                power = None
             now = {
-                "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)),
+                "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)), "source": source,
                 "speed_kmh": snap.get("speed_kmh"), "shift": snap.get("shift"),
                 "odo_km": snap.get("odo_km"), "energy_kwh": snap.get("energy_kwh"),
                 "battery_level": snap.get("battery_level"), "soc": snap.get("soc"),
                 "range_km": snap.get("range_km"), "out_temp": snap.get("out_temp"),
                 "climate_on": snap.get("climate_on"), "charging": snap.get("charging"),
+                "power_kw": power,
             }
-    open_trip, snap = _live_from_stream(session, vehicle.vin)
-    trip = None
-    if open_trip and snap:
-        trip = sync_mod.live_trip(open_trip, snap, cap, get_settings().drive_min_km)
-    return {"driving": trip is not None, "trip": trip, "now": now,
+    cached = _LIVE_TRIP_CACHE.get(vin)
+    if cached and time.time() - cached[0] < 8.0:
+        trip = cached[1]
+    else:
+        open_trip, snap = _live_from_stream(session, vin)
+        trip = (sync_mod.live_trip(open_trip, snap, cap, get_settings().drive_min_km)
+                if open_trip and snap else None)
+        _LIVE_TRIP_CACHE[vin] = (time.time(), trip)
+    return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "server_ts": time.time()}
 
 

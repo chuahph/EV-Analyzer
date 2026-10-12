@@ -12533,6 +12533,8 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
                 state.put(s, state.TELEMETRY_LATEST_KEY, _json.dumps({vin: car}))
                 state.put(s, state.TELEMETRY_SHADOW_KEY, "{}")
                 s.commit()
+            from app.api import routes as routes_mod
+            routes_mod._LIVE_MEM.pop(vin, None); routes_mod._LIVE_TRIP_CACHE.clear()
             parked = client.get("/api/live?capacity_kwh=68.3").json()
             assert parked["driving"] is False and parked["trip"] is None
             assert parked["now"]["energy_kwh"] == 50.0
@@ -12543,6 +12545,8 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
                         "speed_kmh": 60.0}
                 state.put(s, state.TELEMETRY_SHADOW_KEY, _json.dumps({vin: {"open": start, "last": last}}))
                 s.commit()
+            from app.api import routes as routes_mod
+            routes_mod._LIVE_TRIP_CACHE.clear()   # the readout is re-read every 8 s
             moving = client.get("/api/live?capacity_kwh=68.3").json()
             assert moving["driving"] is True
             assert moving["trip"]["distance_km"] == 10.0
@@ -12553,3 +12557,44 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
             for k, v in saved.items():
                 state.put(s, k, v or "{}")
             s.commit()
+
+
+def test_the_live_fast_lane_stays_in_memory():
+    """/api/telemetry/live folds records into memory for the live page and
+    writes nothing; pack power comes from voltage x current; and the same
+    fields arriving through the stored path are kept out of the database."""
+    import json as _json
+    from app import state
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+
+    settings = get_settings()
+    old_pc, old_sk = settings.app_passcode, settings.sync_key
+    settings.app_passcode, settings.sync_key = "pc", "k"
+    vin = "LIVEFAST00000001"
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as s:
+                before = state.get(s, state.TELEMETRY_LATEST_KEY)
+            rec = {"vin": vin, "createdAt": "2026-10-12T00:10:00Z", "data": [
+                {"key": "PackVoltage", "value": {"doubleValue": 380.0}},
+                {"key": "PackCurrent", "value": {"doubleValue": 50.0}},
+                {"key": "VehicleSpeed", "value": {"doubleValue": 31.0}}]}
+            r = client.post("/api/telemetry/live", json={"records": [rec]}, headers={"x-sync-key": "k"})
+            assert r.status_code == 200
+            with SessionLocal() as s:
+                assert state.get(s, state.TELEMETRY_LATEST_KEY) == before
+            client.cookies.set("tesla_passcode", "x")
+            settings.app_passcode = ""
+            now = client.get(f"/api/live?vin={vin}").json()["now"]
+            assert now["source"] == "memory" and now["power_kw"] == 19.0
+
+            # Through the stored path: the composite never holds them.
+            rec2 = dict(rec, createdAt="2026-10-12T00:10:05Z")
+            client.post("/api/telemetry", json={"records": [rec2]}, headers={"x-sync-key": "k"})
+            with SessionLocal() as s:
+                car = _json.loads(state.get(s, state.TELEMETRY_LATEST_KEY) or "{}").get(vin, {})
+            assert "PackCurrent" not in car and "VehicleSpeed" in car
+    finally:
+        settings.app_passcode, settings.sync_key = old_pc, old_sk
+        routes_mod._LIVE_MEM.pop(vin, None)

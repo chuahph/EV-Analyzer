@@ -206,6 +206,8 @@ async def _passcode_gate(request: Request, call_next):
                      # It holds the same key the cron does and has no way to
                      # hold a passcode cookie.
                      "/api/telemetry",
+                     # Its fast lane for the live page: memory only.
+                     "/api/telemetry/live",
                      # And the configure script on that box reads here, to
                      # check it is not about to send the car a SMALLER field
                      # set than the one it already has. Names only, no values

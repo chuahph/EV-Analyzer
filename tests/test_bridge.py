@@ -120,3 +120,17 @@ def test_an_unreadable_spool_line_is_discarded_rather_than_blocking(monkeypatch,
     assert bridge.drain() is True
     assert seen == [[{"n": 1}]]
     assert not _spool_file.exists()
+
+
+def test_live_only_fields_never_reach_the_database_batch():
+    """Pack voltage and current are for the live page: stripped from what the
+    bridge batches for storage, and a record of nothing else is dropped."""
+    pack = {"vin": "V", "data": [{"key": "PackVoltage", "value": {"doubleValue": 390.0}},
+                                 {"key": "PackCurrent", "value": {"doubleValue": 40.0}}]}
+    mixed = {"vin": "V", "data": [{"key": "VehicleSpeed", "value": {"doubleValue": 30.0}},
+                                  {"key": "PackCurrent", "value": {"doubleValue": 40.0}}]}
+    plain = {"vin": "V", "data": [{"key": "Odometer", "value": {"doubleValue": 1.0}}]}
+    assert bridge._for_db(pack) is None
+    assert [e["key"] for e in bridge._for_db(mixed)["data"]] == ["VehicleSpeed"]
+    assert bridge._for_db(plain) is plain
+    assert bridge._keys(mixed) & bridge.LIVE_FIELDS == {"VehicleSpeed", "PackCurrent"}
