@@ -638,3 +638,16 @@ def test_the_vin_battery_code_sets_the_starting_pack():
         finally:
             s.delete(v)
             s.commit()
+
+
+def test_capacity_health_sets_a_measured_pack_against_the_vin_spec():
+    from app.api.routes import _capacity_health
+
+    h = _capacity_health(68.33, "measured from 6 screen readings", 75.0)
+    assert h == {"new_kwh": 75.0, "measured_kwh": 68.3,
+                 "source": "measured from 6 screen readings",
+                 "health_pct": 91.1, "degradation_pct": 8.9}
+    # The spec, an override or no spec at all measures nothing.
+    assert _capacity_health(75.0, "variant spec", 75.0) is None
+    assert _capacity_health(70.0, "override", 75.0) is None
+    assert _capacity_health(68.3, "measured from 1 streamed charge", None) is None

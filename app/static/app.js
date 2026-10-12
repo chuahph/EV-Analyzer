@@ -3402,6 +3402,15 @@ document.addEventListener("keydown", (e) => {
   if (e.target && e.target.id === "plan-dest" && e.key === "Enter") { e.preventDefault(); lookupPlanDest(); }
 });
 
+// Measured usable kWh against the same pack when new (VIN spec): a second
+// reading of health beside the rated-range one, in kWh rather than km.
+function capHtml(c) {
+  if (!c) return "";
+  return `<div class="bat-line">Capacity <strong>${fmt(c.measured_kwh, 1)} kWh</strong> ` +
+    `of ${fmt(c.new_kwh, 1)} kWh when new: <strong>${fmt(c.health_pct, 1)}%</strong> ` +
+    `(${fmt(c.degradation_pct, 1)}% degradation, ${c.source})</div>`;
+}
+
 function renderBattery(d) {
   const card = document.getElementById("battery-card");
   const body = document.getElementById("battery-body");
@@ -3441,6 +3450,7 @@ function renderBattery(d) {
     <div class="bat-line">Estimated full range <strong>${b.est_full_range_km} km</strong>
       vs ${ref} (${b.degradation_pct}% degradation)</div>
     <div class="bat-line">Based on ${b.n_readings} readings · avg SoC ${b.avg_soc}% · lowest seen ${b.min_soc_seen}%</div>
+    ${capHtml(b.capacity_health)}
     ${fleet}
     ${forecastHtml(b.forecast)}
     ${habits}`;

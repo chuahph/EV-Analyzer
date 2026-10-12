@@ -767,6 +767,33 @@ def _fleet_wh_per_km(session: Session, vehicle_id: int) -> float | None:
     return percentile(rates, 0.5)
 
 
+def _new_capacity_kwh(vehicle: Vehicle) -> float | None:
+    """The pack's usable capacity when new: the VIN's battery code first, then
+    model and trim. What a measured capacity is set against for degradation."""
+    vin_info = vin_mod.decode(vehicle.vin)
+    # The VIN's model when the row still carries the placeholder name.
+    model = (vehicle.model if vehicle.model not in (None, "", "Tesla")
+             else vin_info.get("model") or vehicle.model)
+    return battery_analysis.usable_capacity_for(
+        model, vehicle.trim, vin_info.get("year"), vin_info.get("battery"))
+
+
+def _capacity_health(capacity_kwh: float, source: str, new_kwh: float | None) -> dict | None:
+    """Measured usable capacity against the same pack when new.
+
+    A second reading of health beside the rated-range one: kWh rather than km,
+    so it carries no range convention, wheel size or EPA figure. Only for a
+    capacity the car itself measured — the spec against itself says nothing,
+    and an override is a number someone typed.
+    """
+    if not new_kwh or not (source or "").startswith("measured"):
+        return None
+    health = capacity_kwh / new_kwh * 100.0
+    return {"new_kwh": round(new_kwh, 1), "measured_kwh": round(capacity_kwh, 1),
+            "source": source, "health_pct": round(health, 1),
+            "degradation_pct": round(max(100.0 - health, 0.0), 1)}
+
+
 def _usable_capacity(session: Session, vehicle: Vehicle, settings) -> tuple[float, str]:
     """Usable pack capacity (kWh) for turning a drive's range/SoC delta into
     kWh, plus where it came from.
@@ -787,12 +814,7 @@ def _usable_capacity(session: Session, vehicle: Vehicle, settings) -> tuple[floa
     """
     if settings.battery_capacity_kwh and settings.battery_capacity_kwh > 0:
         return settings.battery_capacity_kwh, "override"
-    vin_info = vin_mod.decode(vehicle.vin)
-    # The VIN's model when the row still carries the placeholder name.
-    model = (vehicle.model if vehicle.model not in (None, "", "Tesla")
-             else vin_info.get("model") or vehicle.model)
-    spec = battery_analysis.usable_capacity_for(
-        model, vehicle.trim, vin_info.get("year"), vin_info.get("battery"))
+    spec = _new_capacity_kwh(vehicle)
     # The car's own charging sessions outrank the spec-derived figure, because
     # they measure THIS pack rather than infer it. Spec minus degradation was
     # preferred while the charge-derived number was thought to be the noisy
@@ -12939,6 +12961,10 @@ def summary(
     # kWh) is visible and diagnosable rather than hidden.
     vehicle_out["usable_capacity_kwh"] = round(capacity_kwh, 1)
     vehicle_out["capacity_source"] = capacity_source
+    vehicle_out["new_capacity_kwh"] = _new_capacity_kwh(vehicle)
+    if isinstance(battery, dict):
+        battery["capacity_health"] = _capacity_health(
+            capacity_kwh, capacity_source, vehicle_out["new_capacity_kwh"])
     # What the car's own charge sessions imply that figure should be — the
     # only independent check on it, since a drive's kWh is derived FROM the
     # capacity and would just confirm itself (see battery.implied_capacity).
