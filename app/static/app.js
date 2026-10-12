@@ -4128,9 +4128,9 @@ function renderGlance(d) {
   const boxes = (...b) => `<div class="gl-stack">${b.join("")}</div>`;
   const none = (t) => `<div class="gl-line">${h(t)}</div>`;
   // Every page: a panel, the dial, a panel, and an optional line under them.
-  const page = (left, dial, right, foot = "") => `<div class="gl-page gl-3">
-      <div class="gl-side">${left}</div><div class="gl-pod">${dial}</div><div class="gl-side">${right}</div>
-      ${foot ? `<div class="gl-foot">${foot}</div>` : ""}</div>`;
+  const page = (left, dial, right, foot = "") => ({ body: `<div class="gl-page gl-3">
+      <div class="gl-side">${left}</div><div class="gl-pod">${dial}</div><div class="gl-side">${right}</div></div>`,
+    foot });
 
   const level = bal.current_level_pct ?? bal.current_soc_pct;
   const used = bal.used_pct;
@@ -4291,16 +4291,21 @@ function renderGlance(d) {
   const rail = `<nav class="gl-rail" aria-label="Glance pages">
       ${GLANCE_TABS.map((t) => `<button type="button" class="gl-tab${t.id === glanceTab ? " on" : ""}" data-gl-tab="${t.id}"
         style="--tc:${t.c}" title="${t.label}" aria-label="${t.label}"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ico}</svg></button>`).join("")}
-      <button type="button" class="gl-swap" data-gl-swap title="Move the tabs to the other side" aria-label="Move the tabs to the other side">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>
     </nav>`;
   const cur_tab = GLANCE_TABS.find((t) => t.id === glanceTab);
   const name = v.name || v.model || "Tesla";
-  el.innerHTML = `${rail}<div class="gl-main" style="--tc:${cur_tab.c}">
+  const pg = pages[glanceTab]();
+  // The rail sits in the same row as the page, centred beside it, so the
+  // spine lines up with the side boxes rather than the whole screen.
+  el.innerHTML = `<div class="gl-main" style="--tc:${cur_tab.c}">
     <div class="gl-head"><span class="gl-tabname">${h(cur_tab.label)}</span><h2>${h(name)}</h2>
       <span class="gl-sub">${h(d.window_label || `${d.window_days}-day window`)}</span>
+      <button type="button" class="gl-swap" data-gl-swap title="Move the tabs to the other side"
+        aria-label="Move the tabs to the other side"><svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
-    ${pages[glanceTab]()}</div>`;
+    <div class="gl-body">${rail}${pg.body}</div>
+    ${pg.foot ? `<div class="gl-foot">${pg.foot}</div>` : ""}</div>`;
 }
 
 document.addEventListener("click", (e) => {
