@@ -4093,7 +4093,7 @@ const GL_FRAME = `<div class="gl-frame" aria-hidden="true">
 // in steps as the speed rises, and a bar of slanted LED segments underneath
 // (cyan, amber above 110, red above 140) with a pointer on the current speed and
 // the drive's top speed as a white tick.
-function glSpeedo({ value, max = 160, mark = null, gear = null, label = "Speed" }) {
+function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label = "Speed" }) {
   const uid = `gls${++glDialSeq}`;
   const has = value != null && Number.isFinite(+value);
   const v = has ? +value : 0;
@@ -4134,18 +4134,30 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, label = "Speed" 
     return `<text x="${gx}" y="38" text-anchor="middle" font-size="11" font-weight="${on ? 800 : 600}" fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>
       ${on ? `<rect x="${gx - 7}" y="28" width="14" height="14" rx="2" fill="none" stroke="#22d3ee" stroke-width="1" opacity=".85"/>` : ""}`;
   }).join("");
-  return `<svg class="gl-dial gl-speedo" viewBox="0 0 260 200" role="img" aria-label="${h(label)} ${h(num)} km/h">
+  // The edge answers to speed: the outline takes the speed's colour, a column
+  // of small bars on each side fills from the bottom, and the dashes along the
+  // top edge flow forward while accelerating and back while slowing.
+  const frame = has && v > 0.5 ? colourAt(v) : "#22d3ee";
+  const EB = 12, ebLit = has ? Math.ceil(Math.min(max, v) / max * EB) : 0;
+  let edge = "";
+  for (let k = 0; k < EB; k++) {
+    const y = 166 - k * 11, on = k < ebLit, col = on ? colourAt((k + 0.5) / EB * max) : "#111a26";
+    edge += `<rect x="9.5" y="${y - 8}" width="4" height="8" rx="1" fill="${col}"${on ? ` filter="url(#${uid}-glow)"` : ""}/>
+      <rect x="246.5" y="${y - 8}" width="4" height="8" rx="1" fill="${col}"${on ? ` filter="url(#${uid}-glow)"` : ""}/>`;
+  }
+  return `<svg class="gl-dial gl-speedo${acc > 0 ? " acc-up" : acc < 0 ? " acc-down" : ""}" viewBox="0 0 260 200" role="img" aria-label="${h(label)} ${h(num)} km/h">
     <defs>
       <linearGradient id="${uid}-bg" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#14202f"/><stop offset=".6" stop-color="#0b121b"/><stop offset="1" stop-color="#070b11"/></linearGradient>
       <filter id="${uid}-glow" x="-30%" y="-30%" width="160%" height="160%">
         <feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
-    <polygon points="30,8 230,8 252,30 252,170 230,192 30,192 8,170 8,30" fill="url(#${uid}-bg)" stroke="#22d3ee" stroke-width="1.6"
+    <polygon points="30,8 230,8 252,30 252,170 230,192 30,192 8,170 8,30" fill="url(#${uid}-bg)" stroke="${frame}" stroke-width="1.8"
       filter="url(#${uid}-glow)"/>
     <polygon points="34,15 226,15 245,34 245,166 226,185 34,185 15,166 15,34" fill="none" stroke="rgba(34,211,238,.25)" stroke-width="1"/>
     <path d="M8 44V30L30 8h26M204 8h26l22 22v14M252 156v14l-22 22h-26M56 192H30L8 170v-14" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
-    <path d="M70 15h120M70 185h120" stroke="#22d3ee" stroke-width="2" opacity=".6" stroke-dasharray="14 6"/>
+    <path class="gl-flow" d="M70 15h120M70 185h120" stroke="${frame}" stroke-width="2.4" opacity=".8" stroke-dasharray="14 6"/>
+    ${edge}
     ${gears}${wings}
     <text x="130" y="${num.length >= 3 ? 112 : 118}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
       filter="url(#${uid}-glow)" style="font-variant-numeric:tabular-nums">${num}</text>
@@ -4463,7 +4475,7 @@ const GLANCE_TABS = [
 // them, else from the change in energy and odometer between two polls at
 // least 20 s apart.
 const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0, hist: [],
-  es: null, esQuery: "", esOpened: 0, esLast: 0, wh: null, whKey: null };
+  es: null, esQuery: "", esOpened: 0, esLast: 0, wh: null, whKey: null, acc: 0, speeds: [] };
 // The last reading from an earlier visit, if recent enough to be worth showing
 // for the moment before the stream's first frame arrives.
 try {
@@ -4564,6 +4576,14 @@ function glLiveApply(L) {
     L.trip.wh_per_km = Math.round(glLiveState.wh);
     L.trip.driving_wh_per_km = L.trip.wh_per_km;
   } else if (!L.trip) { glLiveState.wh = null; }
+  // Accelerating or slowing: this speed against the one about three seconds ago.
+  {
+    const now = Date.now(), v = nw.speed_kmh != null ? +nw.speed_kmh : null;
+    const h = glLiveState.speeds = (glLiveState.speeds || []).filter((x) => now - x.t < 4000);
+    if (v != null) h.push({ t: now, v });
+    const old = h.length ? h[0].v : null;
+    glLiveState.acc = v == null || old == null ? 0 : v - old > 2 ? 1 : v - old < -2 ? -1 : 0;
+  }
   glLiveState.data = L;
   // Kept on the phone so the next time it is turned sideways the page opens
   // on the last reading, not on an empty frame waiting for the stream.
@@ -4734,7 +4754,7 @@ function renderGlance(d) {
               ${tile("odo", "Odometer", odo != null ? fmt(odo) : "—", "km", "", "wide")}
             </div>
           </div>`,
-          glSpeedo({ value: spd, max: 160, gear: nw.shift, label: "Speed" }),
+          glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
           lt ? `<div class="gl-trip">
             <div class="gl-trip-h">Last trip<em>${lt.id != null ? "#" + lt.id + " · " : ""}${h(tripWhen(lt.start_time).split(" ").pop())}</em></div>
             <div class="gl-rts">
@@ -4779,7 +4799,7 @@ function renderGlance(d) {
             ${tile("whkm", "Use", n(tw), "Wh/km", twTone)}
           </div>
         </div>`,
-        glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, label: "Speed" }),
+        glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
         `${powerBar}
          ${glTrace(glLiveState.hist)}
          ${battBar}`,

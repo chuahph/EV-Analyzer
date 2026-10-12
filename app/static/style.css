@@ -2373,3 +2373,9 @@ main > .card { max-width: 100%; }
 .gl-rt strong { font-size: clamp(16px, 4.6vh, 22px); padding-right: 2px; }
 .gl-rt strong small { font-size: .4em; margin-left: 3px; }
 .gl-rt span { letter-spacing: .02em; font-size: 9px; }
+/* Top-edge dashes of the speed panel flow with acceleration. */
+.gl-speedo .gl-flow { transition: none; }
+.gl-speedo.acc-up .gl-flow { animation: gl-flow .45s linear infinite; }
+.gl-speedo.acc-down .gl-flow { animation: gl-flow .45s linear infinite reverse; }
+@keyframes gl-flow { to { stroke-dashoffset: -20; } }
+@media (prefers-reduced-motion: reduce) { .gl-speedo .gl-flow { animation: none !important; } }
