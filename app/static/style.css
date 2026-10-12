@@ -2365,3 +2365,11 @@ main > .card { max-width: 100%; }
   .home-actions .btn { font-size: 13px; padding-left: 8px; padding-right: 8px; }
 }
 .home-actions .btn.ha-wide { grid-column: 1 / -1; }
+
+/* Live speedometer is a wide panel, not a dial. */
+.gl-dial.gl-speedo { width: 100%; height: auto; max-height: 100%; aspect-ratio: 13 / 10; }
+/* Live tiles: long units (Wh/km) stay inside the tile. */
+.gl-rt { padding-right: 12px; }
+.gl-rt strong { font-size: clamp(16px, 4.6vh, 22px); padding-right: 2px; }
+.gl-rt strong small { font-size: .4em; margin-left: 3px; }
+.gl-rt span { letter-spacing: .02em; font-size: 9px; }

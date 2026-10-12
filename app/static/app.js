@@ -4088,77 +4088,69 @@ const GL_FRAME = `<div class="gl-frame" aria-hidden="true">
   <i class="vent l"></i><i class="vent r"></i>
 </div>`;
 
-// The Live page's speedometer: a diamond readout with large digits inside a
-// ring of LED segments that light up to the current speed (cyan, amber above
-// 110, red above 140), a pointer on the ring, the top speed as a white tick and
-// the gear selector underneath.
+// The Live page's speedometer, not a dial: a wide angular panel with the speed
+// in very large digits, a gear selector on top, chevrons either side that light
+// in steps as the speed rises, and a bar of slanted LED segments underneath
+// (cyan, amber above 110, red above 140) with a pointer on the current speed and
+// the drive's top speed as a white tick.
 function glSpeedo({ value, max = 160, mark = null, gear = null, label = "Speed" }) {
   const uid = `gls${++glDialSeq}`;
-  const A0 = 150, SWEEP = 240, N = 48, cx = 100, cy = 100;
-  const rad = (a) => a * Math.PI / 180;
-  const pt = (a, r) => [cx + r * Math.cos(rad(a)), cy + r * Math.sin(rad(a))];
-  const angOf = (v) => A0 + Math.max(0, Math.min(max, v)) / max * SWEEP;
   const has = value != null && Number.isFinite(+value);
   const v = has ? +value : 0;
   const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 110 ? "#f59e0b" : "#22d3ee");
+  const X0 = 30, X1 = 230, N = 40, step = (X1 - X0) / N, BY = 146, BH = 13;
+  const xOf = (x) => X0 + Math.max(0, Math.min(max, x)) / max * (X1 - X0);
   let segs = "";
   for (let k = 0; k < N; k++) {
-    const mid = (k + 0.5) / N * max, a = A0 + (k + 0.5) / N * SWEEP;
-    const [x1, y1] = pt(a, 70), [x2, y2] = pt(a, 85);
+    const x = X0 + k * step, mid = (k + 0.5) / N * max;
     const lit = has && v > 0.5 && mid <= v + max / N / 2;
-    segs += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
-      stroke="${lit ? colourAt(mid) : "#121b27"}" stroke-width="4.2" stroke-linecap="butt"${lit ? "" : ' opacity=".9"'}/>`;
+    segs += `<polygon points="${(x + 2.6).toFixed(1)},${BY} ${(x + step - 0.8).toFixed(1)},${BY} ${(x + step - 3.4).toFixed(1)},${BY + BH} ${x.toFixed(1)},${BY + BH}"
+      fill="${lit ? colourAt(mid) : "#111a26"}"/>`;
   }
   let labels = "";
   for (let t = 0; t <= max + 1e-9; t += 40) {
-    const [tx, ty] = pt(angOf(t), 96);
-    labels += `<text x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" text-anchor="middle" font-size="8"
-      fill="#6f7f94" font-weight="600">${Math.round(t)}</text>`;
+    labels += `<text x="${xOf(t).toFixed(1)}" y="${BY + BH + 12}" text-anchor="middle" font-size="8" font-weight="600" fill="#6f7f94">${Math.round(t)}</text>`;
   }
-  let markLine = "";
-  if (mark != null && mark > 0) {
-    const [x1, y1] = pt(angOf(mark), 67), [x2, y2] = pt(angOf(mark), 89);
-    markLine = `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
-      stroke="#fff" stroke-width="2.2"/>`;
-  }
-  // The pointer: a small triangle on the outside of the ring, aiming in.
-  let pointer = "";
-  if (has) {
-    const a = angOf(v), [tx, ty] = pt(a, 88.5), [lx, ly] = pt(a - 2.6, 95), [rx, ry] = pt(a + 2.6, 95);
-    pointer = `<polygon points="${tx.toFixed(1)},${ty.toFixed(1)} ${lx.toFixed(1)},${ly.toFixed(1)} ${rx.toFixed(1)},${ry.toFixed(1)}"
-      fill="${colourAt(v)}" filter="url(#${uid}-glow)"/>`;
+  const markTick = mark != null && mark > 0
+    ? `<line x1="${xOf(mark).toFixed(1)}" y1="${BY - 3}" x2="${xOf(mark).toFixed(1)}" y2="${BY + BH + 3}" stroke="#fff" stroke-width="2"/>` : "";
+  const pointer = has
+    ? `<polygon points="${xOf(v).toFixed(1)},${BY - 2} ${(xOf(v) - 4).toFixed(1)},${BY - 9} ${(xOf(v) + 4).toFixed(1)},${BY - 9}"
+        fill="${colourAt(v)}" filter="url(#${uid}-glow)"/>` : "";
+  // Chevrons: four on each side, one more lit for every 40 km/h.
+  const lit = has ? Math.min(4, Math.ceil(v / 40)) : 0;
+  let wings = "";
+  for (let k = 0; k < 4; k++) {
+    const on = k < lit, col = on ? colourAt(Math.min(max, (k + 1) * 40)) : "#16212f";
+    const dx = k * 9;
+    wings += `<polyline points="${55 - dx},${86} ${46 - dx},${104} ${55 - dx},${122}" fill="none" stroke="${col}" stroke-width="4.5"
+        stroke-linejoin="miter"${on ? ` filter="url(#${uid}-glow)"` : ""}/>
+      <polyline points="${205 + dx},${86} ${214 + dx},${104} ${205 + dx},${122}" fill="none" stroke="${col}" stroke-width="4.5"
+        stroke-linejoin="miter"${on ? ` filter="url(#${uid}-glow)"` : ""}/>`;
   }
   const num = has ? String(Math.round(v)) : "—";
-  const size = num.length >= 3 ? 46 : 58;
+  const size = num.length >= 3 ? 64 : 80;
   const gears = ["P", "R", "N", "D"].map((g, k) => {
-    const on = gear === g;
-    return `<text x="${(79 + k * 14).toFixed(0)}" y="173" text-anchor="middle" font-size="10" font-weight="${on ? 800 : 600}"
-      fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>`;
+    const on = gear === g, gx = 130 - 21 + k * 14;
+    return `<text x="${gx}" y="38" text-anchor="middle" font-size="11" font-weight="${on ? 800 : 600}" fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>
+      ${on ? `<rect x="${gx - 7}" y="28" width="14" height="14" rx="2" fill="none" stroke="#22d3ee" stroke-width="1" opacity=".85"/>` : ""}`;
   }).join("");
-  const gearBox = gear && "PRND".includes(gear)
-    ? `<rect x="${(79 + "PRND".indexOf(gear) * 14 - 6).toFixed(0)}" y="164" width="12" height="13" rx="2" fill="none"
-        stroke="#22d3ee" stroke-width="1" opacity=".8"/>` : "";
-  return `<svg class="gl-dial gl-speedo" viewBox="-6 -6 212 212" role="img" aria-label="${h(label)} ${h(num)} km/h">
+  return `<svg class="gl-dial gl-speedo" viewBox="0 0 260 200" role="img" aria-label="${h(label)} ${h(num)} km/h">
     <defs>
-      <radialGradient id="${uid}-face" cx="50%" cy="45%" r="62%">
-        <stop offset="0" stop-color="#16202e"/><stop offset=".75" stop-color="#0b1018"/><stop offset="1" stop-color="#06090e"/></radialGradient>
-      <linearGradient id="${uid}-dia" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#1b2a3c"/><stop offset="1" stop-color="#0a1119"/></linearGradient>
+      <linearGradient id="${uid}-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#14202f"/><stop offset=".6" stop-color="#0b121b"/><stop offset="1" stop-color="#070b11"/></linearGradient>
       <filter id="${uid}-glow" x="-30%" y="-30%" width="160%" height="160%">
-        <feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
-    <circle cx="100" cy="100" r="99" fill="url(#${uid}-face)" stroke="#1d2a38" stroke-width="1.4"/>
-    <path d="M${pt(A0, 91).map((q) => q.toFixed(1)).join(" ")} A91 91 0 1 1 ${pt(A0 + SWEEP, 91).map((q) => q.toFixed(1)).join(" ")}"
-      fill="none" stroke="rgba(34,211,238,.35)" stroke-width="1"/>
-    <g filter="url(#${uid}-glow)">${segs}</g>${markLine}${labels}${pointer}
-    <polygon points="100,42 158,100 100,158 42,100" fill="url(#${uid}-dia)" stroke="#22d3ee" stroke-width="1.6"
+    <polygon points="30,8 230,8 252,30 252,170 230,192 30,192 8,170 8,30" fill="url(#${uid}-bg)" stroke="#22d3ee" stroke-width="1.6"
       filter="url(#${uid}-glow)"/>
-    <polygon points="100,49 151,100 100,151 49,100" fill="none" stroke="rgba(34,211,238,.28)" stroke-width="1"/>
-    <path d="M100 42v8M158 100h-8M100 158v-8M42 100h8" stroke="#fff" stroke-width="2" opacity=".85"/>
-    <text x="100" y="${num.length >= 3 ? 112 : 118}" text-anchor="middle" font-size="${size}" font-weight="800"
-      fill="#f4fbff" filter="url(#${uid}-glow)" style="font-variant-numeric:tabular-nums">${num}</text>
-    <text x="100" y="134" text-anchor="middle" font-size="8.5" font-weight="650" letter-spacing="1.6" fill="#7e93ab">KM/H</text>
-    ${gearBox}${gears}
+    <polygon points="34,15 226,15 245,34 245,166 226,185 34,185 15,166 15,34" fill="none" stroke="rgba(34,211,238,.25)" stroke-width="1"/>
+    <path d="M8 44V30L30 8h26M204 8h26l22 22v14M252 156v14l-22 22h-26M56 192H30L8 170v-14" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
+    <path d="M70 15h120M70 185h120" stroke="#22d3ee" stroke-width="2" opacity=".6" stroke-dasharray="14 6"/>
+    ${gears}${wings}
+    <text x="130" y="${num.length >= 3 ? 112 : 118}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
+      filter="url(#${uid}-glow)" style="font-variant-numeric:tabular-nums">${num}</text>
+    <text x="130" y="132" text-anchor="middle" font-size="9" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H</text>
+    <g filter="url(#${uid}-glow)">${segs}</g>${markTick}${pointer}${labels}
   </svg>`;
 }
 
@@ -4724,14 +4716,21 @@ function renderGlance(d) {
         // same tiles as the driving view. The odometer comes from the
         // dashboard until the car next sends one (it only does when it moves).
         const odo = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
+        // Until the car's own reading arrives (the app has just restarted, and
+        // the car sends level and range only when they change), the figures the
+        // dashboard already holds stand in.
+        const dashPct = bal && (bal.current_level_pct ?? bal.current_soc_pct);
+        const pctShown = pct ?? (dashPct != null ? dashPct : null);
+        const estFull = d.battery && d.battery.est_full_range_km;
+        const rangeShown = nw.range_km ?? (pctShown != null && estFull ? Math.round(estFull * pctShown / 100) : null);
         const band = lt && lt.efficiency_band ? bandTone(lt.efficiency_band) : "";
         const ltTone = band === "tone-good" ? "good" : band === "tone-warn" || band === "tone-bad" ? "warn" : "";
         return page(
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec idle"></b>Car now<em>${!L ? "connecting…" : nw.age_sec != null ? `${nw.age_sec < 90 ? nw.age_sec + "s" : Math.round(nw.age_sec / 60) + " min"} ago` : ""}</em></div>
             <div class="gl-rts">
-              ${tile("batt", "Batt", pct != null ? n(pct, 1) : "—", "%", pct != null && pct < 20 ? "warn" : "good")}
-              ${tile("range", "Range", nw.range_km != null ? n(nw.range_km) : "—", "km")}
+              ${tile("batt", "Batt", pctShown != null ? n(pctShown, 1) : "—", "%", pctShown != null && pctShown < 20 ? "warn" : "good")}
+              ${tile("range", "Range", rangeShown != null ? n(rangeShown) : "—", "km")}
               ${tile("odo", "Odometer", odo != null ? fmt(odo) : "—", "km", "", "wide")}
             </div>
           </div>`,
