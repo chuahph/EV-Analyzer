@@ -4348,8 +4348,9 @@ const GLANCE_TABS = [
   { id: "cost", label: "Cost", c: "#ff6b70", ico: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v1.5M12 16v1.5"/>' },
   { id: "tips", label: "Tips", c: "#facc15", ico: '<path d="M9.5 18.5h5M10.5 21.5h3"/><path d="M15.1 14.2c.2-1 .7-1.8 1.4-2.5A4.9 4.9 0 0 0 18 8.2a6 6 0 0 0-12 0c0 1.3.5 2.5 1.5 3.5.7.7 1.2 1.5 1.4 2.5"/>' },
 ];
-// Live polling: only while the Live page is on screen, every 2 s during a
-// drive (the app answers from memory, see /api/live) and every 30 s parked.
+// The Live page's feed: pushed from the server's in-memory stream while the
+// page is on screen (see glLivePoll and /api/live/stream); the car sends the
+// drive fields every second.
 // Instant kW and Wh/km come from pack voltage x current when the car streams
 // them, else from the change in energy and odometer between two polls at
 // least 20 s apart.

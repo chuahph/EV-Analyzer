@@ -249,7 +249,7 @@ kill -0 $PROXY_PID 2>/dev/null || die "the proxy exited on startup (see $LOG)"
 # to a car is how a stolen Tesla is prepared, and nothing else in 270 fields
 # would show it.
 #
-# PackVoltage and PackCurrent, every 2 s, are for the live page only: their
+# PackVoltage and PackCurrent, every second, are for the live page only: their
 # product is the power the pack is giving out this second, so instant kW and
 # Wh/km no longer wait for a 0.02 kWh step in EnergyRemaining. The bridge
 # sends them to the app's memory and strips them from what it stores, so they
@@ -294,8 +294,8 @@ if [ "${TELEMETRY_V3:-0}" = "1" ]; then
       \"PairedPhoneKeyAndKeyFobQty\": {\"interval_seconds\": 300},
       \"ChargePortDoorOpen\":         {\"interval_seconds\": 60},
       \"DriverSeatBelt\":             {\"interval_seconds\": 30},
-      \"PackVoltage\":                {\"interval_seconds\": 2},
-      \"PackCurrent\":                {\"interval_seconds\": 2}"
+      \"PackVoltage\":                {\"interval_seconds\": 1},
+      \"PackCurrent\":                {\"interval_seconds\": 1}"
   say "Level 3: four windows, paired-key count, charge port door, driver seat belt, pack power (live page)"
 fi
 
@@ -323,16 +323,17 @@ if [ -z "${TELEMETRY_FORCE:-}" ]; then
   [ -n "$HAVE" ] && echo "  car is currently streaming the V$HAVE set" || true
 fi
 
-# The live page's fields stream fast (speed, distance and energy every 2 s;
-# level and range every 10 s) only when this box's bridge paces the stored
+# The live page's fields stream fast (speed, distance, energy and gear every
+# second — the shortest interval the car takes; level and range every 10 s)
+# only when this box's bridge paces the stored
 # path back down to the cadence the rest of the app was built on (DB_INTERVALS
 # in bridge.py). An older bridge would pass the fast stream straight into the
 # database, so with one the classic intervals are kept.
 if grep -q '^DB_INTERVALS' /opt/tesla-bridge/bridge.py 2>/dev/null; then
-  FAST_DRIVE=2 FAST_LEVEL=10 FAST_RANGE=10
-  say "Fast live stream: speed, distance and energy every 2 s (stored history stays at 10 s)"
+  FAST_DRIVE=1 FAST_LEVEL=10 FAST_RANGE=10 FAST_GEAR=1
+  say "Fast live stream: speed, distance, energy and gear every second (stored history stays at 10 s)"
 else
-  FAST_DRIVE=10 FAST_LEVEL=60 FAST_RANGE=300
+  FAST_DRIVE=10 FAST_LEVEL=60 FAST_RANGE=300 FAST_GEAR=5
   say "Bridge has no pacer yet: keeping the classic intervals. Update it first:
      sudo curl -sL $APP_URL/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.py && sudo systemctl restart tesla-bridge"
 fi
@@ -347,7 +348,7 @@ cat > "$WORK/config.json" <<EOF
     "port": 443,
     "ca": "$CA",
     "fields": {
-      "Gear":                      {"interval_seconds": 5},
+      "Gear":                      {"interval_seconds": $FAST_GEAR},
       "DriverSeatOccupied":        {"interval_seconds": 10},
       "DoorState":                 {"interval_seconds": 10},
       "VehicleSpeed":              {"interval_seconds": $FAST_DRIVE},

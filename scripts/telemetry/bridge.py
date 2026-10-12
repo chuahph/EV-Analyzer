@@ -243,7 +243,7 @@ def _keys(record: dict) -> set:
     return {e.get("key") for e in data if isinstance(e, dict)} if isinstance(data, list) else set()
 
 
-# The car streams the live page's fields fast (every 2 s). Everything else in
+# The car streams the live page's fields fast (every second). Everything else in
 # the app was built on, and measured against, the slower cadence below, so the
 # database path is paced back down to it: a field is passed on at most once
 # per its interval, and a value held back is sent when its interval is up —
