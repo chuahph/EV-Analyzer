@@ -1981,3 +1981,57 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   border-radius: 50%; background: #22d3ee; box-shadow: 0 0 6px #22d3ee; animation: gl-blink 1.2s ease-in-out infinite; }
 @keyframes gl-blink { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .gl-live.on b, .gl-tab-live .gl-tab-face::after { animation: none; } }
+
+/* --- Glance, space-robotics frame --------------------------------------------
+   Deep-space backdrop (stars and a faint nebula in the page colour), armour
+   plates on the four corners, LED strips that chase along the top and bottom
+   edges, and vent slots up the sides. All of it sits behind the content. */
+.glance {
+  background:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(1px 1px at 33% 72%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1.4px 1.4px at 58% 12%, rgba(255,255,255,.8), transparent 60%),
+    radial-gradient(1px 1px at 77% 64%, rgba(255,255,255,.55), transparent 60%),
+    radial-gradient(1px 1px at 90% 28%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.2px 1.2px at 22% 90%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 66% 88%, rgba(255,255,255,.45), transparent 60%),
+    radial-gradient(1px 1px at 46% 40%, rgba(255,255,255,.35), transparent 60%),
+    radial-gradient(55% 60% at 80% 20%, rgba(90, 60, 200, .16), transparent 70%),
+    radial-gradient(50% 55% at 15% 85%, rgba(20, 140, 200, .12), transparent 70%),
+    radial-gradient(120% 100% at 50% 50%, #0b1220 0%, #05070c 75%);
+}
+.gl-frame { position: absolute; inset: -2px; pointer-events: none; z-index: 0; }
+.gl-main > :not(.gl-frame) { position: relative; z-index: 1; }
+.gl-frame .c { position: absolute; width: 150px; height: 96px; display: block;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,.7)); }
+.gl-frame .c svg { width: 100%; height: 100%; display: block; }
+.gl-frame .tl { left: 0; top: 0; }
+.gl-frame .tr { right: 0; top: 0; transform: scaleX(-1); }
+.gl-frame .bl { left: 0; bottom: 0; transform: scaleY(-1); }
+.gl-frame .br { right: 0; bottom: 0; transform: scale(-1, -1); }
+.gl-frame .seam { stroke: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); opacity: .9; }
+.gl-frame .led { fill: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); animation: gl-blink 2.4s ease-in-out infinite; }
+.gl-frame .led2 { fill: #ff5a5f; filter: drop-shadow(0 0 3px #ff5a5f); animation: gl-blink 3.1s ease-in-out infinite .6s; }
+.gl-frame .strip { position: absolute; left: 160px; right: 160px; height: 3px; border-radius: 2px;
+  background:
+    linear-gradient(90deg, transparent 0 40%, rgba(255,255,255,.9) 50%, transparent 60% 100%) 0 0 / 30% 100% no-repeat,
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--tc) 85%, transparent) 0 10px, transparent 10px 15px);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tc) 60%, transparent);
+  animation: gl-chase 3.2s linear infinite; opacity: .85; }
+.gl-frame .strip.top { top: 3px; }
+.gl-frame .strip.bot { bottom: 3px; animation-direction: reverse; }
+@keyframes gl-chase { from { background-position: -40% 0, 0 0; } to { background-position: 140% 0, 0 0; } }
+.gl-frame .vent { position: absolute; top: 120px; bottom: 120px; width: 6px;
+  background: repeating-linear-gradient(180deg, #2b3340 0 3px, #06080b 3px 8px);
+  border-radius: 2px; box-shadow: inset 0 0 2px #000, 0 0 6px -2px var(--tc); opacity: .8; }
+.gl-frame .vent.l { left: 4px; } .gl-frame .vent.r { right: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .gl-frame .strip, .gl-frame .led, .gl-frame .led2 { animation: none; } }
+/* Content clears the plates. */
+.gl-main { padding: 22px 30px 22px; }
+.gl-foot { padding-left: 14px; }
+@media (max-height: 420px) {
+  .gl-frame .c { width: 112px; height: 72px; }
+  .gl-frame .strip { left: 120px; right: 120px; }
+  .gl-frame .vent { top: 90px; bottom: 90px; }
+}
