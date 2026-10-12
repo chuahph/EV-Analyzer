@@ -2261,3 +2261,7 @@ header::after {
 .card, .kpi, .score-banner { min-width: 0; }
 .card { overflow-wrap: anywhere; }
 main > .card { max-width: 100%; }
+/* Live page, parked: the odometer tile spans the row; the dot is still. */
+.gl-rt.wide { grid-column: 1 / -1; }
+.gl-trip-h .rec.idle { background: var(--muted); box-shadow: none; animation: none; }
+.gl-rt span { letter-spacing: .05em; }

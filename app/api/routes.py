@@ -15084,6 +15084,18 @@ LIVE_TRIP_PARK_END_SEC = sync_mod.PARK_END_MIN * 60.0
 _LIVE_KEYS = ("ts", "odo_km", "energy_kwh", "soc", "range_km", "battery_level")
 
 
+def _live_snapshot(car: dict, ts: float) -> dict:
+    """snapshot_from_telemetry, with a reading the car has not sent since this
+    process started left unknown. The shared builder turns a missing odometer
+    into 0.0, which is safe for the stored machine (it never sees a record
+    without one) but here would start a drive at 0 km and count the whole
+    odometer as its distance."""
+    snap = sync_mod.snapshot_from_telemetry(car, ts)
+    if car.get("Odometer") is None:
+        snap["odo_km"] = None
+    return snap
+
+
 def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
     if not vin or not fields:
         return
@@ -15108,7 +15120,7 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
     # the moment the car left P, so a wait awake in P is not drive time. A
     # stop in P keeps the drive open, as the car's own Current Drive does,
     # until it has lasted LIVE_TRIP_PARK_END_SEC.
-    snap = sync_mod.snapshot_from_telemetry(car, stamp)
+    snap = _live_snapshot(car, stamp)
     speed = float(snap.get("speed_kmh") or 0.0)
     moving = (snap.get("shift") or "P") != "P" or speed > 0.0
     go = car.get("_go")
@@ -15119,6 +15131,12 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
             car["_go"] = {**base, "ts": stamp, "max_speed": speed}
         else:
             go["max_speed"] = max(float(go.get("max_speed") or 0.0), speed)
+            # A drive that began before a reading was known (the app had just
+            # restarted, and the car sends odometer and energy only when they
+            # change) starts from the first one that arrives.
+            for k in ("odo_km", "energy_kwh", "soc", "range_km", "battery_level"):
+                if go.get(k) is None and snap.get(k) is not None:
+                    go[k] = snap[k]
     else:
         if go is not None:
             stop = car.setdefault("_stop", stamp)
@@ -15157,7 +15175,7 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     if not car or not ts:
         return {"driving": False, "vin": vin, "trip": None, "now": None,
                 "server_ts": time.time()}
-    snap = sync_mod.snapshot_from_telemetry(car, ts)
+    snap = _live_snapshot(car, ts)
     v, a = car.get("PackVoltage"), car.get("PackCurrent")
     try:
         power = round(float(v) * float(a) / 1000.0, 2) if v is not None and a is not None else None

@@ -4356,6 +4356,12 @@ const GLANCE_TABS = [
 // least 20 s apart.
 const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0, hist: [],
   es: null, esQuery: "", esOpened: 0, esLast: 0 };
+// The last reading from an earlier visit, if recent enough to be worth showing
+// for the moment before the stream's first frame arrives.
+try {
+  const kept = JSON.parse(localStorage.getItem("glLive") || "null");
+  if (kept && kept.L && Date.now() - kept.at < 10 * 60 * 1000) glLiveState.data = kept.L;
+} catch (_) { /* nothing kept */ }
 function glanceVisible() {
   const el = document.getElementById("glance");
   return !!el && getComputedStyle(el).display !== "none";
@@ -4415,6 +4421,14 @@ async function glWakeSync() {
 document.addEventListener("pointerdown", () => { if (glWakeWanted()) { glWake.failed = false; glWakeSync(); } }, { passive: true });
 document.addEventListener("visibilitychange", () => { glWakeSync(); });
 window.addEventListener("orientationchange", () => setTimeout(glWakeSync, 400));
+// Turned sideways: connect the stream (and fetch once) now rather than on the
+// next tick of the one-second loop.
+let glLiveWasVisible = false;
+window.addEventListener("resize", () => {
+  const vis = glanceVisible();
+  if (vis && !glLiveWasVisible && glanceTab === "live") glLivePoll();
+  glLiveWasVisible = vis;
+});
 window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
 
 // One reading from the server, pushed or polled: fold it into the page.
@@ -4438,6 +4452,9 @@ function glLiveApply(L) {
     if (!L.driving) glLiveState.inst = null;
   }
   glLiveState.data = L;
+  // Kept on the phone so the next time it is turned sideways the page opens
+  // on the last reading, not on an empty frame waiting for the stream.
+  try { localStorage.setItem("glLive", JSON.stringify({ at: Date.now(), L })); } catch (_) { /* private mode */ }
   if (nw.power_kw != null) {
     const kw = nw.power_kw * (glLiveState.sign < 0 ? -1 : 1);
     const v = nw.speed_kmh || 0;
@@ -4492,7 +4509,8 @@ async function glLivePoll() {
   // No frame from the stream for 20 s (it sends one at least every 15 s):
   // fall back to asking, and let the stream retry on its own.
   const live = glLiveState.es;
-  const quiet = !live || Date.now() - Math.max(glLiveState.esLast || 0, glLiveState.esOpened || 0) > 20000;
+  const quiet = !live || !glLiveState.esLast || glLiveState.esLast < glLiveState.esOpened
+    || Date.now() - Math.max(glLiveState.esLast || 0, glLiveState.esOpened || 0) > 20000;
   if (quiet) {
     try {
       const r = await fetch("/api/live?" + q, { credentials: "same-origin" });
@@ -4567,16 +4585,48 @@ function renderGlance(d) {
         ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
+      const ico = {
+        dist: '<path d="M4 18 10 6l4 8 2-4 4 8"/>',
+        time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+        speed: '<path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 15 4-5"/>',
+        whkm: '<path d="M13 3 5 13h6l-1 8 8-10h-6l1-8Z"/>',
+        batt: '<rect x="3" y="7" width="16" height="10" rx="2.5"/><path d="M22 11v2M7 10v4M11 10v4"/>',
+        range: '<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.2"/>',
+        odo: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M11 10v4M15 10v4"/>',
+      };
+      const tile = (k, label, value, unit, tone = "", cls = "") => `<div class="gl-rt ${tone} ${cls}">
+          <i><svg viewBox="0 0 24 24" aria-hidden="true">${ico[k]}</svg></i>
+          <span>${h(label)}</span><strong>${value}<small>${h(unit)}</small></strong></div>`;
+      const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
       if (!t) {
+        // Parked: the car now on the left, the last drive on the right, in the
+        // same tiles as the driving view. The odometer comes from the
+        // dashboard until the car next sends one (it only does when it moves).
+        const odo = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
+        const band = lt && lt.efficiency_band ? bandTone(lt.efficiency_band) : "";
+        const ltTone = band === "tone-good" ? "good" : band === "tone-warn" || band === "tone-bad" ? "warn" : "";
         return page(
-          boxes(glBox("Battery", lvl != null ? n(lvl, 1) : "—", "%"), glBox("Range", n(nw.range_km), "km"),
-            glBox("Odometer", n(nw.odo_km), "km")),
+          `<div class="gl-trip">
+            <div class="gl-trip-h"><b class="rec idle"></b>Car now<em>${!L ? "connecting…" : nw.age_sec != null ? `${nw.age_sec < 90 ? nw.age_sec + "s" : Math.round(nw.age_sec / 60) + " min"} ago` : ""}</em></div>
+            <div class="gl-rts">
+              ${tile("batt", "Batt", pct != null ? n(pct, 1) : "—", "%", pct != null && pct < 20 ? "warn" : "good")}
+              ${tile("range", "Range", nw.range_km != null ? n(nw.range_km) : "—", "km")}
+              ${tile("odo", "Odometer", odo != null ? fmt(odo) : "—", "km", "", "wide")}
+            </div>
+          </div>`,
           glDial({ value: spd ?? 0, min: 0, max: 160, step: 10,
             bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
             centre: spd != null ? n(spd) : "—", unit: "km/h", colour: "#22d3ee",
             sub: { text: nw.shift ? `gear ${nw.shift}` : "waiting for the car" }, label: "Speed" }),
-          lt ? boxes(glBox("Last trip", n(lt.distance_km, 1), "km"), glBox("Its Wh/km", n(lt.wh_per_km), ""),
-            glBox("Its time", n(lt.duration_min), "min")) : "",
+          lt ? `<div class="gl-trip">
+            <div class="gl-trip-h">Last trip<em>${lt.id != null ? "#" + lt.id + " · " : ""}${h(tripWhen(lt.start_time).split(" ").pop())}</em></div>
+            <div class="gl-rts">
+              ${tile("dist", "Dist", n(lt.distance_km, 1), "km")}
+              ${tile("time", "Time", n(lt.duration_min), "min")}
+              ${tile("speed", "Avg", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—", "km/h")}
+              ${tile("whkm", "Use", n(lt.wh_per_km), "Wh/km", ltTone)}
+            </div>
+          </div>` : "",
           foot);
       }
       // Energy over distance, as the car's "Current Drive" shows it.
@@ -4597,20 +4647,10 @@ function renderGlance(d) {
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           ${inst && inst.whkm != null ? `<div class="gl-power-sub">${n(inst.whkm)} Wh/km right now</div>` : ""}
         </div>`;
-      const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
       const battBar = `<div class="gl-battbar">
           <div class="gl-battbar-top"><span>Battery</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
           <div class="gl-power-sub">used ${n(t.soc_used, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
-      const ico = {
-        dist: '<path d="M4 18 10 6l4 8 2-4 4 8"/>',
-        time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
-        speed: '<path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 15 4-5"/>',
-        whkm: '<path d="M13 3 5 13h6l-1 8 8-10h-6l1-8Z"/>',
-      };
-      const tile = (k, label, value, unit, tone = "") => `<div class="gl-rt ${tone}">
-          <i><svg viewBox="0 0 24 24" aria-hidden="true">${ico[k]}</svg></i>
-          <span>${h(label)}</span><strong>${value}<small>${h(unit)}</small></strong></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       return page(
         `<div class="gl-trip">
