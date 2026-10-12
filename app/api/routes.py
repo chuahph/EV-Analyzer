@@ -15124,6 +15124,18 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
     speed = float(snap.get("speed_kmh") or 0.0)
     moving = (snap.get("shift") or "P") != "P" or speed > 0.0
     go = car.get("_go")
+    # Pack power, voltage x current, every second. Its sign convention is
+    # learned, not assumed: a car standing still can only be drawing from the
+    # pack, and at cruising speed it is mostly drawing too, so the sign seen
+    # there is "discharge".
+    raw = None
+    try:
+        if fields.get("PackVoltage") is not None or fields.get("PackCurrent") is not None:
+            raw = float(car["PackVoltage"]) * float(car["PackCurrent"]) / 1000.0
+    except (KeyError, TypeError, ValueError):
+        raw = None
+    if raw is not None and abs(raw) > 0.2 and (speed == 0.0 or speed > 30.0):
+        car["_sign"] = max(-50, min(50, int(car.get("_sign") or 0) + (1 if raw > 0 else -1)))
     if moving:
         car.pop("_stop", None)
         if go is None:
@@ -15145,6 +15157,20 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
                 car.pop("_stop", None)
         if "_go" not in car:
             car["_park"] = {k: snap.get(k) for k in _LIVE_KEYS}
+    go = car.get("_go")
+    if go is not None and raw is not None and car.get("_sign"):
+        # The drive's energy as the pack delivered it, summed second by second
+        # (regen counted back in, a wait in P included, as the car counts
+        # it). Gaps longer than 10 s are not bridged.
+        kw = raw if car["_sign"] > 0 else -raw
+        last = go.get("_p")
+        if last is None and go.get("e_int") is None:
+            # Power began mid-drive: what came before, from the energy reading.
+            e0, e1 = go.get("energy_kwh"), snap.get("energy_kwh")
+            go["e_int"] = max(float(e0) - float(e1), 0.0) if e0 is not None and e1 is not None else 0.0
+        if last and 0.0 < stamp - last[0] <= 10.0:
+            go["e_int"] = float(go.get("e_int") or 0.0) + last[1] * (stamp - last[0]) / 3600.0
+        go["_p"] = (stamp, kw)
 
 
 @router.post("/telemetry/live")
@@ -15181,6 +15207,10 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         power = round(float(v) * float(a) / 1000.0, 2) if v is not None and a is not None else None
     except (TypeError, ValueError):
         power = None
+    sign = int(car.get("_sign") or 0)
+    if power is not None:
+        # Discharge positive; until the sign is learned, unknown.
+        power = (power if sign > 0 else -power) if sign else None
     now = {
         "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)), "source": "memory",
         "speed_kmh": snap.get("speed_kmh"), "shift": snap.get("shift"),
@@ -15196,6 +15226,14 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     # closed here too once the wait in P has run out on the clock.
     if go and stop and time.time() - float(stop) > LIVE_TRIP_PARK_END_SEC:
         go = None
+    if go and go.get("e_int") is not None and go.get("_p") and snap.get("energy_kwh") is not None:
+        # Energy from the summed pack power: it moves every second, where the
+        # pack's energy reading moves in 0.02 kWh steps and could hold one
+        # Wh/km figure for many seconds at town speeds.
+        e_now = float(go["e_int"]) + go["_p"][1] * max(0.0, min(ts - go["_p"][0], 10.0)) / 3600.0
+        base = 100.0
+        go = {**go, "energy_kwh": base}
+        snap = {**snap, "energy_kwh": base - max(e_now, 0.0)}
     trip = sync_mod.live_trip(go, snap, cap, get_settings().drive_min_km) if go else None
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "server_ts": time.time()}

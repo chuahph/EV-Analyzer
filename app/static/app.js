@@ -4436,12 +4436,7 @@ function glLiveApply(L) {
   const nw = L.now || {};
   const p = glLiveState.prev;
   // Pack power, when the car streams voltage and current: the power this
-  // second. Its sign convention is learned rather than assumed — at
-  // cruising speed the pack is mostly giving power out, so whichever sign
-  // dominates there is "discharge"; the other is regen.
-  if (nw.power_kw != null && (nw.speed_kmh || 0) > 30) {
-    glLiveState.sign = Math.max(-20, Math.min(20, glLiveState.sign + Math.sign(nw.power_kw)));
-  }
+  // second, discharge positive (the server learns the car's sign).
   if (L.driving && p && nw.ts && nw.ts - p.ts >= 20 && nw.energy_kwh != null && p.energy_kwh != null) {
     const dkwh = p.energy_kwh - nw.energy_kwh, dkm = (nw.odo_km || 0) - (p.odo_km || 0);
     const hours = (nw.ts - p.ts) / 3600;
@@ -4456,7 +4451,7 @@ function glLiveApply(L) {
   // on the last reading, not on an empty frame waiting for the stream.
   try { localStorage.setItem("glLive", JSON.stringify({ at: Date.now(), L })); } catch (_) { /* private mode */ }
   if (nw.power_kw != null) {
-    const kw = nw.power_kw * (glLiveState.sign < 0 ? -1 : 1);
+    const kw = nw.power_kw;
     const v = nw.speed_kmh || 0;
     glLiveState.inst = { kw, regen: kw < 0, whkm: v > 5 && kw > 0 ? kw * 1000 / v : null, measured: true };
   }
