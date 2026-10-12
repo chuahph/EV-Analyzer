@@ -2087,9 +2087,9 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 .gl-trip-h .rec { flex: 0 0 8px; width: 8px; height: 8px; padding: 0; margin-left: 2px; border-radius: 50%; background: #ff4d5a; box-shadow: 0 0 8px #ff4d5a;
   animation: gl-rec 1.4s ease-in-out infinite; }
 @keyframes gl-rec { 50% { opacity: .25; } }
-.gl-trip { flex: 1 1 auto; }
-.gl-rts { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px; padding-top: 8px; }
-.gl-rt { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; gap: 4px 6px;
+.gl-side > .gl-trip { flex: 0 0 auto; }
+.gl-rts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 8px; }
+.gl-rt { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 2px 6px;
   align-items: center; min-width: 0; padding: 7px 9px; border-radius: 10px; overflow: hidden; --rc: #22d3ee;
   background: radial-gradient(120% 90% at 0 0, color-mix(in srgb, var(--rc) 16%, transparent), transparent 60%), #0a1017;
   border: 1px solid color-mix(in srgb, var(--rc) 30%, #1d2a38);
