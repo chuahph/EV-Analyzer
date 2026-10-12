@@ -5023,6 +5023,14 @@ function renderGlance(d) {
   const pg = pages[glanceTab]();
   // The rail sits in the same row as the page, centred beside it, so the
   // spine lines up with the side boxes rather than the whole screen.
+  // The page is redrawn every second while live, and a redraw would restart
+  // every CSS animation from its first frame (the scan line never got past the
+  // top). Each animation reads its starting point from a shared clock instead,
+  // so it carries on from where it was.
+  const clock = Date.now();
+  for (const ms of [450, 1200, 1400, 1600, 2400, 3100, 3200, 4500, 7000]) {
+    el.style.setProperty(`--p${ms}`, `-${clock % ms}ms`);
+  }
   el.innerHTML = `<div class="gl-main" style="--tc:${cur_tab.c}">${GL_FRAME}
     <div class="gl-head"><span class="gl-tabname">${h(cur_tab.label)}</span><h2>${h(name)}</h2>
       <span class="gl-sub">${h(glanceTab === "live"

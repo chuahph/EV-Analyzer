@@ -1783,7 +1783,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   background: radial-gradient(circle, color-mix(in srgb, var(--tc) 30%, transparent) 0%,
     color-mix(in srgb, var(--tc) 10%, transparent) 38%, transparent 68%);
   filter: blur(6px);
-  animation: gl-breathe 4.5s ease-in-out infinite;
+  animation: gl-breathe 4.5s ease-in-out infinite var(--p4500, 0ms);
 }
 /* A thin light ring just outside the dial's arc. */
 .gl-pod::after {
@@ -1944,7 +1944,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 .gl-body::after {
   content: ""; position: absolute; left: 0; right: 0; height: 40px; top: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--tc) 9%, transparent), transparent);
-  animation: gl-scan 7s linear infinite;
+  animation: gl-scan 7s linear infinite var(--p7000, 0ms);
 }
 @keyframes gl-scan { from { transform: translateY(-40px); } to { transform: translateY(420px); } }
 @media (prefers-reduced-motion: reduce) { .gl-body::after { display: none; } }
@@ -1975,10 +1975,10 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   text-transform: uppercase; letter-spacing: .06em; font-weight: 650; }
 .gl-live b { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .gl-live.on { color: #22d3ee; }
-.gl-live.on b { background: #22d3ee; box-shadow: 0 0 0 0 rgba(34, 211, 238, .7); animation: gl-ping 1.6s ease-out infinite; }
+.gl-live.on b { background: #22d3ee; box-shadow: 0 0 0 0 rgba(34, 211, 238, .7); animation: gl-ping 1.6s ease-out infinite var(--p1600, 0ms); }
 @keyframes gl-ping { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, .7); } 100% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); } }
 .gl-tab-live .gl-tab-face::after { content: ""; position: absolute; top: 4px; right: 12px; width: 6px; height: 6px;
-  border-radius: 50%; background: #22d3ee; box-shadow: 0 0 6px #22d3ee; animation: gl-blink 1.2s ease-in-out infinite; }
+  border-radius: 50%; background: #22d3ee; box-shadow: 0 0 6px #22d3ee; animation: gl-blink 1.2s ease-in-out infinite var(--p1200, 0ms); }
 @keyframes gl-blink { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .gl-live.on b, .gl-tab-live .gl-tab-face::after { animation: none; } }
 
@@ -2010,14 +2010,14 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 .gl-frame .bl { left: 0; bottom: 0; transform: scaleY(-1); }
 .gl-frame .br { right: 0; bottom: 0; transform: scale(-1, -1); }
 .gl-frame .seam { stroke: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); opacity: .9; }
-.gl-frame .led { fill: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); animation: gl-blink 2.4s ease-in-out infinite; }
-.gl-frame .led2 { fill: #ff5a5f; filter: drop-shadow(0 0 3px #ff5a5f); animation: gl-blink 3.1s ease-in-out infinite .6s; }
+.gl-frame .led { fill: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); animation: gl-blink 2.4s ease-in-out infinite var(--p2400, 0ms); }
+.gl-frame .led2 { fill: #ff5a5f; filter: drop-shadow(0 0 3px #ff5a5f); animation: gl-blink 3.1s ease-in-out infinite calc(var(--p3100, 0ms) + .6s); }
 .gl-frame .strip { position: absolute; left: 160px; right: 160px; height: 3px; border-radius: 2px;
   background:
     linear-gradient(90deg, transparent 0 40%, rgba(255,255,255,.9) 50%, transparent 60% 100%) 0 0 / 30% 100% no-repeat,
     repeating-linear-gradient(90deg, color-mix(in srgb, var(--tc) 85%, transparent) 0 10px, transparent 10px 15px);
   box-shadow: 0 0 8px color-mix(in srgb, var(--tc) 60%, transparent);
-  animation: gl-chase 3.2s linear infinite; opacity: .85; }
+  animation: gl-chase 3.2s linear infinite var(--p3200, 0ms); opacity: .85; }
 .gl-frame .strip.top { top: 3px; }
 .gl-frame .strip.bot { bottom: 3px; animation-direction: reverse; }
 @keyframes gl-chase { from { background-position: -40% 0, 0 0; } to { background-position: 140% 0, 0 0; } }
@@ -2085,7 +2085,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 .gl-trip-h { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .gl-trip-h em { margin-left: auto; font-style: normal; color: var(--muted); letter-spacing: .06em; text-transform: none; }
 .gl-trip-h .rec { flex: 0 0 8px; width: 8px; height: 8px; padding: 0; margin-left: 2px; border-radius: 50%; background: #ff4d5a; box-shadow: 0 0 8px #ff4d5a;
-  animation: gl-rec 1.4s ease-in-out infinite; }
+  animation: gl-rec 1.4s ease-in-out infinite var(--p1400, 0ms); }
 @keyframes gl-rec { 50% { opacity: .25; } }
 .gl-side > .gl-trip { flex: 0 0 auto; }
 .gl-rts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 8px; }
@@ -2375,8 +2375,8 @@ main > .card { max-width: 100%; }
 .gl-rt span { letter-spacing: .02em; font-size: 9px; }
 /* Top-edge dashes of the speed panel flow with acceleration. */
 .gl-speedo .gl-flow { transition: none; }
-.gl-speedo.acc-up .gl-flow { animation: gl-flow .45s linear infinite; }
-.gl-speedo.acc-down .gl-flow { animation: gl-flow .45s linear infinite reverse; }
+.gl-speedo.acc-up .gl-flow { animation: gl-flow .45s linear infinite var(--p450, 0ms); }
+.gl-speedo.acc-down .gl-flow { animation: gl-flow .45s linear infinite reverse var(--p450, 0ms); }
 @keyframes gl-flow { to { stroke-dashoffset: -20; } }
 @media (prefers-reduced-motion: reduce) { .gl-speedo .gl-flow { animation: none !important; } }
 
