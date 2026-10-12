@@ -15171,6 +15171,24 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
         if last and 0.0 < stamp - last[0] <= 10.0:
             go["e_int"] = float(go.get("e_int") or 0.0) + last[1] * (stamp - last[0]) / 3600.0
         go["_p"] = (stamp, kw)
+    # Wh/km is held at the last odometer tick: energy now over distance as of
+    # the tick would saw-tooth, because energy moves every second and the
+    # distance only when the odometer does. Energy and distance as they stood
+    # together at that tick are a consistent pair, which is how the car's own
+    # Current Drive steadies its figure.
+    go = car.get("_go")
+    odo = snap.get("odo_km")
+    if go is not None and odo is not None and go.get("odo_km") is not None:
+        tick = go.get("_od")
+        if tick is None or abs(float(odo) - tick[0]) > 1e-6:
+            if go.get("e_int") is not None:
+                used = float(go["e_int"])
+            elif go.get("energy_kwh") is not None and snap.get("energy_kwh") is not None:
+                used = max(float(go["energy_kwh"]) - float(snap["energy_kwh"]), 0.0)
+            else:
+                used = None
+            if used is not None:
+                go["_od"] = (float(odo), used)
 
 
 @router.post("/telemetry/live")
@@ -15235,6 +15253,11 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         go = {**go, "energy_kwh": base}
         snap = {**snap, "energy_kwh": base - max(e_now, 0.0)}
     trip = sync_mod.live_trip(go, snap, cap, get_settings().drive_min_km) if go else None
+    if trip and go and go.get("_od") and go.get("odo_km") is not None:
+        dist = go["_od"][0] - float(go["odo_km"])
+        if dist >= max(get_settings().drive_min_km, 0.1) and go["_od"][1] > 0:
+            trip["wh_per_km"] = round(go["_od"][1] * 1000.0 / dist)
+            trip["driving_wh_per_km"] = trip["wh_per_km"]
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "server_ts": time.time()}
 

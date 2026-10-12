@@ -4355,7 +4355,7 @@ const GLANCE_TABS = [
 // them, else from the change in energy and odometer between two polls at
 // least 20 s apart.
 const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0, hist: [],
-  es: null, esQuery: "", esOpened: 0, esLast: 0 };
+  es: null, esQuery: "", esOpened: 0, esLast: 0, wh: null, whKey: null };
 // The last reading from an earlier visit, if recent enough to be worth showing
 // for the moment before the stream's first frame arrives.
 try {
@@ -4446,6 +4446,16 @@ function glLiveApply(L) {
     glLiveState.prev = nw.ts ? nw : null;
     if (!L.driving) glLiveState.inst = null;
   }
+  // Wh/km eased toward each new figure rather than jumped to it: the car's
+  // own screen moves slowly, and a figure that leaps with every odometer tick
+  // reads as noise. A new drive starts the average afresh.
+  if (L.trip && L.trip.wh_per_km != null) {
+    const key = L.trip.start_time;
+    if (glLiveState.whKey !== key || glLiveState.wh == null) { glLiveState.whKey = key; glLiveState.wh = L.trip.wh_per_km; }
+    else glLiveState.wh += (L.trip.wh_per_km - glLiveState.wh) * 0.12;
+    L.trip.wh_per_km = Math.round(glLiveState.wh);
+    L.trip.driving_wh_per_km = L.trip.wh_per_km;
+  } else if (!L.trip) { glLiveState.wh = null; }
   glLiveState.data = L;
   // Kept on the phone so the next time it is turned sideways the page opens
   // on the last reading, not on an empty frame waiting for the stream.

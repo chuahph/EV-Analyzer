@@ -12572,7 +12572,16 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
             assert p["trip"]["energy_kwh"] == 0.16
             fold(133, {"PackVoltage": 360.0, "PackCurrent": 20.0})            # regen
             assert get()["now"]["power_kw"] == -7.2
-                        # A stop in P keeps the drive open, as the car's Current Drive does...
+                        # Wh/km is held at the last odometer tick: seconds of power with
+            # no odometer change must not move it.
+            fold(134, {"Odometer": 100.8 / mi})
+            held = get()["trip"]["wh_per_km"]
+            for k in range(5):
+                fold(135 + k, {"PackVoltage": 360.0, "PackCurrent": -50.0})
+            assert get()["trip"]["wh_per_km"] == held
+            fold(140, {"Odometer": 100.9 / mi})
+            assert get()["trip"]["wh_per_km"] != held
+            # A stop in P keeps the drive open, as the car's Current Drive does...
             fold(300, {"Gear": "ShiftStateP", "VehicleSpeed": 0.0})
             assert get()["driving"] is True
             # ...until it has lasted the 15 minutes the car allows to power down.
