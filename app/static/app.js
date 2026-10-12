@@ -4538,7 +4538,11 @@ const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart
 // for the moment before the stream's first frame arrives.
 try {
   const kept = JSON.parse(localStorage.getItem("glLive") || "null");
-  if (kept && kept.L && Date.now() - kept.at < 10 * 60 * 1000) glLiveState.data = kept.L;
+  if (kept && kept.L && Date.now() - kept.at < 10 * 60 * 1000) {
+    // Its age was right when it was saved; add the time since.
+    if (kept.L.now && kept.L.now.age_sec != null) kept.L.now.age_sec += Math.round((Date.now() - kept.at) / 1000);
+    glLiveState.data = kept.L;
+  }
 } catch (_) { /* nothing kept */ }
 function glanceVisible() {
   const el = document.getElementById("glance");
@@ -4645,7 +4649,10 @@ function glLiveApply(L) {
   glLiveState.data = L;
   // Kept on the phone so the next time it is turned sideways the page opens
   // on the last reading, not on an empty frame waiting for the stream.
-  try { localStorage.setItem("glLive", JSON.stringify({ at: Date.now(), L })); } catch (_) { /* private mode */ }
+  if (Date.now() - (glLiveState.saved || 0) > 5000) {
+    glLiveState.saved = Date.now();
+    try { localStorage.setItem("glLive", JSON.stringify({ at: Date.now(), L })); } catch (_) { /* private mode */ }
+  }
   if (nw.power_kw != null) {
     const kw = nw.power_kw;
     const v = nw.speed_kmh || 0;
@@ -4658,7 +4665,21 @@ function glLiveApply(L) {
       kw: glLiveState.inst && glLiveState.inst.kw != null ? glLiveState.inst.kw : null });
     while (hst.length && hst[0].t < nw.ts - 180) hst.shift();
   } else if (!L.driving) glLiveState.hist = [];
-  if (lastData && glanceTab === "live" && glanceVisible()) renderGlance(lastData);
+  glLiveDraw();
+}
+
+// Frames can arrive several times a second; one redraw serves them all, at
+// most about eight a second, so a busy stream does not cost the phone layout
+// work for every record.
+let glDrawTimer = null, glDrawLast = 0;
+function glLiveDraw() {
+  if (glDrawTimer) return;
+  const wait = Math.max(0, 200 - (Date.now() - glDrawLast));
+  glDrawTimer = setTimeout(() => {
+    glDrawTimer = null;
+    glDrawLast = Date.now();
+    if (lastData && glanceTab === "live" && glanceVisible()) renderGlance(lastData);
+  }, wait);
 }
 
 function glLiveQuery() {
@@ -5046,6 +5067,16 @@ function renderGlance(d) {
 // Shrink to fit: any figure or heading wider than the box it sits in gets a
 // smaller font until it fits (down to 8 px), so no phone size clips a number or
 // a word. Measured after every draw, so it follows the screen and the value.
+// The page may have been drawn while hidden (upright), when nothing can be
+// measured: fit again once the window has settled after a turn.
+let glFitTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(glFitTimer);
+  glFitTimer = setTimeout(() => {
+    const el = document.getElementById("glance");
+    if (el && glanceVisible()) glFit(el);
+  }, 150);
+});
 const GL_FIT = ".gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-box-v, .gl-foot .gl-chip";
 function glFit(root) {
   root.querySelectorAll(GL_FIT).forEach((e) => {

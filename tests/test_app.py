@@ -12614,6 +12614,87 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
         settings.app_passcode = old
 
 
+def test_live_memory_edge_cases():
+    """Older records fill in fields without overwriting newer ones; a car known
+    to be in Park is not moving whatever speed it last sent, but an unknown gear
+    after a restart does not read as stopped; and the power sign is not learned
+    while charging."""
+    from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+
+    from app.api import routes as routes_mod
+
+    vin = "LIVEEDGE000000001"
+    t0 = _dtm.now(_tz.utc) - _td(seconds=60)
+    at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fold = lambda d, f: routes_mod._live_mem_fold(vin, at(d), f)
+    payload = lambda: routes_mod._live_payload(vin, 68.3)
+    mi = 1.609344
+    try:
+        # 1. A trailing record: temperature merges, speed is not overwritten.
+        routes_mod._LIVE_MEM.pop(vin, None)
+        fold(10, {"Gear": "ShiftStateD", "VehicleSpeed": 40.0, "Odometer": 100.0 / mi})
+        fold(5, {"OutsideTemp": 27.0, "VehicleSpeed": 3.0})
+        now = payload()["now"]
+        assert now["out_temp"] == 27.0
+        assert now["speed_kmh"] == round(40.0 * mi, 1) or abs(now["speed_kmh"] - 40.0 * mi) < 0.1
+
+        # 2. Park wins over a stale speed, once the gear is known.
+        routes_mod._LIVE_MEM.pop(vin, None)
+        fold(0, {"Gear": "ShiftStateD", "VehicleSpeed": 12.0, "Odometer": 100.0 / mi})
+        assert payload()["driving"] is True
+        fold(20, {"Gear": "ShiftStateP"})            # no fresh speed ever arrives
+        p = payload()
+        assert p["now"]["speed_kmh"] == 0.0
+        # ...but a restart mid-drive, gear not yet heard, still shows the speed.
+        routes_mod._LIVE_MEM.pop(vin, None)
+        fold(30, {"VehicleSpeed": 50.0})
+        assert abs(payload()["now"]["speed_kmh"] - 50.0 * mi) < 0.1
+
+        # 3. Power sign: charging at a standstill teaches nothing; standing in
+        # gear does.
+        routes_mod._LIVE_MEM.pop(vin, None)
+        for k in range(5):
+            fold(k, {"Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+                     "DetailedChargeState": "DetailedChargeStateCharging",
+                     "PackVoltage": 380.0, "PackCurrent": -30.0})
+        assert not routes_mod._LIVE_MEM[vin].get("_sign")
+        assert payload()["now"]["power_kw"] is None
+        for k in range(5, 8):
+            fold(k, {"Gear": "ShiftStateD", "VehicleSpeed": 0.0,
+                     "DetailedChargeState": "DetailedChargeStateDisconnected",
+                     "PackVoltage": 380.0, "PackCurrent": 10.0})
+        assert routes_mod._LIVE_MEM[vin]["_sign"] > 0
+        assert payload()["now"]["power_kw"] == 3.8
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_live_memory_survives_malformed_readings():
+    """The fast lane takes whatever arrives with the sync key. A number where a
+    text field belongs, NaN or infinity must neither break every later answer
+    nor put an invalid token in the JSON the browser parses."""
+    import json as _json
+
+    from app.api import routes as routes_mod
+
+    vin = "LIVEBAD0000000001"
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        for k, f in enumerate([
+            {"Gear": 5.0, "DetailedChargeState": 3.2, "VehicleSpeed": float("nan")},
+            {"Odometer": float("inf"), "PackVoltage": "abc", "PackCurrent": float("-inf")},
+            {"EnergyRemaining": "55.5", "Gear": "ShiftStateD", "VehicleSpeed": 30.0},
+        ]):
+            routes_mod._live_mem_fold(vin, "2026-10-12T10:00:%02dZ" % k, f)
+        out = _json.dumps(routes_mod._live_payload(vin, 68.3))
+        assert "NaN" not in out and "Infinity" not in out
+        car = routes_mod._LIVE_MEM[vin]
+        assert car.get("Gear") == "ShiftStateD" and car.get("EnergyRemaining") == 55.5
+        assert "PackVoltage" not in car and "Odometer" not in car
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)
+
+
 def test_the_live_fast_lane_stays_in_memory():
     """/api/telemetry/live folds records into memory for the live page and
     writes nothing; pack power comes from voltage x current; and the same

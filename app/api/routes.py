@@ -15093,24 +15093,89 @@ def _live_snapshot(car: dict, ts: float) -> dict:
     snap = sync_mod.snapshot_from_telemetry(car, ts)
     if car.get("Odometer") is None:
         snap["odo_km"] = None
+    # A car in Park is not moving, whatever the last speed it sent was: Tesla
+    # may follow the last non-zero reading with an invalid one, which the fold
+    # ignores, and the old speed would then hold the drive open and the dial up.
+    # Only when the gear is actually known: after a restart it defaults to P,
+    # and a car already rolling must not read as stopped.
+    if car.get("Gear") is not None and (snap.get("shift") or "P") == "P":
+        snap["speed_kmh"] = 0.0
     return snap
+
+
+_LIVE_LOCK = threading.Lock()
+
+
+def _live_latest_vin() -> str | None:
+    """The car heard from most recently (a copy of the dict is walked, since
+    another thread may be adding a car)."""
+    items = list(_LIVE_MEM.items())
+    return max(items, key=lambda kv: float(kv[1].get("_seen") or 0.0))[0] if items else None
+
+
+_LIVE_TEXT_KEYS = frozenset({"Gear", "DetailedChargeState", "BMSState", "DoorState", "SentryMode"})
+_LIVE_NUM_KEYS = frozenset({"VehicleSpeed", "Odometer", "EnergyRemaining", "BatteryLevel", "Soc",
+                            "RatedRange", "PackVoltage", "PackCurrent", "OutsideTemp", "InsideTemp"})
+
+
+def _live_clean(key: str, value):
+    """A value fit to keep in the live view, or None to ignore it.
+
+    The fast lane takes whatever arrives with the sync key, and one bad value
+    kept in memory would make every later live answer fail (a number where a
+    gear is expected) or put NaN into the JSON the browser parses. Numbers must
+    be finite, text fields must be text."""
+    if value is None:
+        return None
+    if key in _LIVE_NUM_KEYS:
+        try:
+            x = float(value)
+        except (TypeError, ValueError):
+            return None
+        return x if math.isfinite(x) else None
+    if key in _LIVE_TEXT_KEYS:
+        return value if isinstance(value, str) else None
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
 
 
 def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
     if not vin or not fields:
         return
+    fields = {k: _live_clean(k, v) for k, v in fields.items() if isinstance(k, str)}
+    with _LIVE_LOCK:
+        try:
+            _live_mem_fold_locked(vin, created_at, fields)
+        except Exception:   # noqa: BLE001 - a bad record must never break the ingest it rides on
+            import logging
+            logging.getLogger(__name__).exception("live memory fold failed")
+
+
+def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     ts = _telemetry_ts(created_at)
     car = _LIVE_MEM.setdefault(vin, {})
-    if ts and ts < float(car.get("_t") or 0.0):
-        return   # a replayed record is older than what is shown
+    # Each field keeps the time of the record it came from, so an older record
+    # (the bridge's stored batches trail the fast lane by seconds) still fills in
+    # the fields the fast lane never sends — temperature, climate, locks — and
+    # can never overwrite a newer reading of the same field.
+    kt = car.setdefault("_kt", {})
+    older = bool(ts and ts < float(car.get("_t") or 0.0))
     for k, v in fields.items():
-        if v is not None:
-            car[k] = v
+        if v is None:
+            continue
+        if ts and ts < kt.get(k, 0.0):
+            continue
+        car[k] = v
+        if ts:
+            kt[k] = ts
+    car["_seen"] = time.time()
+    car["_v"] = int(car.get("_v") or 0) + 1      # wakes the live streams
+    if older:
+        return   # a trailing record: fields merged, the drive logic below is for the newest
     if ts:
         car["_t"] = ts
         car["_ts"] = created_at
-    car["_seen"] = time.time()
-    car["_v"] = int(car.get("_v") or 0) + 1      # wakes the live streams
     stamp = float(car.get("_t") or 0.0)
     if not stamp:
         return
@@ -15134,7 +15199,12 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
             raw = float(car["PackVoltage"]) * float(car["PackCurrent"]) / 1000.0
     except (KeyError, TypeError, ValueError):
         raw = None
-    if raw is not None and abs(raw) > 0.2 and (speed == 0.0 or speed > 30.0):
+    # Learned only where the direction is certain: cruising, or standing in
+    # gear (D, R or N). Not while charging, when current flows the other way
+    # at a standstill, and not in Park, which could be either.
+    in_gear = car.get("Gear") is not None and (snap.get("shift") or "P") != "P"
+    if (raw is not None and abs(raw) > 0.2 and not snap.get("charging")
+            and (speed > 30.0 or (speed == 0.0 and in_gear))):
         car["_sign"] = max(-50, min(50, int(car.get("_sign") or 0) + (1 if raw > 0 else -1)))
     if moving:
         car.pop("_stop", None)
@@ -15209,10 +15279,21 @@ def telemetry_live_push(payload: dict = Body(...)):
     return {"ok": True}
 
 
+def _live_payload_safe(vin: str | None, capacity_kwh: float | None) -> dict:
+    """_live_payload, but a failure is an empty answer, never an error: the page
+    keeps its last picture and the stream stays up."""
+    try:
+        return _live_payload(vin, capacity_kwh)
+    except Exception:   # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).exception("live payload failed")
+        return {"driving": False, "vin": vin, "trip": None, "now": None, "server_ts": time.time()}
+
+
 def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     """The live page's whole answer, built from memory only."""
-    if not vin and _LIVE_MEM:
-        vin = max(_LIVE_MEM, key=lambda k: float(_LIVE_MEM[k].get("_seen") or 0.0))
+    if not vin:
+        vin = _live_latest_vin()
     cap = capacity_kwh or 75.0
     car = _LIVE_MEM.get(vin) if vin else None
     ts = _telemetry_ts(car.get("_ts")) if car else None
@@ -15272,7 +15353,7 @@ def live_now(
     energy since leaving Park) is tracked in memory too (_live_mem_fold).
     ``power_kw`` is pack voltage x current when the car streams them,
     discharge positive."""
-    return _live_payload(vin, capacity_kwh)
+    return _live_payload_safe(vin, capacity_kwh)
 
 
 @router.get("/live/stream")
@@ -15297,18 +15378,17 @@ async def live_stream(
         while time.monotonic() - opened < 3600:
             if await request.is_disconnected():
                 return
-            target = vin or (max(_LIVE_MEM, key=lambda k: float(_LIVE_MEM[k].get("_seen") or 0.0))
-                             if _LIVE_MEM else None)
+            target = vin or _live_latest_vin()
             car = _LIVE_MEM.get(target) if target else None
             v = (car or {}).get("_v")
             if v != last_v:
                 last_v = v
                 last_beat = time.monotonic()
-                yield "data: " + _json_mod.dumps(_live_payload(target, capacity_kwh)) + "\n\n"
+                yield "data: " + _json_mod.dumps(_live_payload_safe(target, capacity_kwh)) + "\n\n"
             elif time.monotonic() - last_beat > 15:
                 last_beat = time.monotonic()
                 # The age on screen keeps counting while the car is quiet.
-                yield "data: " + _json_mod.dumps(_live_payload(target, capacity_kwh)) + "\n\n"
+                yield "data: " + _json_mod.dumps(_live_payload_safe(target, capacity_kwh)) + "\n\n"
             await asyncio.sleep(0.1)
 
     return StreamingResponse(events(), media_type="text/event-stream",
