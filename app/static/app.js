@@ -4863,10 +4863,14 @@ function renderGlance(d) {
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           ${inst && inst.whkm != null ? `<div class="gl-power-sub">${n(inst.whkm)} Wh/km right now</div>` : ""}
         </div>`;
+      // The car's battery % moves in whole steps, which barely register on a short
+      // drive: take the larger of that and the energy used over the pack size.
+      const packKwh = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+      const usedPct = Math.max(+t.soc_used || 0, packKwh && t.energy_kwh > 0 ? t.energy_kwh / packKwh * 100 : 0);
       const battBar = `<div class="gl-battbar">
           <div class="gl-battbar-top"><span>Battery</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
-          <div class="gl-power-sub">used ${n(t.soc_used, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
+          <div class="gl-power-sub">used ${n(usedPct, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       return page(
         `<div class="gl-trip">
