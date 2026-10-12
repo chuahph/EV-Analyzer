@@ -24,9 +24,19 @@
        card per linked car. Selecting a car opens its dashboard; a car dashboard
        has a "← Main" link back here. -->
   <div id="home-view">
+    <div class="home-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><b class="hf-rail"></b></div>
     <div class="home-inner">
       <div class="home-hero">
-        <span class="home-logo">⚡</span>
+        <div class="home-emblem" aria-hidden="true">
+          <svg viewBox="0 0 120 120">
+            <defs><linearGradient id="he-g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>
+            <circle class="he-track" cx="60" cy="60" r="50" pathLength="100"/>
+            <circle class="he-ticks" cx="60" cy="60" r="56" pathLength="100"/>
+            <circle class="he-arc" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="66 100"/>
+            <path class="he-bolt" d="M66 22 38 64h20l-4 34 30-44H64l2-32Z"/>
+          </svg>
+        </div>
         <h1 class="home-title">Tesla Analyzer</h1>
         <p class="home-tagline">Driving · Charging · Efficiency Analytics</p>
         <div class="home-meta" aria-label="Mode and current time (Malaysia time)">
@@ -35,24 +45,26 @@
         </div>
       </div>
 
-      <div class="home-cars-wrap">
-        <h2 class="home-h2">Select a car</h2>
-        <div id="home-cars" class="home-cars"></div>
-      </div>
+      <div class="home-main">
+        <div class="home-cars-wrap">
+          <h2 class="home-h2">Select a car</h2>
+          <div id="home-cars" class="home-cars"></div>
+        </div>
 
-      <div class="home-actions">
-        <button id="btn-link" class="btn btn-accent">🔗 Link Tesla Account</button>
-        <button id="btn-unlink" class="btn hidden"
-                title="Disconnect this Tesla so you can link a different account">🔌 Unlink / switch account</button>
-        <button id="btn-import" class="btn">📁 Load Tesla Data</button>
-        <button id="btn-compare" class="btn hidden">⚖ Compare Cars</button>
-        <button id="btn-guide" class="btn">❓ Setup Guide</button>
-      </div>
+        <div class="home-actions">
+          <button id="btn-link" class="btn btn-accent"><span class="ha-ico"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1"/></svg></span>Link Tesla Account</button>
+          <button id="btn-unlink" class="btn hidden"
+                  title="Disconnect this Tesla so you can link a different account"><span class="ha-ico"><svg viewBox="0 0 24 24"><path d="M12 3v8M7.5 6.5a7 7 0 1 0 9 0"/></svg></span>Unlink / switch account</button>
+          <button id="btn-import" class="btn"><span class="ha-ico"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></span>Load Tesla Data</button>
+          <button id="btn-compare" class="btn hidden"><span class="ha-ico"><svg viewBox="0 0 24 24"><path d="M12 4v16M5 8l7-4 7 4M5 8l-2 6a3 3 0 0 0 4 0L5 8Zm14 0-2 6a3 3 0 0 0 4 0l-2-6Z"/></svg></span>Compare Cars</button>
+          <button id="btn-guide" class="btn"><span class="ha-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></svg></span>Setup Guide</button>
+        </div>
 
-      <!-- App build / config version, parked at the foot of the garage page. -->
-      <div class="home-foot">
-        <p id="build-info" class="clock build"></p>
-        <p class="home-foot-app">Tesla Analyzer</p>
+        <!-- App build / config version, parked at the foot of the garage page. -->
+        <div class="home-foot">
+          <p id="build-info" class="clock build"></p>
+          <p class="home-foot-app">Tesla Analyzer</p>
+        </div>
       </div>
     </div>
   </div>

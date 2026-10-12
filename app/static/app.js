@@ -418,6 +418,16 @@ function carCard(car) {
   const go = document.createElement("span");
   go.className = "car-card-go";
   go.textContent = "›";
+  // What the car is doing now, filled in by homeLive() below: a dot that is
+  // lit while the car is streaming, the battery as a small bar, the state.
+  if (realVin) {
+    btn.dataset.vin = car.vin;
+    const live = document.createElement("span");
+    live.className = "car-card-live";
+    live.innerHTML = '<b class="cl-dot"></b><span class="cl-txt">checking…</span>' +
+      '<span class="cl-bat" hidden><i></i></span>';
+    main.append(live);
+  }
   btn.append(ico, main, go);
   btn.addEventListener("click", () => openCar(car.vin));
   return btn;
@@ -449,6 +459,11 @@ async function renderHome() {
   document.getElementById("btn-compare")?.classList.toggle(
     "hidden", STATIC_MODE || mode !== "live" || list.length < 2);
 
+  // An odd number of action tiles: the last one takes the whole row.
+  const tiles = [...document.querySelectorAll(".home-actions .btn:not(#btn-link):not(.hidden)")];
+  tiles.forEach((b) => b.classList.remove("ha-wide"));
+  if (tiles.length % 2 === 1) tiles[tiles.length - 1].classList.add("ha-wide");
+
   cars.innerHTML = "";
   if (!list.length) {
     const p = document.createElement("p");
@@ -458,6 +473,33 @@ async function renderHome() {
     return;
   }
   for (const c of list) cars.appendChild(carCard(c));
+  homeLive();
+}
+
+// The live line on each car card, from the same memory-only endpoint the Live
+// page uses (no database read). Refreshed every few seconds while the garage
+// page is showing.
+let homeLiveTimer = null;
+async function homeLive() {
+  clearTimeout(homeLiveTimer);
+  if (STATIC_MODE || !document.body.classList.contains("view-home")) return;
+  for (const card of document.querySelectorAll("#home-cars .car-card[data-vin]")) {
+    const txt = card.querySelector(".cl-txt"), dot = card.querySelector(".cl-dot");
+    const bat = card.querySelector(".cl-bat");
+    try {
+      const L = await (await fetch("/api/live?vin=" + encodeURIComponent(card.dataset.vin))).json();
+      const nw = L.now;
+      if (!nw) { txt.textContent = "no live data yet"; dot.className = "cl-dot"; bat.hidden = true; continue; }
+      const lvl = nw.battery_level ?? nw.soc;
+      const fresh = nw.age_sec != null && nw.age_sec < 120;
+      const state = L.driving ? "driving" : fresh ? "parked, awake" : "asleep";
+      txt.textContent = [state, lvl != null ? `${fmt(lvl, 1)}%` : "", nw.range_km != null ? `${fmt(nw.range_km)} km` : ""]
+        .filter(Boolean).join(" · ");
+      dot.className = "cl-dot" + (L.driving ? " drive" : fresh ? " on" : "");
+      if (lvl != null) { bat.hidden = false; bat.firstElementChild.style.width = Math.max(0, Math.min(100, lvl)) + "%"; }
+    } catch (_) { txt.textContent = ""; }
+  }
+  homeLiveTimer = setTimeout(homeLive, 4000);
 }
 
 document.getElementById("btn-home")?.addEventListener("click", showHome);
