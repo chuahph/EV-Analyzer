@@ -2402,8 +2402,12 @@ main > .card { max-width: 100%; }
 .oh-arc { fill: none; stroke: var(--hud); stroke-width: 3; stroke-linecap: round; }
 .oh-needle { stroke: #fff; stroke-width: 2.4; stroke-linecap: round; }
 .oh-tile { fill: rgba(34, 211, 238, .22); stroke: rgba(34, 211, 238, .5); stroke-width: 1; }
-.oh-phone.land { height: auto; width: 96px; animation: oh-glow 2.4s ease-in-out infinite; }
-@keyframes oh-glow { 50% { filter: drop-shadow(0 0 14px rgba(34, 211, 238, .75)); } }
+.oh-phone.land { height: auto; width: 96px; transform-origin: center; animation: oh-turn 3.6s ease-in-out infinite; }
+/* Upright for a moment, turns sideways, then stays flat for most of the loop. */
+@keyframes oh-turn {
+  0%, 8% { transform: rotate(-90deg) scale(.72); filter: drop-shadow(0 0 8px rgba(34, 211, 238, .35)); }
+  34%, 100% { transform: none; filter: drop-shadow(0 0 14px rgba(34, 211, 238, .7)); }
+}
 .oh-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
 .oh-never { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
 .oh-ok { min-height: 40px; padding: 0 22px; border: 0; border-radius: 4px 12px 4px 12px; font: inherit; font-weight: 700;
