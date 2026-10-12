@@ -2367,7 +2367,7 @@ main > .card { max-width: 100%; }
 .home-actions .btn.ha-wide { grid-column: 1 / -1; }
 
 /* Live speedometer is a wide panel, not a dial. */
-.gl-dial.gl-speedo { width: 100%; height: auto; max-height: 100%; aspect-ratio: 13 / 10; }
+.gl-dial.gl-speedo { width: 100%; height: auto; max-height: 100%; aspect-ratio: 13 / 12; }
 /* Live tiles: long units (Wh/km) stay inside the tile. */
 .gl-rt { padding-right: 12px; }
 .gl-rt strong { font-size: clamp(16px, 4.6vh, 22px); padding-right: 2px; }

@@ -4158,7 +4158,7 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
   const has = value != null && Number.isFinite(+value);
   const v = has ? +value : 0;
   const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 110 ? "#f59e0b" : "#22d3ee");
-  const X0 = 30, X1 = 230, N = 40, step = (X1 - X0) / N, BY = 146, BH = 13;
+  const X0 = 30, X1 = 230, N = 40, step = (X1 - X0) / N, BY = 186, BH = 15;
   const xOf = (x) => X0 + Math.max(0, Math.min(max, x)) / max * (X1 - X0);
   let segs = "";
   for (let k = 0; k < N; k++) {
@@ -4181,47 +4181,47 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
   let wings = "";
   for (let k = 0; k < 4; k++) {
     const on = k < lit, col = on ? colourAt(Math.min(max, (k + 1) * 40)) : "#16212f";
-    const dx = k * 9;
-    wings += `<polyline points="${55 - dx},${86} ${46 - dx},${104} ${55 - dx},${122}" fill="none" stroke="${col}" stroke-width="4.5"
+    const dx = k * 7.5;
+    wings += `<polyline points="${50 - dx},${96} ${39 - dx},${124} ${50 - dx},${152}" fill="none" stroke="${col}" stroke-width="5"
         stroke-linejoin="miter"${on ? ` filter="url(#${uid}-glow)"` : ""}/>
-      <polyline points="${205 + dx},${86} ${214 + dx},${104} ${205 + dx},${122}" fill="none" stroke="${col}" stroke-width="4.5"
+      <polyline points="${210 + dx},${96} ${221 + dx},${124} ${210 + dx},${152}" fill="none" stroke="${col}" stroke-width="5"
         stroke-linejoin="miter"${on ? ` filter="url(#${uid}-glow)"` : ""}/>`;
   }
   const num = has ? String(Math.round(v)) : "—";
-  const size = num.length >= 3 ? 64 : 80;
+  const size = num.length >= 3 ? 72 : 98;
   const gears = ["P", "R", "N", "D"].map((g, k) => {
     const on = gear === g, gx = 130 - 21 + k * 14;
-    return `<text x="${gx}" y="38" text-anchor="middle" font-size="11" font-weight="${on ? 800 : 600}" fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>
-      ${on ? `<rect x="${gx - 7}" y="28" width="14" height="14" rx="2" fill="none" stroke="#22d3ee" stroke-width="1" opacity=".85"/>` : ""}`;
+    return `<text x="${gx}" y="40" text-anchor="middle" font-size="12" font-weight="${on ? 800 : 600}" fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>
+      ${on ? `<rect x="${gx - 7}" y="29" width="15" height="15" rx="2" fill="none" stroke="#22d3ee" stroke-width="1" opacity=".85"/>` : ""}`;
   }).join("");
   // The edge answers to speed: the outline takes the speed's colour, a column
   // of small bars on each side fills from the bottom, and the dashes along the
   // top edge flow forward while accelerating and back while slowing.
   const frame = has && v > 0.5 ? colourAt(v) : "#22d3ee";
-  const EB = 12, ebLit = has ? Math.ceil(Math.min(max, v) / max * EB) : 0;
+  const EB = 14, ebLit = has ? Math.ceil(Math.min(max, v) / max * EB) : 0;
   let edge = "";
   for (let k = 0; k < EB; k++) {
-    const y = 166 - k * 11, on = k < ebLit, col = on ? colourAt((k + 0.5) / EB * max) : "#111a26";
+    const y = 206 - k * 11, on = k < ebLit, col = on ? colourAt((k + 0.5) / EB * max) : "#111a26";
     edge += `<rect x="9.5" y="${y - 8}" width="4" height="8" rx="1" fill="${col}"${on ? ` filter="url(#${uid}-glow)"` : ""}/>
       <rect x="246.5" y="${y - 8}" width="4" height="8" rx="1" fill="${col}"${on ? ` filter="url(#${uid}-glow)"` : ""}/>`;
   }
-  return `<svg class="gl-dial gl-speedo${acc > 0 ? " acc-up" : acc < 0 ? " acc-down" : ""}" viewBox="0 0 260 200" role="img" aria-label="${h(label)} ${h(num)} km/h">
+  return `<svg class="gl-dial gl-speedo${acc > 0 ? " acc-up" : acc < 0 ? " acc-down" : ""}" viewBox="0 0 260 240" role="img" aria-label="${h(label)} ${h(num)} km/h">
     <defs>
       <linearGradient id="${uid}-bg" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#14202f"/><stop offset=".6" stop-color="#0b121b"/><stop offset="1" stop-color="#070b11"/></linearGradient>
       <filter id="${uid}-glow" x="-30%" y="-30%" width="160%" height="160%">
         <feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     </defs>
-    <polygon points="30,8 230,8 252,30 252,170 230,192 30,192 8,170 8,30" fill="url(#${uid}-bg)" stroke="${frame}" stroke-width="1.8"
+    <polygon points="30,8 230,8 252,30 252,210 230,232 30,232 8,210 8,30" fill="url(#${uid}-bg)" stroke="${frame}" stroke-width="1.8"
       filter="url(#${uid}-glow)"/>
-    <polygon points="34,15 226,15 245,34 245,166 226,185 34,185 15,166 15,34" fill="none" stroke="rgba(34,211,238,.25)" stroke-width="1"/>
-    <path d="M8 44V30L30 8h26M204 8h26l22 22v14M252 156v14l-22 22h-26M56 192H30L8 170v-14" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
-    <path class="gl-flow" d="M70 15h120M70 185h120" stroke="${frame}" stroke-width="2.4" opacity=".8" stroke-dasharray="14 6"/>
+    <polygon points="34,15 226,15 245,34 245,206 226,225 34,225 15,206 15,34" fill="none" stroke="rgba(34,211,238,.25)" stroke-width="1"/>
+    <path d="M8 44V30L30 8h26M204 8h26l22 22v14M252 196v14l-22 22h-26M56 232H30L8 210v-14" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
+    <path class="gl-flow" d="M70 15h120M70 225h120" stroke="${frame}" stroke-width="2.4" opacity=".8" stroke-dasharray="14 6"/>
     ${edge}
     ${gears}${wings}
-    <text x="130" y="${num.length >= 3 ? 112 : 118}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
+    <text x="130" y="${num.length >= 3 ? 140 : 150}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
       filter="url(#${uid}-glow)" style="font-variant-numeric:tabular-nums">${num}</text>
-    <text x="130" y="132" text-anchor="middle" font-size="9" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H</text>
+    <text x="130" y="166" text-anchor="middle" font-size="10" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H</text>
     <g filter="url(#${uid}-glow)">${segs}</g>${markTick}${pointer}${labels}
   </svg>`;
 }
