@@ -306,7 +306,12 @@ function renderScore(d) {
     `Lower Wh/km (gentler speed, smoother acceleration, less climate use) lifts it.`;
   el.className = `score-banner tone-${scoreTone(s)}`;
   el.innerHTML =
-    `<div class="score-ring">${s}<span>/100</span></div>` +
+    // A ring gauge, the same family as the Glance dials.
+    `<div class="score-ring"><svg viewBox="0 0 100 100" aria-hidden="true">` +
+    `<circle class="sr-track" cx="50" cy="50" r="42" pathLength="100"/>` +
+    `<circle class="sr-ticks" cx="50" cy="50" r="48" pathLength="100"/>` +
+    `<circle class="sr-fill" cx="50" cy="50" r="42" pathLength="100" stroke-dasharray="${Math.max(0, Math.min(100, s))} 100"/>` +
+    `</svg><b>${s}</b><span>/100</span></div>` +
     `<div class="score-text">` +
     `<div class="score-grade">Driving score: grade ${grade}` +
     `<button class="info-btn" data-info="score-info">!</button></div>` +

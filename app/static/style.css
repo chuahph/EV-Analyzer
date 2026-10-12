@@ -2137,3 +2137,89 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   background: #4a5462; border-radius: 0 2px 2px 0; }
 .gl-battbar-cell i { position: absolute; left: 1px; top: 1px; bottom: 1px; border-radius: 2px;
   background-image: repeating-linear-gradient(90deg, transparent 0 9px, rgba(0,0,0,.45) 9px 11px) !important; }
+
+/* --- HUD look for the main (portrait) dashboard ----------------------------
+   The same family as the Glance view: a faint grid behind everything, cyan
+   frame light, notched tiles with glowing values and corner brackets on the
+   cards. Layered over the base styles above, so the layout is unchanged. */
+:root { --hud: #22d3ee; }
+body {
+  background:
+    radial-gradient(900px 520px at 50% -8%, rgba(34, 211, 238, .10), transparent 60%),
+    radial-gradient(1200px 700px at 6% -12%, rgba(232, 33, 39, .07), transparent 56%),
+    linear-gradient(rgba(34, 211, 238, .035) 1px, transparent 1px) 0 0 / 100% 28px,
+    linear-gradient(90deg, rgba(34, 211, 238, .035) 1px, transparent 1px) 0 0 / 28px 100%,
+    linear-gradient(180deg, #0b0f15 0%, #080b10 55%, #0a0d12 100%);
+  background-attachment: fixed;
+}
+/* Header: a lit rail along its lower edge, brightest in the middle. */
+header { border-bottom-color: #13202b; }
+header::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(34,211,238,.15) 15%, var(--hud) 50%, rgba(34,211,238,.15) 85%, transparent);
+  box-shadow: 0 0 12px rgba(34, 211, 238, .55);
+}
+/* Shortcut buttons: a notched corner, a tone light along the top, and an icon glow. */
+.qn-btn {
+  --qc: var(--hud);
+  position: relative; overflow: hidden; border-radius: 4px 12px 4px 12px;
+  background: linear-gradient(180deg, #151c26, #0c1118);
+  border-color: color-mix(in srgb, var(--qc) 22%, #1d2733);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 6px 14px rgba(0,0,0,.45);
+}
+.qn-btn::before {
+  content: ""; position: absolute; left: 18%; right: 18%; top: 0; height: 2px; border-radius: 2px;
+  background: var(--qc); box-shadow: 0 0 8px var(--qc); opacity: .85;
+}
+.qn-btn.tone-green { --qc: var(--green); } .qn-btn.tone-blue { --qc: #60a5fa; }
+.qn-btn.tone-violet { --qc: var(--violet); } .qn-btn.tone-amber { --qc: var(--amber); }
+.qn-btn.tone-red { --qc: #ff6b70; } .qn-btn.tone-teal { --qc: var(--teal); }
+.qn-btn .qn-ico { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--qc) 70%, transparent)); }
+
+/* Score: a ring gauge with the number in its centre. */
+.score-banner { align-items: center; border-radius: 6px 18px 6px 18px; }
+.score-banner { --sc: var(--muted); }
+.score-banner.tone-green { --sc: var(--green); } .score-banner.tone-blue { --sc: #60a5fa; }
+.score-banner.tone-amber { --sc: var(--amber); } .score-banner.tone-red { --sc: #ff6b70; }
+.score-ring { position: relative; width: 84px; height: 84px; display: grid; place-items: center; align-content: center; }
+.score-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.score-ring circle { fill: none; }
+.score-ring .sr-track { stroke: #0a0e14; stroke-width: 9; }
+.score-ring .sr-ticks { stroke: color-mix(in srgb, var(--sc) 40%, transparent); stroke-width: 3; stroke-dasharray: .6 4.4; }
+.score-ring .sr-fill { stroke: var(--sc); stroke-width: 9; stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--sc)); }
+.score-ring b { position: relative; font-size: 28px; line-height: 1; color: var(--text);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--sc) 70%, transparent); }
+.score-ring span { position: relative; font-size: 10px; margin-top: 1px; }
+
+/* KPI tiles: a cut top-right corner, a label with a pointer, a glowing value
+   and a lit line along the bottom in the tile's tone. */
+.kpi { --kc: var(--hud); overflow: hidden; border-radius: 6px 16px 6px 16px; }
+.kpi.tone-blue { --kc: #60a5fa; } .kpi.tone-green { --kc: var(--green); } .kpi.tone-amber { --kc: var(--amber); }
+.kpi.tone-violet { --kc: var(--violet); } .kpi.tone-teal { --kc: var(--teal); } .kpi.tone-red { --kc: #ff6b70; }
+.kpi::after {
+  content: ""; position: absolute; left: 14px; right: 30%; bottom: 0; height: 2px; border-radius: 2px; pointer-events: none;
+  background: linear-gradient(90deg, var(--kc), transparent); box-shadow: 0 0 8px var(--kc);
+}
+.kpi > .label::before { content: "▸ "; color: var(--kc); }
+.kpi .label { letter-spacing: .1em; font-size: 10.5px; }
+.kpi .value { text-shadow: 0 0 14px color-mix(in srgb, var(--kc) 45%, transparent); }
+.kpi-empty::after, .kpi-info::after { display: none; }
+
+/* Cards: corner brackets in cyan, and a brighter title rule. */
+.card { border-color: #1b2632; border-radius: 6px; background: linear-gradient(180deg, #141b24, #0e131a);
+  box-shadow: inset 0 0 30px rgba(34,211,238,.035), 0 10px 26px rgba(0,0,0,.45); }
+.card::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 0; pointer-events: none; z-index: 0;
+  --b: rgba(34, 211, 238, .7);
+  background:
+    linear-gradient(var(--b), var(--b)) 0 0 / 16px 2px, linear-gradient(var(--b), var(--b)) 0 0 / 2px 16px,
+    linear-gradient(var(--b), var(--b)) 100% 0 / 16px 2px, linear-gradient(var(--b), var(--b)) 100% 0 / 2px 16px,
+    linear-gradient(var(--b), var(--b)) 0 100% / 16px 2px, linear-gradient(var(--b), var(--b)) 0 100% / 2px 16px,
+    linear-gradient(var(--b), var(--b)) 100% 100% / 16px 2px, linear-gradient(var(--b), var(--b)) 100% 100% / 2px 16px;
+  background-repeat: no-repeat;
+  opacity: .8;
+}
+.card h2 { border-bottom-color: #1b2632; }
+.card h2::after { width: 64px; background: linear-gradient(90deg, var(--hud), var(--accent-2)); box-shadow: 0 0 8px rgba(34,211,238,.6); }
+.sep { background: linear-gradient(90deg, transparent, rgba(34,211,238,.25) 50%, transparent); }
