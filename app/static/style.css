@@ -2082,14 +2082,39 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   box-shadow: inset 0 0 24px rgba(34,211,238,.06), inset 0 1px 0 rgba(255,255,255,.06), 0 10px 22px rgba(0,0,0,.5); }
 .gl-trip-h { font-size: 10.5px; font-weight: 650; letter-spacing: .16em; text-transform: uppercase; color: #22d3ee;
   padding-bottom: 6px; border-bottom: 1px solid #1d2a38; }
-.gl-read { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0;
-  border-bottom: 1px dashed #1a2532; }
-.gl-read:last-child { border-bottom: 0; }
-.gl-read span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-.gl-read strong { font: 700 clamp(18px, 5.2vh, 26px) ui-monospace, "SF Mono", Menlo, monospace; color: #c9f6ff;
-  text-shadow: 0 0 10px rgba(34,211,238,.45); font-variant-numeric: tabular-nums; }
-.gl-read strong small { font-size: .5em; color: var(--muted); margin-left: 4px; text-shadow: none; }
-/* Right: power meter, Wh/km strip, battery bar. */
+.gl-trip-h { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.gl-trip-h em { margin-left: auto; font-style: normal; color: var(--muted); letter-spacing: .06em; text-transform: none; }
+.gl-trip-h .rec { flex: 0 0 8px; width: 8px; height: 8px; padding: 0; margin-left: 2px; border-radius: 50%; background: #ff4d5a; box-shadow: 0 0 8px #ff4d5a;
+  animation: gl-rec 1.4s ease-in-out infinite; }
+@keyframes gl-rec { 50% { opacity: .25; } }
+.gl-trip { flex: 1 1 auto; }
+.gl-rts { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 8px; padding-top: 8px; }
+.gl-rt { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; gap: 4px 6px;
+  align-items: center; min-width: 0; padding: 7px 9px; border-radius: 10px; overflow: hidden; --rc: #22d3ee;
+  background: radial-gradient(120% 90% at 0 0, color-mix(in srgb, var(--rc) 16%, transparent), transparent 60%), #0a1017;
+  border: 1px solid color-mix(in srgb, var(--rc) 30%, #1d2a38);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 6px 14px rgba(0,0,0,.4); }
+.gl-rt::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--rc), transparent); opacity: .8; }
+.gl-rt:nth-child(2) { --rc: #a78bfa; } .gl-rt:nth-child(3) { --rc: #60a5fa; }
+.gl-rt.good { --rc: var(--green); } .gl-rt.warn { --rc: var(--amber); }
+.gl-rt i { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 8px;
+  background: color-mix(in srgb, var(--rc) 18%, #0a0d12); box-shadow: 0 0 10px color-mix(in srgb, var(--rc) 35%, transparent); }
+.gl-rt i svg { width: 14px; height: 14px; fill: none; stroke: var(--rc); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gl-rt span { font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-rt strong { grid-column: 1 / -1; align-self: end; font: 700 clamp(17px, 5vh, 24px) ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--rc) 55%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gl-rt strong small { font-size: .46em; color: var(--muted); margin-left: 3px; text-shadow: none; font-family: inherit; }
+/* Trace of speed and power over the last few minutes. */
+.gl-trace { flex: 1; min-height: 70px; display: flex; flex-direction: column; padding: 8px 10px; border-radius: 12px;
+  border: 1px solid var(--border); background: linear-gradient(180deg, #0d141c, #080c11);
+  box-shadow: inset 0 0 18px rgba(34,211,238,.05), 0 10px 22px rgba(0,0,0,.45); }
+.gl-trace-h { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; font-size: 9.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em; }
+.gl-trace-h .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 3px 0 6px; }
+.gl-trace svg { flex: 1; width: 100%; min-height: 40px; margin-top: 4px; }
+.gl-trace-wait { flex: 1; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
+/* Right: power meter, trace, battery bar. */
 .gl-power, .gl-battbar { padding: 9px 12px; border-radius: 12px; border: 1px solid var(--border);
   background: linear-gradient(180deg, #19202a, #10151c); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 22px rgba(0,0,0,.45); }
 .gl-power-top, .gl-battbar-top { display: flex; justify-content: space-between; align-items: baseline;

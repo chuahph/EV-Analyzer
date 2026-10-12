@@ -4292,6 +4292,31 @@ function glSegs(rows) {
   }).join("")}</div>`;
 }
 
+// Speed (area) and power (line) over the last few minutes of the drive.
+function glTrace(hist) {
+  const W = 300, H = 92;
+  if (!hist || hist.length < 2) {
+    return `<div class="gl-trace"><div class="gl-trace-h"><span>Last 3 min</span></div>
+      <div class="gl-trace-wait">building the trace…</div></div>`;
+  }
+  const t0 = hist[0].t, t1 = hist[hist.length - 1].t || t0 + 1;
+  const vmax = Math.max(60, ...hist.map((p) => p.v));
+  const kws = hist.filter((p) => p.kw != null).map((p) => p.kw);
+  const kmax = Math.max(20, ...kws.map(Math.abs));
+  const x = (t) => ((t - t0) / Math.max(1, t1 - t0) * W).toFixed(1);
+  const yv = (v) => (H - 4 - v / vmax * (H - 12)).toFixed(1);
+  const yk = (k) => (H / 2 - k / kmax * (H / 2 - 6)).toFixed(1);
+  const area = `M0 ${H} ` + hist.map((p) => `L${x(p.t)} ${yv(p.v)}`).join(" ") + ` L${W} ${H} Z`;
+  const kline = hist.filter((p) => p.kw != null).map((p, k) => `${k ? "L" : "M"}${x(p.t)} ${yk(p.kw)}`).join(" ");
+  return `<div class="gl-trace"><div class="gl-trace-h"><span>Last 3 min</span>
+      <span><b class="dot" style="background:#22d3ee"></b>speed <b class="dot" style="background:var(--amber)"></b>power</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="#2a3340" stroke-dasharray="3 4"/>
+      <path d="${area}" fill="rgba(34,211,238,.18)" stroke="#22d3ee" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+      ${kline ? `<path d="${kline}" fill="none" stroke="var(--amber)" stroke-width="2" vector-effect="non-scaling-stroke"/>` : ""}
+    </svg></div>`;
+}
+
 function glBox(label, value, unit, tone = "") {
   return `<div class="gl-box ${tone}"><span class="gl-box-l">${h(label)}</span>
     <span class="gl-box-v">${value}<small>${h(unit || "")}</small></span></div>`;
@@ -4323,7 +4348,7 @@ const GLANCE_TABS = [
 // Instant kW and Wh/km come from pack voltage x current when the car streams
 // them, else from the change in energy and odometer between two polls at
 // least 20 s apart.
-const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0 };
+const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0, hist: [] };
 function glanceVisible() {
   const el = document.getElementById("glance");
   return !!el && getComputedStyle(el).display !== "none";
@@ -4392,6 +4417,13 @@ async function glLivePoll() {
         const v = nw.speed_kmh || 0;
         glLiveState.inst = { kw, regen: kw < 0, whkm: v > 5 && kw > 0 ? kw * 1000 / v : null, measured: true };
       }
+      // The last three minutes of speed and power, for the trace on the page.
+      if (L.driving && nw.ts) {
+        const hst = glLiveState.hist, lastT = hst.length ? hst[hst.length - 1].t : 0;
+        if (nw.ts > lastT) hst.push({ t: nw.ts, v: +nw.speed_kmh || 0,
+          kw: glLiveState.inst && glLiveState.inst.kw != null ? glLiveState.inst.kw : null });
+        while (hst.length && hst[0].t < nw.ts - 180) hst.shift();
+      } else if (!L.driving) glLiveState.hist = [];
       if (L.driving) wait = 2000;
       if (lastData && glanceTab === "live") renderGlance(lastData);
     }
@@ -4477,9 +4509,9 @@ function renderGlance(d) {
           foot);
       }
       const tw = t.driving_wh_per_km ?? t.wh_per_km;
-      // Left: one trip-computer panel of readouts (not three boxes). Right: a
-      // power meter, a Wh/km strip against rated, and a battery bar, so the
-      // two sides of the speedometer read differently.
+      // Left: a trip computer of icon tiles. Right: a power meter, a trace of
+      // the last few minutes and a battery bar, so neither side repeats the
+      // Drive page's LED meters.
       const kw = inst && inst.kw != null ? inst.kw : null;
       const kwMin = -60, kwMax = 150, zero = -kwMin / (kwMax - kwMin) * 100;
       const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
@@ -4493,21 +4525,30 @@ function renderGlance(d) {
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           ${inst && inst.whkm != null ? `<div class="gl-power-sub">${n(inst.whkm)} Wh/km right now</div>` : ""}
         </div>`;
-      const whShare = tw && rated ? Math.min(1, tw / (rated * 1.6)) : 0;
       const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
       const battBar = `<div class="gl-battbar">
           <div class="gl-battbar-top"><span>Battery</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
           <div class="gl-power-sub">used ${n(t.soc_used, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
-      const readout = (label, value, unit) => `<div class="gl-read"><span>${h(label)}</span>
-          <strong>${value}<small>${h(unit)}</small></strong></div>`;
+      const ico = {
+        dist: '<path d="M4 18 10 6l4 8 2-4 4 8"/>',
+        time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+        speed: '<path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 15 4-5"/>',
+        whkm: '<path d="M13 3 5 13h6l-1 8 8-10h-6l1-8Z"/>',
+      };
+      const tile = (k, label, value, unit, tone = "") => `<div class="gl-rt ${tone}">
+          <i><svg viewBox="0 0 24 24" aria-hidden="true">${ico[k]}</svg></i>
+          <span>${h(label)}</span><strong>${value}<small>${h(unit)}</small></strong></div>`;
+      const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       return page(
         `<div class="gl-trip">
-          <div class="gl-trip-h">Trip computer</div>
-          ${readout("Distance", n(t.distance_km, 1), "km")}
-          ${readout("Time", n(t.duration_min), "min")}
-          ${readout("Avg speed", n(t.avg_speed_kmh), "km/h")}
-          ${readout("Started", h(tripWhen(t.start_time).split(" ").pop()), "")}
+          <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(tripWhen(t.start_time).split(" ").pop())}</em></div>
+          <div class="gl-rts">
+            ${tile("dist", "Dist", n(t.distance_km, 1), "km")}
+            ${tile("time", "Time", n(t.duration_min), "min")}
+            ${tile("speed", "Avg", n(t.avg_speed_kmh), "km/h")}
+            ${tile("whkm", "Use", n(tw), "Wh/km", twTone)}
+          </div>
         </div>`,
         glDial({ value: spd ?? t.avg_speed_kmh, min: 0, max: 160, step: 10,
           bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
@@ -4515,8 +4556,7 @@ function renderGlance(d) {
           colour: spd != null && spd > 110 ? "var(--amber)" : "#22d3ee",
           sub: { text: `max ${n(t.max_speed_kmh)} km/h` }, label: "Speed" }),
         `${powerBar}
-         ${glSegs([{ label: "Trip Wh/km", text: `${n(tw)}${rated ? ` · rated ${n(rated)}` : ""}`, share: whShare,
-            colour: (q) => rated && q * rated * 1.6 > rated ? "var(--amber)" : "var(--green)" }])}
+         ${glTrace(glLiveState.hist)}
          ${battBar}`,
         foot);
     },
