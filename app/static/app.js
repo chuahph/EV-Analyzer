@@ -4047,6 +4047,28 @@ function glBar(label, value, max, colour, text) {
     <strong>${h(text)}</strong></div>`;
 }
 
+// Half-circle gauge, for a score out of 100.
+function glGauge(score, colour, grade) {
+  const p = Math.max(0, Math.min(100, Number(score) || 0));
+  const len = Math.PI * 40;
+  const arc = p > 0 ? `<path d="M10 52 A40 40 0 0 1 90 52" fill="none" stroke="${colour}" stroke-width="10"
+      stroke-linecap="round" stroke-dasharray="${(len * p / 100).toFixed(1)} ${len.toFixed(1)}"/>` : "";
+  return `<svg class="gl-gauge" viewBox="0 0 100 60" role="img" aria-label="score ${Math.round(p)}">
+    <path d="M10 52 A40 40 0 0 1 90 52" fill="none" stroke="var(--panel-2)" stroke-width="10" stroke-linecap="round"/>
+    ${arc}
+    <text x="50" y="48" text-anchor="middle" font-size="22" font-weight="750" fill="var(--text)">${score == null ? "—" : Math.round(p)}</text>
+    ${grade ? `<text x="50" y="59" text-anchor="middle" font-size="8.5" fill="var(--muted)">grade ${h(grade)}</text>` : ""}
+  </svg>`;
+}
+
+// One bar split into parts: [{v, colour, label}].
+function glSplit(parts) {
+  const tot = parts.reduce((a, p) => a + (p.v > 0 ? p.v : 0), 0);
+  const seg = parts.map((p) => tot > 0 && p.v > 0
+    ? `<span style="width:${(p.v / tot * 100).toFixed(1)}%;background:${p.colour}"></span>` : "").join("");
+  return `<div class="gl-split">${seg || '<span style="width:100%;background:var(--panel-2)"></span>'}</div>`;
+}
+
 function renderGlance(d) {
   const el = document.getElementById("glance");
   if (!el || !d) return;
@@ -4054,89 +4076,81 @@ function renderGlance(d) {
   const chg = d.charging || {}, bat = d.battery || {}, v = d.vehicle || {};
   const cur = d.currency || "";
   const n = (x, dg = 0) => (x == null || !Number.isFinite(+x) ? "—" : fmt(+x, dg));
-  const tile = (label, body) => `<div class="gl-tile"><div class="gl-label">${h(label)}</div>${body}</div>`;
+  // Bento: one hero, two wide tiles and four small ones, each with its own
+  // colour, so the eye has an order to read in instead of eight equal boxes.
+  const tile = (cls, label, body) =>
+    `<div class="gl-tile ${cls}"><div class="gl-label">${h(label)}</div>${body}</div>`;
 
-  // 1 · Battery now, and how much of it this window used.
-  // With no current reading (an imported history), the ring shows what the
-  // window used instead of an empty gauge.
+  // Hero · battery: the one big ring.
   const level = bal.current_level_pct ?? bal.current_soc_pct;
   const used = bal.used_pct;
-  const ring1 = level != null
-    ? glRing(level, "var(--green)", `${Math.round(level)}%`, "now")
+  const ring = level != null
+    ? glRing(level, "var(--green)", `${Math.round(level)}%`, "battery now")
     : glRing(used ?? 0, "var(--amber)", used != null ? `${n(used, 1)}%` : "—", "used");
-  const t1 = tile("Battery", `<div class="gl-ring">${ring1}
-    <div><div class="gl-line">Used <strong>${n(used, 1)}%</strong></div>
-    <div class="gl-line"><strong>${n(bal.used_kwh, 1)}</strong> kWh</div>
-    <div class="gl-line">of ${n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 1)} kWh</div></div></div>`);
+  const ch = bat.capacity_health;
+  const hero = tile("gl-hero gl-c-green", "Battery", `<div class="gl-hero-ring">${ring}</div>
+    <div class="gl-stats">
+      <div><span>Used</span><strong>${n(used, 1)}%</strong></div>
+      <div><span>Energy</span><strong>${n(bal.used_kwh, 1)} kWh</strong></div>
+      <div><span>Pack</span><strong>${n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 1)} kWh</strong></div>
+      ${ch ? `<div><span>Health</span><strong>${n(ch.health_pct, 1)}%</strong></div>` : ""}
+    </div>`);
 
-  // 2 · Distance and trips.
-  const t2 = tile("Driven", `<div class="gl-big">${n(drv.total_distance_km, 1)}<small>km</small></div>
-    <div class="gl-line"><strong>${n(drv.total_drives)}</strong> trips · <strong>${n(drv.total_duration_h, 1)}</strong> h</div>
-    <div class="gl-line">avg <strong>${n(drv.avg_speed_kmh)}</strong> km/h · longest <strong>${n(drv.longest_trip_km, 1)}</strong> km</div>`);
-
-  // 3 · Efficiency, with its daily trend.
+  // Wide · efficiency with its trend.
   const vsRated = eff.vs_rated_pct;
   const daily = Object.values(eff.daily_efficiency || {}).map(Number);
-  const t3 = tile("Efficiency", `<div class="gl-big">${n(eff.avg_efficiency_wh_per_km ?? drv.avg_efficiency_wh_per_km)}<small>Wh/km</small></div>
-    <div class="gl-line">${vsRated == null ? "" : `<strong class="${vsRated <= 0 ? "tone-good" : "tone-warn"}">${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}%</strong> vs rated`}</div>
-    ${glSpark(daily, "#f59e0b")}`);
+  const effT = tile("gl-wide gl-c-amber", "Efficiency", `<div class="gl-row">
+      <div class="gl-big">${n(eff.avg_efficiency_wh_per_km ?? drv.avg_efficiency_wh_per_km)}<small>Wh/km</small></div>
+      ${vsRated == null ? "" : `<span class="gl-chip ${vsRated <= 0 ? "tone-good" : "tone-warn"}">${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}% vs rated</span>`}
+    </div>${glSpark(daily, "#f59e0b")}`);
 
-  // 4 · Where the energy went: driving against standing still.
-  const tripK = +bal.trip_kwh || +drv.trip_energy_used_kwh || 0, parkK = +bal.vampire_kwh || 0;
-  const tot = tripK + parkK;
-  const t4 = tile("Energy used", `<div class="gl-ring">${
-    glRing(tot > 0 ? tripK / tot * 100 : 0, "var(--accent-2)", `${n(tot, 1)}`, "kWh")}
-    <div><div class="gl-line"><strong style="color:var(--accent-2)">●</strong> Driving <strong>${n(tripK, 1)}</strong></div>
-    <div class="gl-line"><strong style="color:var(--panel-2)">●</strong> Parked <strong>${n(parkK, 2)}</strong></div>
-    <div class="gl-line">${n(bal.vampire_hours, 1)} h parked</div></div></div>`);
-
-  // 5 · Driving score.
+  // Small · driving score as a half gauge.
   const score = drv.eco_score;
   const sc = score == null ? "var(--muted)" : score >= 80 ? "var(--green)" : score >= 60 ? "var(--accent-2)" : "var(--amber)";
-  const t5 = tile("Driving score", `<div class="gl-ring">${
-    glRing(score ?? 0, sc, score != null ? String(Math.round(score)) : "—", drv.eco_grade || "")}
-    <div><div class="gl-line">p95 <strong>${n(drv.p95_speed_kmh)}</strong> km/h</div>
-    <div class="gl-line">max <strong>${n(drv.max_speed_kmh)}</strong> km/h</div></div></div>`);
+  const scoreT = tile("gl-c-blue", "Driving score", glGauge(score, sc, drv.eco_grade));
 
-  // 6 · The last trip.
+  // Small · distance, with this week against last when there is one.
+  const wk = d.week_compare;
+  const mx = wk && wk.this && wk.last ? Math.max(wk.this.distance_km || 0, wk.last.distance_km || 0) : 0;
+  const drivenT = tile("gl-c-violet", "Driven", `<div class="gl-big">${n(drv.total_distance_km, 1)}<small>km</small></div>
+    <div class="gl-line"><strong>${n(drv.total_drives)}</strong> trips · <strong>${n(drv.total_duration_h, 1)}</strong> h</div>
+    ${mx ? "" : `<div class="gl-line">avg <strong>${n(drv.avg_speed_kmh)}</strong> km/h</div>
+      <div class="gl-line">longest <strong>${n(drv.longest_trip_km, 1)}</strong> km</div>`}
+    ${mx ? `<div class="gl-bars">
+      ${glBar("7 days", wk.this.distance_km || 0, mx, "var(--violet)", `${n(wk.this.distance_km)}`)}
+      ${glBar("before", wk.last.distance_km || 0, mx, "var(--panel-2)", `${n(wk.last.distance_km)}`)}</div>` : ""}`);
+
+  // Small · where the energy went, as one split bar.
+  const tripK = +bal.trip_kwh || +drv.trip_energy_used_kwh || 0, parkK = +bal.vampire_kwh || 0;
+  const energyT = tile("gl-c-blue", "Energy used", `<div class="gl-big">${n(tripK + parkK, 1)}<small>kWh</small></div>
+    ${glSplit([{ v: tripK, colour: "var(--accent-2)" }, { v: parkK, colour: "var(--amber)" }])}
+    <div class="gl-line"><b class="dot" style="background:var(--accent-2)"></b>driving <strong>${n(tripK, 1)}</strong></div>
+    <div class="gl-line"><b class="dot" style="background:var(--amber)"></b>parked <strong>${n(parkK, 2)}</strong>
+      · ${n(bal.vampire_hours, 0)} h</div>`);
+
+  // Wide · the last trip.
   const lt = (drv.recent_trips || [])[0];
-  const t6 = tile("Last trip", lt ? `<div class="gl-big">${n(lt.distance_km, 1)}<small>km</small></div>
-    <div class="gl-line"><strong>${n(lt.wh_per_km)}</strong> Wh/km · <strong>${n(lt.duration_min)}</strong> min${lt.id != null ? ` · #${lt.id}` : ""}</div>
-    <div class="gl-line">${h(lt.route || tripWhen(lt.start_time))}</div>
-    ${lt.efficiency_band ? `<div class="gl-line">${h(lt.efficiency_band)}${lt.vs_expected_pct != null ? ` · ${lt.vs_expected_pct > 0 ? "+" : ""}${n(lt.vs_expected_pct, 0)}% vs expected` : ""}</div>` : ""}`
+  const band = lt && lt.efficiency_band;
+  const bandCls = band === "efficient" ? "tone-good" : band === "inefficient" ? "tone-warn" : "";
+  const tripT = tile("gl-wide gl-c-teal", "Last trip", lt ? `<div class="gl-row">
+      <div class="gl-big">${n(lt.distance_km, 1)}<small>km</small></div>
+      <div class="gl-big gl-big-2">${n(lt.wh_per_km)}<small>Wh/km</small></div>
+      <div class="gl-big gl-big-2">${n(lt.duration_min)}<small>min</small></div>
+    </div>
+    <div class="gl-line">${h(lt.route || tripWhen(lt.start_time))}${lt.id != null ? ` · #${lt.id}` : ""}</div>
+    ${band ? `<span class="gl-chip ${bandCls}">${h(band)}${lt.vs_expected_pct != null ? ` · ${lt.vs_expected_pct > 0 ? "+" : ""}${n(lt.vs_expected_pct, 0)}% vs expected` : ""}</span>` : ""}`
     : `<div class="gl-line">No trips in this window</div>`);
 
-  // 7 · Cost.
-  const t7 = tile("Cost", `<div class="gl-big">${h(cur)} ${n(drv.total_cost, 2)}</div>
-    <div class="gl-line"><strong>${h(cur)} ${n(drv.cost_per_km, 3)}</strong> per km</div>
-    <div class="gl-line">charging paid <strong>${h(cur)} ${n(chg.total_cost, 2)}</strong></div>`);
-
-  // 8 · This week against last, or battery health when there is no week yet.
-  const wk = d.week_compare;
-  let t8;
-  if (wk && wk.this && wk.last) {
-    const mx = Math.max(wk.this.distance_km || 0, wk.last.distance_km || 0);
-    t8 = tile("7 days vs previous", `<div class="gl-bars">
-      ${glBar("This wk", wk.this.distance_km || 0, mx, "var(--accent-2)", `${n(wk.this.distance_km)} km`)}
-      ${glBar("Last wk", wk.last.distance_km || 0, mx, "var(--panel-2)", `${n(wk.last.distance_km)} km`)}
-      <div class="gl-line">Wh/km <strong>${n(wk.this.wh_per_km)}</strong> vs <strong>${n(wk.last.wh_per_km)}</strong></div></div>`);
-  } else if (bat.capacity_health || bat.available) {
-    const ch = bat.capacity_health;
-    const hp = ch ? ch.health_pct : bat.health_pct;
-    t8 = tile("Battery health", `<div class="gl-ring">${
-      glRing(hp ?? 0, "var(--teal)", hp != null ? `${n(hp, 1)}%` : "—", "health")}
-      <div><div class="gl-line">${ch ? `<strong>${n(ch.measured_kwh, 1)}</strong> of ${n(ch.new_kwh, 1)} kWh` : `${n(bat.est_full_range_km)} km full`}</div></div></div>`);
-  } else {
-    t8 = tile("Charging", `<div class="gl-big">${n(chg.total_energy_kwh, 1)}<small>kWh</small></div>
-      <div class="gl-line"><strong>${n(chg.total_sessions)}</strong> session${chg.total_sessions === 1 ? "" : "s"} · avg to <strong>${n(chg.avg_end_soc)}%</strong></div>
-      <div class="gl-line">DC <strong>${n(chg.dc_energy_share_pct)}%</strong> of energy</div>`);
-  }
+  // Small · cost.
+  const costT = tile("gl-c-red", "Cost", `<div class="gl-big">${n(drv.total_cost, 2)}<small>${h(cur)}</small></div>
+    <div class="gl-line"><strong>${n(drv.cost_per_km, 3)}</strong> ${h(cur)}/km</div>
+    <div class="gl-line">charged <strong>${n(chg.total_energy_kwh, 1)}</strong> kWh</div>`);
 
   const name = v.name || v.model || "Tesla";
   el.innerHTML = `<div class="gl-head"><h2>${h(name)}</h2>
       <span class="gl-sub">${h(d.window_label || `${d.window_days}-day window`)}</span>
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
-    ${t1}${t2}${t3}${t4}${t5}${t6}${t7}${t8}`;
+    ${hero}${effT}${scoreT}${drivenT}${energyT}${tripT}${costT}`;
 }
 
 document.addEventListener("click", (e) => {

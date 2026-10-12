@@ -1624,21 +1624,24 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
    Fixed over the dashboard rather than in its flow, so turning a phone back
    upright returns to exactly the scroll position it left. Shown by the
    landscape-phone media query below, or by body.glance-on (the Glance
-   shortcut, offered on wide screens only). */
+   shortcut, offered on wide screens only).
+
+   A bento grid: six columns, two rows. The battery is the hero (2x2),
+   efficiency and the last trip are wide (2x1), the rest single — so the
+   page has an order to read in, not eight equal boxes. */
 .glance {
   display: none; position: fixed; inset: 0; z-index: 60;
-  background: var(--bg); overflow: auto;
+  background: radial-gradient(120% 90% at 0% 0%, #13202a 0%, var(--bg) 55%);
+  overflow: auto;
   padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
            max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-template-rows: auto repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
-/* On a wide screen the tiles keep a card's proportions instead of
-   stretching to the window, centred as one block. */
 body.glance-on .glance {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 290px));
-  grid-template-rows: auto repeat(2, 200px); justify-content: center;
+  display: grid; grid-template-columns: repeat(6, minmax(0, 190px));
+  grid-template-rows: auto repeat(2, 210px); justify-content: center;
   align-content: center; gap: 14px;
 }
 @media (orientation: landscape) and (max-height: 560px) {
@@ -1658,28 +1661,61 @@ body.glance-on .glance {
   overflow: hidden; text-overflow: ellipsis; }
 .gl-close { margin-left: auto; background: none; border: 1px solid var(--border);
   color: var(--text); border-radius: 8px; padding: 2px 10px; font-size: 13px; }
+
 .gl-tile {
-  background: linear-gradient(180deg, #1c222c, var(--panel));
-  border: 1px solid var(--border); border-radius: 12px;
+  --c: var(--accent-2);
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(140% 90% at 100% 0%, color-mix(in srgb, var(--c) 16%, transparent) 0%, transparent 60%),
+    linear-gradient(180deg, #1b212b, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--c) 22%, var(--border));
+  border-radius: 16px;
   box-shadow: var(--edge-hi), var(--elev-1);
   padding: 10px 12px; min-width: 0; min-height: 0;
-  display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 5px;
 }
-.gl-label { color: var(--muted); font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .04em; }
-.gl-big { font-size: clamp(20px, 4.2vh, 30px); font-weight: 750; line-height: 1.1;
-  font-variant-numeric: tabular-nums; }
-.gl-big small { font-size: .5em; font-weight: 600; color: var(--muted); margin-left: 3px; }
+/* A short accent stroke in the tile's colour, top left. */
+.gl-tile::before {
+  content: ""; position: absolute; left: 12px; top: 0; width: 28px; height: 3px;
+  border-radius: 0 0 3px 3px; background: var(--c);
+}
+.gl-c-green { --c: var(--green); } .gl-c-amber { --c: var(--amber); }
+.gl-c-blue { --c: var(--accent-2); } .gl-c-violet { --c: var(--violet); }
+.gl-c-teal { --c: var(--teal); } .gl-c-red { --c: #ff6b70; }
+.gl-hero { grid-column: span 2; grid-row: span 2; border-radius: 22px; }
+.gl-wide { grid-column: span 2; }
+
+.gl-label { color: var(--muted); font-size: 11px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .05em; }
+.gl-big { font-size: clamp(20px, 4.4vh, 30px); font-weight: 760; line-height: 1.05;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gl-big small { font-size: .48em; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.gl-big-2 { font-size: clamp(16px, 3.4vh, 22px); }
+.gl-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
 .gl-line { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gl-line strong { color: var(--text); font-weight: 650; }
-.gl-ring { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-height: 0; }
-.gl-ring svg { width: min(44%, 118px); height: auto; max-height: 100%; aspect-ratio: 1; flex: 0 0 auto; }
-.gl-ring > div { min-width: 0; }
-.gl-spark { flex: 1 1 auto; min-height: 30px; max-height: 80px; width: 100%; margin-top: auto; }
-.gl-bars { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; justify-content: center; }
-.gl-bar { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.gl-bar .track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
-.gl-bar .fill { height: 100%; border-radius: 4px; }
-.gl-tile .tone-good { color: var(--green); } .gl-tile .tone-warn { color: var(--amber); }
+.gl-chip { align-self: flex-start; font-size: 11px; font-weight: 650; padding: 2px 8px;
+  border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.gl-tile .tone-good { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.gl-tile .tone-warn { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+
+/* Hero: the ring as large as the tile allows, the figures in a 2x2 under it. */
+.gl-hero-ring { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.gl-hero-ring svg { height: 100%; max-height: 190px; width: auto; aspect-ratio: 1; }
+.gl-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.gl-stats div { display: flex; justify-content: space-between; gap: 6px; font-size: 12px;
+  color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
+.gl-stats strong { color: var(--text); font-weight: 650; white-space: nowrap; }
+
+.gl-gauge { flex: 1 1 auto; min-height: 0; width: 100%; max-height: 120px; }
+.gl-split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px;
+  background: var(--panel-2); margin: 4px 0 2px; }
+.gl-split span { height: 100%; }
+.gl-spark { flex: 1 1 auto; min-height: 30px; width: 100%; margin-top: auto; }
+.gl-bars { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
+.gl-bar { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gl-bar .track { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.gl-bar .fill { height: 100%; border-radius: 3px; }
