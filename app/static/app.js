@@ -4158,6 +4158,140 @@ function glHBars(items, { mark, digits = 0 } = {}) {
     <div class="gl-hnote"><span>◂ better</span><span>rated ${fmt(mark)}</span><span>worse ▸</span></div></div>`;
 }
 
+// --- More shapes, so no two Glance pages look alike ----------------------
+let glSvgSeq = 0;
+const glPolar = (cx, cy, r, deg) => {
+  const a = (deg - 90) * Math.PI / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+};
+function glArcPath(cx, cy, r, a0, a1) {
+  const [x0, y0] = glPolar(cx, cy, r, a0), [x1, y1] = glPolar(cx, cy, r, a1);
+  return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+}
+
+// A 180-degree gauge with a bright fill arc rather than a needle.
+function glHalf({ value, min, max, bands = [], centre, unit, sub, colour }) {
+  const id = `gh${++glSvgSeq}`, cl = (x) => Math.max(min, Math.min(max, x));
+  const deg = (x) => -90 + (cl(x) - min) / (max - min) * 180;
+  const zero = min < 0 && max > 0 ? deg(0) : -90;
+  const v = value == null ? null : deg(+value);
+  const ticks = Array.from({ length: 11 }, (_, k) => {
+    const a = -90 + k * 18, [x1, y1] = glPolar(110, 112, 96, a), [x2, y2] = glPolar(110, 112, k % 5 ? 90 : 84, a);
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="var(--muted)" stroke-width="${k % 5 ? 1 : 2}"/>`;
+  }).join("");
+  return `<svg class="gl-shape" viewBox="0 0 220 150" role="img" aria-label="${h(centre)} ${h(unit)}">
+    <defs><filter id="${id}" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <path d="${glArcPath(110, 112, 100, -90, 90)}" fill="none" stroke="#3a4352" stroke-width="3"/>
+    <path d="${glArcPath(110, 112, 76, -90, 90)}" fill="none" stroke="#0a0d12" stroke-width="22"/>
+    ${bands.map((b) => `<path d="${glArcPath(110, 112, 104, deg(b.from), deg(b.to))}" fill="none" stroke="${b.colour}" stroke-width="3" opacity=".8"/>`).join("")}
+    ${v != null && v !== zero ? `<path d="${glArcPath(110, 112, 76, Math.min(zero, v), Math.max(zero, v))}" fill="none" stroke="${colour}" stroke-width="18" filter="url(#${id})"/>` : ""}
+    ${ticks}
+    <text x="110" y="100" text-anchor="middle" font-size="30" font-weight="780" fill="var(--text)">${h(centre)}</text>
+    <text x="110" y="122" text-anchor="middle" font-size="11" fill="var(--muted)">${h(unit)}</text>
+    ${sub ? `<text x="110" y="142" text-anchor="middle" font-size="11" font-weight="650" fill="${sub.colour || "var(--muted)"}">${h(sub.text)}</text>` : ""}
+  </svg>`;
+}
+
+// A battery drawn as cells, the filled ones lit.
+function glBatteryShape(pct, colour, big, small) {
+  const p = Math.max(0, Math.min(100, +pct || 0)), cells = 10, lit = Math.round(p / 100 * cells);
+  const cell = Array.from({ length: cells }, (_, k) => {
+    const y = 236 - (k + 1) * 21, on = k < lit;
+    return `<rect x="36" y="${y}" width="88" height="17" rx="3" fill="${on ? colour : "#121821"}"
+      opacity="${on ? .55 + .45 * (k + 1) / cells : 1}" ${on ? `style="filter:drop-shadow(0 0 4px ${colour})"` : ""}/>`;
+  }).join("");
+  return `<svg class="gl-shape gl-shape-tall" viewBox="0 0 160 250" role="img" aria-label="${h(big)}">
+    <rect x="60" y="4" width="40" height="12" rx="3" fill="#3a4352"/>
+    <rect x="26" y="14" width="108" height="230" rx="14" fill="#0b0f15" stroke="#4a5462" stroke-width="3"/>
+    <rect x="30" y="18" width="100" height="222" rx="11" fill="none" stroke="#000" stroke-opacity=".6"/>
+    ${cell}
+    <text x="80" y="128" text-anchor="middle" font-size="30" font-weight="800" fill="#fff" style="paint-order:stroke" stroke="#000" stroke-width="4" stroke-opacity=".6">${h(big)}</text>
+    <text x="80" y="150" text-anchor="middle" font-size="11" fill="#e6e9ef" style="paint-order:stroke" stroke="#000" stroke-width="3" stroke-opacity=".6">${h(small)}</text>
+  </svg>`;
+}
+
+// A donut of parts, with a figure in the hole and a legend under it.
+function glDonut(parts, centre, unit) {
+  const tot = parts.reduce((a, x) => a + (x.v > 0 ? x.v : 0), 0);
+  let a = 0;
+  const segs = tot > 0 ? parts.filter((x) => x.v > 0).map((x) => {
+    const span = x.v / tot * 360, a0 = a + 1.5, a1 = a + span - 1.5;
+    a += span;
+    return span >= 359.9 ? `<circle cx="100" cy="100" r="74" fill="none" stroke="${x.colour}" stroke-width="24"/>`
+      : `<path d="${glArcPath(100, 100, 74, a0, Math.max(a0 + .5, a1))}" fill="none" stroke="${x.colour}" stroke-width="24"/>`;
+  }).join("") : "";
+  return `<div class="gl-donut"><svg class="gl-shape" viewBox="0 0 200 200" role="img" aria-label="${h(centre)} ${h(unit)}">
+      <circle cx="100" cy="100" r="74" fill="none" stroke="#0a0d12" stroke-width="30"/>
+      <g style="filter:drop-shadow(0 0 6px rgba(255,255,255,.12))">${segs}</g>
+      <circle cx="100" cy="100" r="56" fill="#0d1219" stroke="#2c3440" stroke-width="2"/>
+      <text x="100" y="104" text-anchor="middle" font-size="30" font-weight="800" fill="var(--text)">${h(centre)}</text>
+      <text x="100" y="124" text-anchor="middle" font-size="11" fill="var(--muted)">${h(unit)}</text></svg>
+    <div class="gl-legend">${parts.map((x) => `<span><b class="dot" style="background:${x.colour}"></b>${h(x.label)}<strong>${x.text}</strong></span>`).join("")}</div></div>`;
+}
+
+// Concentric rings, one per row, each filled to its share.
+function glRings(rows, centre, unit) {
+  const ring = (r, k) => {
+    const rad = 82 - k * 18, p = Math.max(0, Math.min(1, r.share || 0));
+    return `<circle cx="100" cy="100" r="${rad}" fill="none" stroke="#0a0d12" stroke-width="12"/>
+      ${p > 0 ? `<path d="${glArcPath(100, 100, rad, 0, Math.max(1, p * 359.5))}" fill="none" stroke="${r.colour}" stroke-width="10" stroke-linecap="round" style="filter:drop-shadow(0 0 4px ${r.colour})"/>` : ""}`;
+  };
+  return `<div class="gl-donut"><svg class="gl-shape" viewBox="0 0 200 200" role="img" aria-label="${h(centre)} ${h(unit)}">
+      ${rows.map(ring).join("")}
+      <text x="100" y="104" text-anchor="middle" font-size="22" font-weight="800" fill="var(--text)">${h(centre)}</text>
+      <text x="100" y="120" text-anchor="middle" font-size="9.5" fill="var(--muted)">${h(unit)}</text></svg>
+    <div class="gl-legend">${rows.map((r) => `<span><b class="dot" style="background:${r.colour}"></b>${h(r.label)}<strong>${r.text}</strong></span>`).join("")}</div></div>`;
+}
+
+// A 24-hour clock with a radial bar per hour.
+function glClock(byHour, colour, centre, unit) {
+  const vals = Array.from({ length: 24 }, (_, k) => +(byHour[k] ?? byHour[String(k)] ?? 0) || 0);
+  const mx = Math.max(...vals, 0.001);
+  const bars = vals.map((v, k) => {
+    const a = k * 15, len = v > 0 ? 6 + v / mx * 30 : 2;
+    const [x1, y1] = glPolar(100, 100, 52, a), [x2, y2] = glPolar(100, 100, 52 + len, a);
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+      stroke="${v > 0 ? colour : "#2a313c"}" stroke-width="6" stroke-linecap="round" ${v > 0 ? `style="filter:drop-shadow(0 0 3px ${colour})"` : ""}/>`;
+  }).join("");
+  const lab = [0, 6, 12, 18].map((hr) => {
+    const [x, y] = glPolar(100, 100, 40, hr * 15);
+    return `<text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--muted)">${hr}</text>`;
+  }).join("");
+  return `<svg class="gl-shape" viewBox="0 0 200 200" role="img" aria-label="${h(centre)} ${h(unit)}">
+    <circle cx="100" cy="100" r="96" fill="#0b0f15" stroke="#3a4352" stroke-width="2"/>
+    <circle cx="100" cy="100" r="90" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="2"/>
+    <circle cx="100" cy="100" r="50" fill="#0d1219" stroke="#2c3440"/>
+    ${bars}${lab}
+    <text x="100" y="102" text-anchor="middle" font-size="18" font-weight="800" fill="var(--text)">${h(centre)}</text>
+    <text x="100" y="116" text-anchor="middle" font-size="8.5" fill="var(--muted)">${h(unit)}</text></svg>`;
+}
+
+// A hexagon badge: a grade, its score and a ring of progress round it.
+function glBadge(score, grade, colour, caption) {
+  const p = Math.max(0, Math.min(100, +score || 0));
+  const hex = (r) => Array.from({ length: 6 }, (_, k) => glPolar(100, 100, r, k * 60).map((x) => x.toFixed(1)).join(",")).join(" ");
+  const per = 6 * 84, dash = per * p / 100;
+  return `<svg class="gl-shape" viewBox="0 0 200 210" role="img" aria-label="grade ${h(grade)} ${h(score)}">
+    <polygon points="${hex(92)}" fill="#0b0f15" stroke="#3a4352" stroke-width="3"/>
+    <polygon points="${hex(84)}" fill="none" stroke="#0a0d12" stroke-width="10"/>
+    <polygon points="${hex(84)}" fill="none" stroke="${colour}" stroke-width="8" stroke-dasharray="${dash.toFixed(1)} ${per}"
+      style="filter:drop-shadow(0 0 5px ${colour})" transform="rotate(0 100 100)"/>
+    <polygon points="${hex(66)}" fill="#121821" stroke="#2c3440" stroke-width="1.5"/>
+    <text x="100" y="112" text-anchor="middle" font-size="48" font-weight="850" fill="${colour}" style="filter:drop-shadow(0 0 6px ${colour})">${h(grade || "—")}</text>
+    <text x="100" y="138" text-anchor="middle" font-size="12" fill="var(--text)">${score == null ? "" : `${Math.round(p)} / 100`}</text>
+    <text x="100" y="206" text-anchor="middle" font-size="11" fill="var(--muted)">${h(caption)}</text></svg>`;
+}
+
+// LED segment meters: a row of lit blocks per reading.
+function glSegs(rows) {
+  return `<div class="gl-segs">${rows.map((r) => {
+    const n = 12, lit = Math.round(Math.max(0, Math.min(1, r.share || 0)) * n);
+    return `<div class="gl-seg"><span>${h(r.label)}</span><strong>${r.text}</strong>
+      <i>${Array.from({ length: n }, (_, k) => `<b class="${k < lit ? "on" : ""}" style="${k < lit ? `--sc:${typeof r.colour === "function" ? r.colour(k / n) : r.colour}` : ""}"></b>`).join("")}</i></div>`;
+  }).join("")}</div>`;
+}
+
 function glBox(label, value, unit, tone = "") {
   return `<div class="gl-box ${tone}"><span class="gl-box-l">${h(label)}</span>
     <span class="gl-box-v">${value}<small>${h(unit || "")}</small></span></div>`;
@@ -4360,8 +4494,11 @@ function renderGlance(d) {
           glBox("Battery", lvl != null ? n(lvl, 1) : "—", `% · used ${n(t.soc_used, 1)}`)),
         foot);
     },
+    // Drive: boxes, the Wh/km dial, and how the distance splits by speed.
     drive: () => {
       const top = Math.max(300, Math.ceil(((whkm || 0) * 1.25) / 50) * 50);
+      const sb = Object.entries(drv.distance_by_speed_band || {});
+      const sbC = ["#ff6b70", "var(--amber)", "var(--teal)", "var(--accent-2)"];
       return page(
         boxes(glBox("Distance", n(drv.total_distance_km, 1), "km"), glBox("Trips", n(drv.total_drives), ""),
           glBox("Drive time", n(drv.total_duration_h, 1), "h")),
@@ -4371,121 +4508,123 @@ function renderGlance(d) {
           colour: vsRated != null && vsRated > 0 ? "var(--amber)" : "var(--green)",
           sub: vsRated == null ? null : { text: `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}% vs rated`,
             colour: vsRated > 0 ? "var(--amber)" : "var(--green)" }, label: "Efficiency" }),
-        boxes(glBox("Avg speed", n(drv.avg_speed_kmh), "km/h"), glBox("Energy", n(tripK + parkK, 1), "kWh"),
-          glBox("Cost", n(drv.total_cost, 2), cur)),
+        `${sb.length ? panel("Distance by speed", glSplit(sb.map(([k, x], q) => ({ v: +x || 0, colour: sbC[q % 4],
+            label: k.replace(/\s*\(.*\)/, ""), text: `${n(x, 0)} km` })))) : ""}
+         ${glSegs([
+           { label: "Avg speed", text: `${n(drv.avg_speed_kmh)} km/h`, share: (drv.avg_speed_kmh || 0) / 110, colour: (q) => q > .8 ? "var(--amber)" : "#22d3ee" },
+           { label: "Energy", text: `${n(tripK + parkK, 1)} kWh`, share: (tripK + parkK) / ((bal.full_charge_kwh ?? v.usable_capacity_kwh) || 75), colour: "var(--accent-2)" },
+           { label: "Cost", text: `${n(drv.total_cost, 2)} ${cur}`, share: Math.min(1, (+drv.cost_per_km || 0) / .3), colour: "#ff6b70" }])}`,
         lastLine);
     },
+    // Efficiency: horizontal bars, a half gauge, vertical bars.
     eff: () => {
       const bands = Object.entries(drv.efficiency_by_speed_band || {});
       const daily = Object.entries(eff.daily_efficiency || {}).slice(-7);
-      // A scale of whole numbers: ±30, ±40, ... with a tick every 5 or 10.
-      const r = vsRated ?? 0, lim = Math.max(30, Math.ceil(Math.abs(r) / 10) * 10);
-      const effStep = lim <= 30 ? 5 : 10;
+      const lim = Math.max(30, Math.ceil(Math.abs(vsRated ?? 0) / 10) * 10);
       return page(
-        panel("By speed · Wh/km", bands.length ? glHBars(bands.map(([k, x]) => ({ label: k.replace(/\s*\(.*\)/, ""), value: x,
-          colour: rated && x > rated ? "var(--amber)" : "var(--green)" })), { mark: rated }) : none("No speed data")),
-        glDial({ value: vsRated, min: -lim, max: lim, step: effStep,
+        panel("By speed · Wh/km", bands.length ? glHBars(bands.map(([k, x]) => ({ label: k.replace(/\s*\(.*\)/, ""), value: x })),
+          { mark: rated }) : none("No speed data")),
+        glHalf({ value: vsRated, min: -lim, max: lim,
           bands: [{ from: -lim, to: 0, colour: "var(--green)" }, { from: 0, to: lim, colour: "var(--amber)" }],
-          mark: 0, centre: vsRated == null ? "—" : `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}%`, unit: "vs rated",
-          colour: r > 0 ? "var(--amber)" : "var(--green)",
-          sub: { text: `${n(whkm)} Wh/km · rated ${n(rated)}` }, label: "Versus rated" }),
+          centre: vsRated == null ? "—" : `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}%`, unit: "versus rated",
+          colour: (vsRated ?? 0) > 0 ? "var(--amber)" : "var(--green)",
+          sub: { text: `${n(whkm)} Wh/km · rated ${n(rated)}` } }),
         panel(rated ? `By day · - - rated ${n(rated)}` : "By day", daily.length ? glVBars(daily.map(([k, x]) => ({ label: k.slice(8), value: x,
           colour: rated && x > rated ? "var(--amber)" : "var(--teal)" })), { mark: rated }) : none("No daily data")),
         `<span class="gl-chip">best ${n(eff.best_efficiency_wh_per_km)} Wh/km</span>
          <span class="gl-chip">worst ${n(eff.worst_efficiency_wh_per_km)} Wh/km</span>`);
     },
+    // Battery: where the energy went, a battery of lit cells, LED meters.
     battery: () => {
       const ch = bat.capacity_health;
-      const dial = level != null
-        ? glDial({ value: level, min: 0, max: 100, step: 10,
-            bands: [{ from: 0, to: 20, colour: "#ff6b70" }, { from: 20, to: 100, colour: "var(--green)" }],
-            centre: `${Math.round(level)}%`, unit: "battery", colour: "var(--green)",
-            sub: used != null ? { text: `used ${n(used, 1)}%` } : null, label: "Battery" })
-        : used != null
-        ? glDial({ value: used, min: 0, max: 100, step: 10, bands: [{ from: 0, to: 100, colour: "var(--accent-2)" }],
-            centre: `${n(used, 1)}%`, unit: "battery used", colour: "var(--accent-2)", label: "Battery used" })
-        : glDial({ value: kmPct, min: 0, max: 8, step: 0.5,
-            bands: [{ from: 0, to: 4, colour: "var(--amber)" }, { from: 4, to: 8, colour: "var(--green)" }],
-            centre: n(kmPct, 2), unit: "km per 1% battery", colour: "var(--green)", label: "km per percent" });
+      const pack = +(bal.full_charge_kwh ?? v.usable_capacity_kwh) || 0;
+      // The cells show the level now; else what is left of a charge; else,
+      // for a window of many charges, km per 1% against a 7 km scale.
+      const shown = level ?? (used != null ? Math.max(0, 100 - used) : kmPct ? Math.min(100, kmPct / 7 * 100) : null);
       return page(
         `${panel("Where it went", glSplit([
           { v: tripK, colour: "var(--accent-2)", label: "driving", text: `${n(tripK, 1)}` },
           { v: parkK, colour: "var(--amber)", label: "parked", text: `${n(parkK, 2)}` }]))}
-         ${boxes(glBox("Used", n(bal.used_kwh, 1), "kWh"))}`,
-        dial,
-        boxes(glBox("Pack", n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 1), "kWh"),
-          ch ? glBox("Health", n(ch.health_pct, 1), "%", "tone-good")
-            : glBox("Full packs", n((+bal.used_kwh || 0) / (+(bal.full_charge_kwh ?? v.usable_capacity_kwh) || 1), 1), "×"),
-          glBox("km per 1%", n(kmPct, 2), "km")));
+         ${boxes(glBox("Used", n(bal.used_kwh, 1), "kWh"), glBox("Pack", n(pack, 1), "kWh"))}`,
+        glBatteryShape(shown ?? 0, (shown ?? 0) < 20 ? "#ff6b70" : "var(--green)",
+          level != null ? `${Math.round(level)}%` : used != null ? `${n(used, 1)}%` : n(kmPct, 2),
+          level != null ? "battery now" : used != null ? "used this window" : "km per 1%"),
+        glSegs([
+          { label: "Health", text: ch ? `${n(ch.health_pct, 1)}%` : "—", share: ch ? ch.health_pct / 100 : 0, colour: "var(--green)" },
+          { label: "km per 1%", text: `${n(kmPct, 2)} km`, share: (kmPct || 0) / 7, colour: "var(--teal)" },
+          { label: "Driving share", text: tripK + parkK > 0 ? `${n(tripK / (tripK + parkK) * 100, 0)}%` : "—",
+            share: tripK + parkK > 0 ? tripK / (tripK + parkK) : 0, colour: "var(--accent-2)" }]));
     },
+    // Trips: recent bars, a donut of how the trips went, boxes.
     trips: () => {
       const rec = (drv.recent_trips || []).slice(0, 6).reverse();
+      const all = drv.recent_trips || [];
+      const cnt = (b) => all.filter((t) => t.efficiency_band === b).length;
       return page(
         panel(rated ? `Recent · Wh/km · - - rated ${n(rated)}` : "Recent · Wh/km", rec.length ? glVBars(rec.map((t) => ({
           label: t.id != null ? `#${t.id}` : tripWhen(t.start_time).slice(0, 6),
           value: t.wh_per_km, colour: bandColour(t.efficiency_band) })), { mark: rated }) : none("No trips")),
-        glDial({ value: score, min: 0, max: 100, step: 10,
-          bands: [{ from: 0, to: 60, colour: "var(--amber)" }, { from: 60, to: 80, colour: "var(--accent-2)" },
-            { from: 80, to: 100, colour: "var(--green)" }],
-          centre: score == null ? "—" : String(Math.round(score)), unit: "driving score", colour: scoreColour(score),
-          sub: drv.eco_grade ? { text: `grade ${drv.eco_grade}` } : null, label: "Driving score" }),
+        glDonut([
+          { v: cnt("efficient"), colour: "var(--green)", label: "efficient", text: cnt("efficient") },
+          { v: cnt("typical"), colour: "var(--accent-2)", label: "typical", text: cnt("typical") },
+          { v: cnt("inefficient"), colour: "var(--amber)", label: "inefficient", text: cnt("inefficient") }],
+          score == null ? "—" : String(Math.round(score)), `driving score${drv.eco_grade ? ` · ${drv.eco_grade}` : ""}`),
         boxes(glBox("Longest", n(drv.longest_trip_km, 1), "km"), glBox("Avg trip", n(drv.avg_trip_distance_km, 1), "km"),
           glBox("Top speed", n(drv.max_speed_kmh), "km/h")),
         lastLine);
     },
-    charge: () => {
-      const hours = Object.entries(chg.energy_by_hour || {});
-      const groups = [0, 6, 12, 18].map((s0) => ({
-        label: `${String(s0).padStart(2, "0")}–${String(s0 + 6).padStart(2, "0")}`,
-        value: hours.filter(([hr]) => +hr >= s0 && +hr < s0 + 6).reduce((a, [, x]) => a + (+x || 0), 0),
-        colour: "var(--violet)" }));
-      return page(
+    // Charging: boxes, a 24-hour clock of when energy went in, LED meters.
+    charge: () => page(
         boxes(glBox("Charged", n(chg.total_energy_kwh, 1), "kWh"), glBox("Sessions", n(chg.total_sessions), ""),
           glBox("Paid", n(chg.total_cost, 2), cur)),
-        glDial({ value: chg.avg_end_soc, min: 0, max: 100, step: 10,
-          bands: [{ from: 0, to: 80, colour: "var(--accent-2)" }, { from: 80, to: 90, colour: "var(--green)" },
-            { from: 90, to: 100, colour: "var(--amber)" }],
-          centre: chg.avg_end_soc == null ? "—" : `${n(chg.avg_end_soc)}%`, unit: "charged to, on average",
-          colour: "var(--violet)", sub: { text: `${n(chg.full_charge_share_pct)}% of charges to 100%` },
-          label: "Average charge level" }),
-        `${panel("When · kWh", glVBars(groups, { digits: 1 }))}
+        glClock(chg.energy_by_hour || {}, "var(--violet)", `${n(chg.total_energy_kwh, 0)}`, "kWh by hour"),
+        `${glSegs([
+            { label: "Charged to (avg)", text: `${n(chg.avg_end_soc)}%`, share: (chg.avg_end_soc || 0) / 100,
+              colour: (q) => q >= .9 ? "var(--amber)" : q >= .8 ? "var(--green)" : "var(--violet)" },
+            { label: "To 100%", text: `${n(chg.full_charge_share_pct)}% of charges`, share: (chg.full_charge_share_pct || 0) / 100, colour: "var(--amber)" },
+            { label: "Per kWh", text: `${n(chg.avg_cost_per_kwh, 2)} ${cur}`, share: Math.min(1, (chg.avg_cost_per_kwh || 0) / 2), colour: "#ff6b70" }])}
          ${panel("AC vs DC", glSplit([
            { v: +chg.ac_energy_kwh || 0, colour: "var(--teal)", label: "AC", text: n(chg.ac_energy_kwh, 1) },
-           { v: +chg.dc_energy_kwh || 0, colour: "#ff6b70", label: "DC", text: n(chg.dc_energy_kwh, 1) }]))}`);
-    },
+           { v: +chg.dc_energy_kwh || 0, colour: "#ff6b70", label: "DC", text: n(chg.dc_energy_kwh, 1) }]))}`),
+    // Parked: boxes, a donut of driving against parked time, a half gauge.
     parked: () => {
-      const hrs = +bal.vampire_hours || 0;
+      const hrs = +bal.vampire_hours || 0, drvH = +drv.total_duration_h || 0;
       const perDay = hrs > 0 ? parkK / hrs * 24 : null;
       const vd = drv.vampire_drain || {};
       return page(
-        boxes(glBox("Parked", n(hrs, 0), "h"), glBox("Stops", n(bal.vampire_gaps ?? vd.gaps), ""),
-          glBox("Longest", n(bal.vampire_longest_hours ?? (vd.longest || {}).hours, 1), "h")),
-        glDial({ value: perDay, min: 0, max: 3, step: 0.25,
-          bands: [{ from: 0, to: 1, colour: "var(--green)" }, { from: 1, to: 2, colour: "var(--amber)" },
-            { from: 2, to: 3, colour: "#ff6b70" }],
-          centre: perDay == null ? "—" : n(perDay, 2), unit: "kWh lost per parked day", colour: "#38bdf8",
-          sub: { text: `${n(parkK, 2)} kWh in all` }, label: "Parked drain" }),
-        `${panel("Driving vs parked", glSplit([
-          { v: tripK, colour: "var(--accent-2)", label: "driving", text: n(tripK, 1) },
-          { v: parkK, colour: "#38bdf8", label: "parked", text: n(parkK, 2) }]))}
+        boxes(glBox("Stops", n(bal.vampire_gaps ?? vd.gaps), ""),
+          glBox("Longest", n(bal.vampire_longest_hours ?? (vd.longest || {}).hours, 1), "h"),
+          glBox("Lost", n(parkK, 2), "kWh")),
+        glDonut([
+          { v: drvH, colour: "var(--accent-2)", label: "driving", text: `${n(drvH, 1)} h` },
+          { v: hrs, colour: "#38bdf8", label: "parked", text: `${n(hrs, 0)} h` }],
+          hrs + drvH > 0 ? `${n(hrs / (hrs + drvH) * 100, 0)}%` : "—", "of the time parked"),
+        `${glHalf({ value: perDay, min: 0, max: 3,
+            bands: [{ from: 0, to: 1, colour: "var(--green)" }, { from: 1, to: 2, colour: "var(--amber)" }, { from: 2, to: 3, colour: "#ff6b70" }],
+            centre: perDay == null ? "—" : n(perDay, 2), unit: "kWh lost per parked day",
+            colour: perDay != null && perDay > 1 ? "var(--amber)" : "#38bdf8" })}
          ${bal.vampire_longest_inducer ? panel("Longest stop drew", `<div class="gl-line"><strong>${h(bal.vampire_longest_inducer)}</strong></div>`) : ""}`);
     },
+    // Cost: boxes, rings for where the money went, AC against DC.
     cost: () => {
       const per100 = drv.cost_per_km != null ? drv.cost_per_km * 100 : null;
       const pc = d.petrol_comparison;
-      const top = Math.max(20, Math.ceil(((per100 || 0) * 1.6) / 5) * 5);
+      const ac = +chg.ac_cost || 0, dc = +chg.dc_cost || 0, paid = ac + dc;
       return page(
         boxes(glBox("Driving", n(drv.total_cost, 2), cur), glBox("Charging", n(chg.total_cost, 2), cur),
           glBox("Per kWh", n(chg.avg_cost_per_kwh, 2), cur)),
-        glDial({ value: per100, min: 0, max: top, step: top / 10, bands: [{ from: 0, to: top, colour: "#ff6b70" }],
-          centre: per100 == null ? "—" : n(per100, 2), unit: `${cur} per 100 km`, colour: "#ff6b70",
-          sub: { text: `${n(drv.cost_per_km, 3)} ${cur}/km` }, label: "Cost per 100 km" }),
-        `${panel("AC vs DC cost", glSplit([
-          { v: +chg.ac_cost || 0, colour: "var(--teal)", label: "AC", text: n(chg.ac_cost, 2) },
-          { v: +chg.dc_cost || 0, colour: "#ff6b70", label: "DC", text: n(chg.dc_cost, 2) }]))}
-         ${pc && pc.savings != null ? boxes(glBox(pc.savings >= 0 ? "Saved vs petrol" : "More than petrol",
-            n(Math.abs(pc.savings), 2), cur, pc.savings >= 0 ? "tone-good" : "tone-warn")) : ""}`);
+        glRings([
+          { label: "AC", text: `${n(ac, 2)}`, share: paid ? ac / paid : 0, colour: "var(--teal)" },
+          { label: "DC", text: `${n(dc, 2)}`, share: paid ? dc / paid : 0, colour: "#ff6b70" },
+          { label: "Driven", text: `${n(drv.total_cost, 2)}`, share: paid ? Math.min(1, (+drv.total_cost || 0) / paid) : 0, colour: "var(--amber)" }],
+          per100 == null ? "—" : n(per100, 1), `${cur} / 100 km`),
+        `${pc && pc.savings != null ? boxes(glBox(pc.savings >= 0 ? "Saved vs petrol" : "More than petrol",
+            n(Math.abs(pc.savings), 2), cur, pc.savings >= 0 ? "tone-good" : "tone-warn")) : ""}
+         ${glSegs([
+           { label: "Per km", text: `${n(drv.cost_per_km, 3)} ${cur}`, share: Math.min(1, (+drv.cost_per_km || 0) / .3), colour: "#ff6b70" },
+           { label: "DC share", text: paid ? `${n(dc / paid * 100, 0)}%` : "—", share: paid ? dc / paid : 0, colour: "var(--amber)" }])}`);
     },
+    // Tips: the assessment as a hexagon badge between tip cards.
     tips: () => {
       const recs = (asmt.recommendations || d.recommendations || []).slice(0, 4);
       const card = (r) => `<div class="gl-tip"><span class="gl-chip ${r.priority === "high" ? "tone-warn" : ""}">${h(r.category || r.priority || "")}</span>
@@ -4493,11 +4632,7 @@ function renderGlance(d) {
       const sc = asmt.score;
       return page(
         recs.slice(0, 2).map(card).join("") || none("Nothing to change"),
-        glDial({ value: sc, min: 0, max: 100, step: 10,
-          bands: [{ from: 0, to: 60, colour: "var(--amber)" }, { from: 60, to: 80, colour: "var(--accent-2)" },
-            { from: 80, to: 100, colour: "var(--green)" }],
-          centre: sc == null ? "—" : String(Math.round(sc)), unit: "overall assessment", colour: scoreColour(sc),
-          sub: asmt.grade ? { text: `grade ${asmt.grade}` } : null, label: "Assessment" }),
+        glBadge(sc, asmt.grade, scoreColour(sc), "overall assessment"),
         recs.length > 2 ? recs.slice(2, 4).map(card).join("")
           : (asmt.strengths || []).slice(0, 2).map((st) => `<div class="gl-tip"><span class="gl-chip tone-good">doing well</span>
               <div class="gl-tip-t">${h(st.title || st)}</div></div>`).join(""),

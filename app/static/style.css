@@ -2058,3 +2058,20 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 .gl-hnote span:last-child { color: var(--amber); }
 /* The vertical charts name their rated line in the title, not over the bars. */
 .gl-vmark span { display: none; }
+
+/* Shapes that stand in for the dial on most pages. */
+.gl-shape { height: 100%; max-height: 100%; width: auto; max-width: 100%;
+  filter: drop-shadow(0 12px 16px rgba(0,0,0,.6)) drop-shadow(0 0 20px color-mix(in srgb, var(--tc) 18%, transparent)); }
+.gl-shape-tall { max-height: 92%; }
+.gl-donut { height: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.gl-donut .gl-shape { flex: 1 1 auto; min-height: 0; }
+.gl-donut .gl-legend { justify-content: center; }
+/* LED segment meters. */
+.gl-segs { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px;
+  background: linear-gradient(180deg, #19202a, #10151c); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 22px rgba(0,0,0,.45); }
+.gl-seg { display: grid; grid-template-columns: 1fr auto; gap: 4px; font-size: 11px; color: var(--muted); }
+.gl-seg strong { color: var(--text); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.gl-seg i { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
+.gl-seg b { height: 9px; border-radius: 2px; background: #0b0f15; box-shadow: inset 0 1px 2px #000; }
+.gl-seg b.on { background: var(--sc); box-shadow: 0 0 6px var(--sc), inset 0 1px 0 rgba(255,255,255,.35); }
