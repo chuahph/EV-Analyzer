@@ -820,6 +820,20 @@ def _usable_capacity(session: Session, vehicle: Vehicle, settings) -> tuple[floa
             and (not spec
                  or abs(screen["kwh"] - spec) <= spec * MEASURED_CAPACITY_MAX_DRIFT)):
         return screen["kwh"], f"measured from {screen['readings']} screen readings"
+    # Next, the pack as the stream measures it across a charge: EnergyRemaining
+    # against the displayed %, each pair read at one instant. The same
+    # discharge-free ratio the screen readings take by hand, so a new copy
+    # stops reading every Long Range as the 75 kWh spec after its first charge
+    # of 20 points, with no screenshot. Only paired sessions: an unpaired one
+    # can end on a stale % (7 Oct read 1.1% high that way).
+    stream = _stream_capacity(session)
+    paired = sorted(r["implied_capacity_kwh"] for r in stream.get("rows") or []
+                    if r.get("paired") and r.get("counts"))
+    if paired:
+        kwh = round(percentile(paired, 0.5), 1)
+        if 45.0 <= kwh <= 95.0 and (not spec or abs(kwh - spec) <= spec * MEASURED_CAPACITY_MAX_DRIFT):
+            n = len(paired)
+            return kwh, f"measured from {n} streamed charge{'s' if n != 1 else ''}"
     measured, samples = _measured_capacity(session, vehicle)
     if measured and (not spec or abs(measured - spec) <= spec * MEASURED_CAPACITY_MAX_DRIFT):
         return measured, f"measured from {samples} charges"
@@ -9285,9 +9299,9 @@ def _stream_capacity(session: Session) -> dict[str, Any]:
     what the screenshot readings measure by hand — with no charger
     efficiency in it, because both are read off the pack itself.
 
-    Reported, not used: it needs sessions recorded since level_start existed,
-    and the % the car shows may settle after a charge ends, so it has to be
-    seen agreeing with screen_side before it replaces it.
+    Used by _usable_capacity, after the screen readings and before the
+    charge-meter median, once a session has both ends paired. Seen agreeing
+    with screen_side first: 67.74 against 68.33 on 11 October.
     """
     import json as _json
 

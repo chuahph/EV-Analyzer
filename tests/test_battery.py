@@ -326,6 +326,43 @@ def test_usable_capacity_falls_back_without_degradation_history():
         assert _usable_capacity(s, v, settings) == (72.4, "measured")
 
 
+def test_usable_capacity_takes_a_paired_streamed_charge_over_the_spec():
+    """A new copy read every Long Range as the 75 kWh spec until someone typed
+    in screen readings. One charge of 20+ points with both ends paired now
+    measures the pack; an unpaired one does not count."""
+    import json as _json
+    from types import SimpleNamespace
+
+    from app import state
+    from app.api.routes import _usable_capacity
+    from app.database import SessionLocal
+    from app.models import Vehicle
+
+    with SessionLocal() as s:
+        saved = state.get(s, state.TELEMETRY_CHARGES_KEY)
+        v = Vehicle(vin="LRW3F7EK3RC000003", model="Model 3", trim="74D Nova19",
+                    battery_capacity_kwh=75.0)
+        s.add(v)
+        settings = SimpleNamespace(battery_capacity_kwh=0.0, battery_new_range_km=0.0)
+        try:
+            state.put(s, state.TELEMETRY_CHARGES_KEY, _json.dumps([
+                {"start_time": "2026-10-07T07:13:41", "kwh_pack_level": 38.02,
+                 "level_start": 33.97, "level_end": 89.0}]))
+            s.commit()
+            assert _usable_capacity(s, v, settings)[1] == "variant spec"
+
+            state.put(s, state.TELEMETRY_CHARGES_KEY, _json.dumps([
+                {"start_time": "2026-10-11T14:47:38",
+                 "level_pair_start": [51.46, 38.08], "level_pair_end": [84.0, 60.12]}]))
+            s.commit()
+            assert _usable_capacity(s, v, settings) == (
+                67.7, "measured from 1 streamed charge")
+        finally:
+            state.put(s, state.TELEMETRY_CHARGES_KEY, saved or "[]")
+            s.delete(v)
+            s.commit()
+
+
 def test_fleet_degradation_curve_interpolates_and_extrapolates():
     from app.analysis.battery import fleet_degradation_pct
 
