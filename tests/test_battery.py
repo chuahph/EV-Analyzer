@@ -415,6 +415,8 @@ def test_vin_decode():
     assert info["model"] == "Model 3"
     assert info["year"] == 2024
     assert info["plant"] == "Shanghai"
+    assert info["battery"] == "NMC"
+    assert decode("LRW3F7FK3RC309372")["battery"] == "LFP"
     assert decode("DEMO12345") == {}
     assert decode("") == {}
 
@@ -608,3 +610,31 @@ def test_implied_capacity_prefers_the_curve_figure_over_the_endpoints():
     assert out["median_kwh"] == 67.8
     assert out["samples"][0]["method"] == "curve"
     assert out["samples"][0]["curve_samples"] == 13
+
+
+def test_the_vin_battery_code_sets_the_starting_pack():
+    """An LFP car is the standard-range pack from its VIN alone, before any
+    charge has measured it; an NMC car still goes by its trim badge."""
+    from types import SimpleNamespace
+
+    from app.analysis.battery import usable_capacity_for
+    from app.api.routes import _usable_capacity
+    from app.database import SessionLocal
+    from app.models import Vehicle
+
+    assert usable_capacity_for("Model 3", "", 2024, "LFP") == 57.5
+    assert usable_capacity_for("Model Y", "74D", 2024, "LFP") == 60.0
+    assert usable_capacity_for("Model 3", "74D", 2024, "NMC") == 75.0
+    assert usable_capacity_for("Model 3", "", 2024, "NMC") is None
+
+    with SessionLocal() as s:
+        v = Vehicle(vin="LRW3F7FA3RC000004", model="Tesla", trim="",
+                    battery_capacity_kwh=75.0)
+        s.add(v)
+        s.commit()
+        try:
+            settings = SimpleNamespace(battery_capacity_kwh=0.0, battery_new_range_km=0.0)
+            assert _usable_capacity(s, v, settings) == (57.5, "variant spec")
+        finally:
+            s.delete(v)
+            s.commit()

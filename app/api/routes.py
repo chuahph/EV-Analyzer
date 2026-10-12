@@ -787,8 +787,12 @@ def _usable_capacity(session: Session, vehicle: Vehicle, settings) -> tuple[floa
     """
     if settings.battery_capacity_kwh and settings.battery_capacity_kwh > 0:
         return settings.battery_capacity_kwh, "override"
+    vin_info = vin_mod.decode(vehicle.vin)
+    # The VIN's model when the row still carries the placeholder name.
+    model = (vehicle.model if vehicle.model not in (None, "", "Tesla")
+             else vin_info.get("model") or vehicle.model)
     spec = battery_analysis.usable_capacity_for(
-        vehicle.model, vehicle.trim, vin_mod.decode(vehicle.vin).get("year"))
+        model, vehicle.trim, vin_info.get("year"), vin_info.get("battery"))
     # The car's own charging sessions outrank the spec-derived figure, because
     # they measure THIS pack rather than infer it. Spec minus degradation was
     # preferred while the charge-derived number was thought to be the noisy
@@ -3905,8 +3909,9 @@ def _process_vehicle(session: Session, data: dict, v_summary: dict, settings) ->
     # and per-drive kWh is right from the first synced drive. Only when the
     # column is still untouched — a measured value is never overwritten.
     if vehicle.battery_capacity_kwh == 75.0:
+        vin_info = vin_mod.decode(vin)
         spec_cap = battery_analysis.usable_capacity_for(
-            vehicle.model, vehicle.trim, vin_mod.decode(vin).get("year"))
+            vehicle.model, vehicle.trim, vin_info.get("year"), vin_info.get("battery"))
         if spec_cap:
             vehicle.battery_capacity_kwh = spec_cap
 

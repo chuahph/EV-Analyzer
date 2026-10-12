@@ -3,6 +3,7 @@
 A Tesla VIN is 17 characters, e.g. LRW3F7EK3RC309372:
   1-3   WMI / factory region (LRW = Giga Shanghai, 5YJ = Fremont, ...)
   4     model line (3 = Model 3, Y = Model Y, S, X)
+  7     battery type (E = lithium-ion NCA/NCM, F = lithium iron phosphate)
   10    model year letter (R = 2024, S = 2025, ...)
   11    assembly plant (C = Shanghai, F = Fremont, A = Austin, B = Berlin)
 """
@@ -20,6 +21,13 @@ YEAR_BY_CODE = {
     "7": 2037, "8": 2038, "9": 2039,
 }
 
+# Battery chemistry. On a Model 3 or Y it separates the two packs a trim badge
+# can leave ambiguous: an LFP car is the standard-range pack whatever else is
+# known about it, so a new copy need not wait for a charge to stop reading it
+# as a 75 kWh Long Range.
+BATTERY_BY_CODE = {"E": "NMC", "F": "LFP", "H": "high capacity",
+                   "S": "standard", "V": "ultra high capacity"}
+
 PLANT_BY_CODE = {
     "F": "Fremont", "A": "Austin", "B": "Berlin", "C": "Shanghai",
     "N": "Nevada", "R": "Fremont",
@@ -27,7 +35,7 @@ PLANT_BY_CODE = {
 
 
 def decode(vin: str) -> dict:
-    """Best-effort {model, year, plant} from a Tesla VIN; {} if not decodable."""
+    """Best-effort {model, year, plant, battery} from a Tesla VIN; {} if not decodable."""
     vin = (vin or "").strip().upper()
     if len(vin) != 17 or vin.startswith(("DEMO", "IMPORT", "LINKED")):
         return {}
@@ -35,4 +43,5 @@ def decode(vin: str) -> dict:
         "model": MODEL_BY_CODE.get(vin[3]),
         "year": YEAR_BY_CODE.get(vin[9]),
         "plant": PLANT_BY_CODE.get(vin[10]),
+        "battery": BATTERY_BY_CODE.get(vin[6]),
     }

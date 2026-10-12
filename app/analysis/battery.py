@@ -364,8 +364,25 @@ def implied_capacity(charges: list[Any]) -> dict[str, Any]:
     }
 
 
-def usable_capacity_for(model: str, trim: str, year: int | None = None) -> float | None:
-    """Nominal usable pack capacity (kWh) for the variant, if recognised."""
+# An LFP pack by model, from the VIN's battery code. It decides the pack on
+# its own: every LFP Model 3 or Y is the standard-range pack, whatever the
+# trim badge says or fails to say.
+LFP_USABLE_KWH = {"MODEL 3": 57.5, "MODEL Y": 60.0}
+
+
+def usable_capacity_for(model: str, trim: str, year: int | None = None,
+                        battery: str | None = None) -> float | None:
+    """Nominal usable pack capacity (kWh) when new, if recognised.
+
+    The VIN's battery code first (``battery``, from vin.decode), then the
+    model and trim badge. This is only the starting figure: the car's own
+    measurements replace it (see routes._usable_capacity).
+    """
+    if battery == "LFP":
+        text = (model or "").upper()
+        lfp = next((kwh for m, kwh in LFP_USABLE_KWH.items() if m in text), None)
+        if lfp:
+            return lfp
     return _variant_lookup(USABLE_KWH, model, trim, year)
 
 
