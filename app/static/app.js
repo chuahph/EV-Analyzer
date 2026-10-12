@@ -347,6 +347,66 @@ async function openCar(vin) {
   }
   showCar();
   await load();
+  showOrientHint();
+}
+
+// After a car is opened: a short card showing the two ways to hold the phone —
+// sideways for the live dashboard, upright for the full data. Shown the first
+// three times (or until "don't show again"), only when the phone is upright,
+// and gone the moment it is turned sideways.
+const ORIENT_KEY = "orientHint";
+function showOrientHint() {
+  let seen = 0;
+  try { seen = +(localStorage.getItem(ORIENT_KEY) || 0); } catch (_) { /* private mode */ }
+  if (seen >= 3 || seen < 0) return;
+  if (glanceVisible() || document.getElementById("orient-hint")) return;
+  try { localStorage.setItem(ORIENT_KEY, String(seen + 1)); } catch (_) { /* private mode */ }
+  const el = document.createElement("div");
+  el.id = "orient-hint";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "How to view your car");
+  el.innerHTML = `<div class="oh-card">
+      <div class="oh-title">Two ways to view</div>
+      <div class="oh-row">
+        <div class="oh-item">
+          <svg class="oh-phone land" viewBox="0 0 96 60" aria-hidden="true">
+            <rect x="2" y="6" width="92" height="48" rx="8" class="oh-body"/>
+            <path d="M24 44a20 20 0 0 1 48 0" class="oh-arc"/><path d="M48 44l12-16" class="oh-needle"/>
+            <rect x="9" y="16" width="14" height="9" rx="2" class="oh-tile"/><rect x="9" y="29" width="14" height="9" rx="2" class="oh-tile"/>
+            <rect x="73" y="16" width="14" height="9" rx="2" class="oh-tile"/><rect x="73" y="29" width="14" height="9" rx="2" class="oh-tile"/>
+          </svg>
+          <b>Sideways</b><span>Live dashboard: speed, trip and power, updating every second</span>
+        </div>
+        <div class="oh-item">
+          <svg class="oh-phone port" viewBox="0 0 60 96" aria-hidden="true">
+            <rect x="6" y="2" width="48" height="92" rx="8" class="oh-body"/>
+            <circle cx="30" cy="22" r="9" class="oh-arc"/>
+            <rect x="13" y="38" width="15" height="11" rx="2" class="oh-tile"/><rect x="32" y="38" width="15" height="11" rx="2" class="oh-tile"/>
+            <rect x="13" y="53" width="15" height="11" rx="2" class="oh-tile"/><rect x="32" y="53" width="15" height="11" rx="2" class="oh-tile"/>
+            <rect x="13" y="68" width="34" height="18" rx="2" class="oh-tile"/>
+          </svg>
+          <b>Upright</b><span>Full data: score, trips, charges and charts</span>
+        </div>
+      </div>
+      <div class="oh-actions">
+        <label class="oh-never"><input type="checkbox"> Don't show again</label>
+        <button type="button" class="oh-ok">Got it</button>
+      </div>
+      <i class="oh-timer"></i>
+    </div>`;
+  document.body.appendChild(el);
+  const close = () => {
+    const never = el.querySelector(".oh-never input");
+    if (never && never.checked) { try { localStorage.setItem(ORIENT_KEY, "-1"); } catch (_) { /* private mode */ } }
+    el.classList.add("out");
+    clearTimeout(timer);
+    window.removeEventListener("resize", onTurn);
+    setTimeout(() => el.remove(), 250);
+  };
+  const onTurn = () => { if (glanceVisible()) close(); };
+  const timer = setTimeout(close, 12000);
+  window.addEventListener("resize", onTurn);
+  el.addEventListener("click", (e) => { if (e.target === el || e.target.closest(".oh-ok")) close(); });
 }
 
 // Tesla's own exterior paint names — vehicle.trim is seeded server-side

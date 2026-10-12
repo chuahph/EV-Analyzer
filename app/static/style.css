@@ -2379,3 +2379,38 @@ main > .card { max-width: 100%; }
 .gl-speedo.acc-down .gl-flow { animation: gl-flow .45s linear infinite reverse; }
 @keyframes gl-flow { to { stroke-dashoffset: -20; } }
 @media (prefers-reduced-motion: reduce) { .gl-speedo .gl-flow { animation: none !important; } }
+
+/* "Two ways to view" card shown after a car is opened. */
+#orient-hint { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); background: rgba(3, 6, 10, .62);
+  backdrop-filter: blur(3px); animation: oh-fade .25s ease both; }
+#orient-hint.out { animation: oh-fade .25s ease reverse both; }
+@keyframes oh-fade { from { opacity: 0; } to { opacity: 1; } }
+.oh-card { position: relative; width: min(440px, 100%); overflow: hidden; padding: 18px 18px 16px;
+  border-radius: 6px 22px 6px 22px; border: 1px solid #1d2a38; border-top: 2px solid var(--hud);
+  background: linear-gradient(180deg, #131b26, #0a1018); box-shadow: 0 0 30px -6px rgba(34, 211, 238, .45), 0 18px 40px rgba(0, 0, 0, .6);
+  animation: oh-rise .35s cubic-bezier(.22, .61, .36, 1) both; }
+@keyframes oh-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.oh-title { font-size: 12px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--hud); margin-bottom: 12px; }
+.oh-row { display: grid; grid-template-columns: 1.25fr 1fr; gap: 12px; }
+.oh-item { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 12px 8px 10px;
+  border-radius: 4px 12px 4px 12px; border: 1px solid #1d2a38; background: rgba(34, 211, 238, .04); }
+.oh-item b { font-size: 14px; }
+.oh-item span { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.oh-phone { height: 64px; width: auto; filter: drop-shadow(0 0 8px rgba(34, 211, 238, .35)); }
+.oh-phone.land { height: 54px; }
+.oh-body { fill: #0b121b; stroke: var(--hud); stroke-width: 2.2; }
+.oh-arc { fill: none; stroke: var(--hud); stroke-width: 3; stroke-linecap: round; }
+.oh-needle { stroke: #fff; stroke-width: 2.4; stroke-linecap: round; }
+.oh-tile { fill: rgba(34, 211, 238, .22); stroke: rgba(34, 211, 238, .5); stroke-width: 1; }
+.oh-phone.land { animation: oh-turn 2.4s ease-in-out infinite; transform-origin: center; }
+@keyframes oh-turn { 0%, 30% { transform: rotate(-90deg) scale(.8); } 60%, 100% { transform: none; } }
+.oh-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+.oh-never { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.oh-ok { min-height: 40px; padding: 0 22px; border: 0; border-radius: 4px 12px 4px 12px; font: inherit; font-weight: 700;
+  background: linear-gradient(180deg, #2ee0f7, #14a9c4); color: #04202a; box-shadow: 0 0 16px -3px rgba(34, 211, 238, .8); }
+.oh-timer { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--hud); transform-origin: left;
+  animation: oh-time 12s linear both; box-shadow: 0 0 8px var(--hud); }
+@keyframes oh-time { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .oh-phone.land, .oh-timer { animation: none; } }
+@media (orientation: landscape) and (max-height: 560px) { #orient-hint { display: none; } }
