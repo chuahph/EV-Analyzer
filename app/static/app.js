@@ -4547,7 +4547,8 @@ function renderGlance(d) {
             glBox("Its time", n(lt.duration_min), "min")) : "",
           foot);
       }
-      const tw = t.driving_wh_per_km ?? t.wh_per_km;
+      // Energy over distance, as the car's "Current Drive" shows it.
+      const tw = t.wh_per_km ?? t.driving_wh_per_km;
       // Left: a trip computer of icon tiles. Right: a power meter, a trace of
       // the last few minutes and a battery bar, so neither side repeats the
       // Drive page's LED meters.

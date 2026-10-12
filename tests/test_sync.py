@@ -174,6 +174,22 @@ def test_live_trip_reports_progress():
     assert live_trip(None, now) is None
 
 
+def test_live_trip_energy_from_the_pack_reading_not_stale_range():
+    """12 October: a 3.8 km, 13 min drive the car put at 0.6 kWh and 157.6
+    Wh/km read 0.15 kWh and 21 Wh/km live, because the stored range (saved
+    every five minutes) had barely moved. The pack's EnergyRemaining, start
+    minus now, is the measure."""
+    from app.sync import live_trip
+
+    trip = {"ts": T0, "odo_km": 32_487.2, "soc": 76, "range_km": 380.0,
+            "energy_kwh": 57.40, "max_speed": 0}
+    now = {**snap(T0 + 780, 32_491.0, 75, shift="D", speed=16, range_km=379.2),
+           "energy_kwh": 56.80}
+    lt = live_trip(trip, now, capacity_kwh=75.0)
+    assert lt["energy_kwh"] == 0.6
+    assert lt["wh_per_km"] == 158                  # 0.6 kWh over 3.8 km
+
+
 def test_live_trip_km_per_soc_from_energy_on_short_drive():
     """A short live drive (integer SoC unchanged) still reports km/1%."""
     from app.sync import live_trip

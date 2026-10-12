@@ -890,7 +890,16 @@ def live_trip(
     dt_min = max((float(snap["ts"]) - float(open_trip["ts"])) / 60.0, 0.0)
     soc_used = (max(float(open_trip["soc"]) - float(snap["soc"]), 0.0)
                 if snap.get("soc") is not None and open_trip.get("soc") is not None else 0.0)
-    energy_kwh = _energy_kwh(open_trip, snap, capacity_kwh)
+    # The pack's own energy reading, start minus now, when the stream carries
+    # it: the measure completed streamed trips use, and the car's "Current
+    # Drive" kWh. The range-based estimate is only the fallback — stored range
+    # arrives every five minutes, so on a short drive it lagged so far that a
+    # 3.8 km, 0.6 kWh drive read 0.15 kWh and 21 Wh/km (12 October).
+    e0, e1 = open_trip.get("energy_kwh"), snap.get("energy_kwh")
+    if e0 is not None and e1 is not None:
+        energy_kwh = max(float(e0) - float(e1), 0.0)
+    else:
+        energy_kwh = _energy_kwh(open_trip, snap, capacity_kwh)
     avg_speed = distance / (dt_min / 60.0) if dt_min else 0.0
     # Current speed and average both bound the max from below.
     observed_max = max(open_trip.get("max_speed", 0.0),

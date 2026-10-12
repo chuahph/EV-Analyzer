@@ -15171,6 +15171,15 @@ def live_now(
         trip = cached[1]
     else:
         open_trip, snap = _live_from_stream(session, vin)
+        # The fast lane's readings are seconds old where the stored step can
+        # be a batch behind: let them carry the "now" end of the trip.
+        if open_trip and snap and source == "memory" and isinstance(car, dict):
+            mem_ts = _telemetry_ts(car.get("_ts"))
+            if mem_ts and mem_ts > float(snap.get("ts") or 0.0):
+                mem = sync_mod.snapshot_from_telemetry(car, mem_ts)
+                snap = {**snap, "ts": mem_ts, **{k: mem[k] for k in (
+                    "odo_km", "energy_kwh", "soc", "battery_level", "range_km",
+                    "speed_kmh", "out_temp") if mem.get(k) is not None}}
         trip = (sync_mod.live_trip(open_trip, snap, cap, get_settings().drive_min_km)
                 if open_trip and snap else None)
         _LIVE_TRIP_CACHE[vin] = (time.time(), trip)
