@@ -2431,3 +2431,12 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip .gl-rt i svg { width: 12px; height: 12px; }
   .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, 4.4vh, 18px); }
 }
+
+/* A little taller than compact: the trip panels grow to about 80% of the
+   column height and share it between the tiles. */
+.gl-side > .gl-trip { flex: 1 1 auto; max-height: 80%; margin-block: auto; }
+.gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
+.gl-side > .gl-trip .gl-rt strong { font-size: clamp(18px, 5.4vh, 26px); }
+@media (orientation: landscape) and (max-width: 740px) {
+  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, 4.4vh, 18px); }
+}
