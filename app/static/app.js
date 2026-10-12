@@ -5042,6 +5042,22 @@ function renderGlance(d) {
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
     <div class="gl-body">${rail}${pg.body}</div>
     ${pg.foot ? `<div class="gl-foot">${pg.foot}</div>` : ""}</div>`;
+  glFit(el);
+}
+
+// Shrink to fit: any figure or heading wider than the box it sits in gets a
+// smaller font until it fits (down to 8 px), so no phone size clips a number or
+// a word. Measured after every draw, so it follows the screen and the value.
+const GL_FIT = ".gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-box-v, .gl-foot .gl-chip";
+function glFit(root) {
+  root.querySelectorAll(GL_FIT).forEach((e) => {
+    e.style.fontSize = "";
+    let fs = parseFloat(getComputedStyle(e).fontSize), n = 0;
+    while (e.scrollWidth > e.clientWidth + 1 && fs > 8 && n++ < 10) {
+      fs *= 0.92;
+      e.style.fontSize = fs.toFixed(1) + "px";
+    }
+  });
 }
 
 document.addEventListener("click", (e) => {

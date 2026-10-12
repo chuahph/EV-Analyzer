@@ -2440,3 +2440,10 @@ main > .card { max-width: 100%; }
 @media (orientation: landscape) and (max-width: 740px) {
   .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, 4.4vh, 18px); }
 }
+
+/* Figures and headings are measured and shrunk to fit (glFit in app.js): they
+   must not wrap or clip at the edge, and the heading's time is no longer cut
+   with an ellipsis. */
+.gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub { white-space: nowrap; }
+.gl-rt strong, .gl-rt span { min-width: 0; overflow: visible; text-overflow: clip; }
+.gl-side > .gl-trip .gl-trip-h em { overflow: visible; text-overflow: clip; }
