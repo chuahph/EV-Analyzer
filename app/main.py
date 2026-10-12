@@ -10,7 +10,8 @@ import secrets
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTextResponse,
+                               RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router as api_router
@@ -133,9 +134,12 @@ LOGIN_HTML = """<!DOCTYPE html>
 # health endpoint (cloud hosts probe it to decide the deploy succeeded), and
 # Tesla's partner public key (Tesla fetches it to verify the registered domain).
 TESLA_KEY_PATH = "/.well-known/appspecific/com.tesla.3p.public-key.pem"
+BRIDGE_PATH = "/scripts/telemetry/bridge.py"
 # /vm and /car join them: curl running on the receiver box has no passcode
-# cookie, and both only hand back a public GitHub URL.
-_OPEN_PATHS = {"/login", "/api/health", "/api/ping", TESLA_KEY_PATH, "/vm", "/car"}
+# cookie, and both serve scripts this public repository already publishes;
+# the bridge they fetch is the same.
+_OPEN_PATHS = {"/login", "/api/health", "/api/ping", TESLA_KEY_PATH, "/vm", "/car",
+               BRIDGE_PATH}
 # Reached from another site on purpose: Tesla's sign-in redirects back here.
 # Guarded by its own OAuth state check instead.
 _CROSS_SITE_OK = {"/api/link/oauth/callback"}
@@ -481,34 +485,87 @@ def manifest() -> FileResponse:
     return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
 
 
-# Typing shortcuts for the two setup scripts. Google's SSH-in-browser will
-# not reliably paste on iOS, so the receiver box is set up by TYPING a
-# command — and a raw.githubusercontent URL is ~130 characters of
-# case-sensitive path to get right by thumb. These cut it to
-# `curl -sL evperkm.xyz/car`, on a domain already being typed all day.
+# The two setup scripts and the bridge, served from the code this app is
+# running — the user's own fork, at the commit Render deployed — so a relay is
+# never built from anyone else's repository or domain. They used to be
+# redirects to the original author's GitHub main, reached through the
+# author's domain: if either lapsed or was taken over, every user's relay
+# (which runs these as root) went with it.
 #
-# Not an open redirect: the targets are fixed here, nothing about them comes
-# from the request. Both scripts are public on GitHub already, so serving a
-# pointer to one gives away nothing the repository does not.
-_SCRIPT_URLS = {
-    "vm": "https://raw.githubusercontent.com/chuahph/Tesla-Analyzer/main/vm.sh",
-    "car": "https://raw.githubusercontent.com/chuahph/Tesla-Analyzer/main/car.sh",
-}
+# Short because the receiver box is set up by TYPING `curl -sL <app>/vm`
+# into Google's SSH-in-browser, which will not reliably paste on iOS.
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts" / "telemetry"
+_SCRIPTS = {"vm": "01-vm-setup.sh", "car": "02-configure-vehicle.sh"}
+_HOST_RE = re.compile(r"^[A-Za-z0-9.-]+(:[0-9]{1,5})?$")
+
+
+def _public_base(request: Request) -> str:
+    """This app's own address, as the client reached it.
+
+    Written into the setup script as the default app URL, so it is checked
+    rather than echoed: anything but a plain host[:port] gives no default.
+    """
+    netloc = request.url.netloc or ""
+    if not _HOST_RE.match(netloc):
+        return ""
+    host = request.url.hostname or ""
+    scheme = "http" if host in ("localhost", "127.0.0.1") else "https"
+    return f"{scheme}://{netloc}"
+
+
+def _script(name: str) -> str:
+    return (SCRIPTS_DIR / name).read_text(encoding="utf-8")
 
 
 @app.get("/vm")
-def vm_script() -> RedirectResponse:
-    return RedirectResponse(_SCRIPT_URLS["vm"], status_code=302)
+def vm_script(request: Request) -> PlainTextResponse:
+    text = _script(_SCRIPTS["vm"]).replace("__SERVED_FROM__", _public_base(request), 1)
+    return PlainTextResponse(text, media_type="text/x-shellscript")
 
 
 @app.get("/car")
-def car_script() -> RedirectResponse:
-    return RedirectResponse(_SCRIPT_URLS["car"], status_code=302)
+def car_script() -> PlainTextResponse:
+    return PlainTextResponse(_script(_SCRIPTS["car"]), media_type="text/x-shellscript")
+
+
+@app.get(BRIDGE_PATH)
+def bridge_script() -> PlainTextResponse:
+    return PlainTextResponse(_script("bridge.py"), media_type="text/x-python")
+
+
+_PEM_RE = re.compile(
+    r"-----BEGIN PUBLIC KEY-----\s*[A-Za-z0-9+/=\s]+?\s*-----END PUBLIC KEY-----")
+
+
+def _env_public_key(raw: str) -> str | None:
+    """The PEM block from TESLA_PUBLIC_KEY, however it was pasted.
+
+    Render's form keeps line breaks, but a key pasted as one line, or with
+    literal backslash-n, arrives as either. Only a well-formed block is
+    served; anything else falls back to the file.
+    """
+    text = (raw or "").replace("\\n", "\n").strip()
+    m = _PEM_RE.search(text)
+    if not m:
+        return None
+    body = re.sub(r"\s+", "", m.group(0)[len("-----BEGIN PUBLIC KEY-----"):-len("-----END PUBLIC KEY-----")])
+    lines = [body[i:i + 64] for i in range(0, len(body), 64)]
+    return "-----BEGIN PUBLIC KEY-----\n" + "\n".join(lines) + "\n-----END PUBLIC KEY-----\n"
 
 
 @app.get(TESLA_KEY_PATH)
-def tesla_public_key() -> FileResponse:
-    """Partner public key Tesla checks when registering this domain (Fleet API)."""
+def tesla_public_key():
+    """Partner public key Tesla checks when registering this domain (Fleet API).
+
+    From TESLA_PUBLIC_KEY when set, so a fork never has to commit its own key:
+    a committed key put every fork a commit ahead of the original, which made
+    GitHub's Sync fork offer to discard it (and with it the car's pairing) and
+    made any change to the original's key file a conflict in every fork. The
+    file is the fallback for a copy that has not set the variable.
+    """
+    pem = _env_public_key(os.environ.get("TESLA_PUBLIC_KEY", ""))
+    if pem:
+        return PlainTextResponse(pem, media_type="application/x-pem-file")
     return FileResponse(
         STATIC_DIR / "well-known" / "com.tesla.3p.public-key.pem",
         media_type="application/x-pem-file",

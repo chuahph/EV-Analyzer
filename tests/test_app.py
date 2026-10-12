@@ -4343,7 +4343,16 @@ def test_partner_registration_is_recorded_per_domain(monkeypatch):
                            headers={"host": host})
         # Twice from the same host registers once; a new host registers again.
         assert registered == ["first.example", "second.example"]
+
+        # TESLA_PARTNER_DOMAIN wins over the host: an app on *.onrender.com
+        # registers the domain its relay hostname sits under.
+        settings.tesla_partner_domain = "Alexev.xyz"
+        with TestClient(app) as client:
+            client.get("/api/link/oauth/start", follow_redirects=False,
+                       headers={"host": "you-analyzer.onrender.com"})
+        assert registered[-1] == "alexev.xyz"
     finally:
+        settings.tesla_partner_domain = ""
         (settings.app_passcode, settings.tesla_client_id,
          settings.tesla_client_secret) = old_pc, old_id, old_secret
 
@@ -4751,24 +4760,44 @@ def test_telegram_chat_id_lookup():
         settings.app_passcode, settings.telegram_bot_token = old_pc, old_tok
 
 
-def test_script_shortcuts_are_reachable_without_the_passcode():
-    """The receiver box is set up by typing a command into Google's
-    SSH-in-browser, which does not paste on iOS — so the URL has to be short,
-    and curl there carries no passcode cookie."""
+def test_setup_scripts_are_served_from_this_app_without_the_passcode():
+    """The relay is built from the scripts THIS app serves — the user's own
+    fork at the deployed commit — never a redirect to another repository or
+    domain. Open, because curl on the relay has no passcode cookie; /vm
+    carries this app's own address as the default, and nobody else's."""
     settings = get_settings()
     old_pc = settings.app_passcode
     settings.app_passcode = "secret"
     try:
-        with TestClient(app) as client:
-            for path, script in (("/vm", "vm.sh"), ("/car", "car.sh")):
-                resp = client.get(path, follow_redirects=False)
-                assert resp.status_code == 302, path
-                assert resp.headers["location"].endswith("/" + script)
-                # Not behind the gate: a redirect to /login would hand curl
-                # an HTML page and bash would try to run it.
-                assert "/login" not in resp.headers["location"]
+        with TestClient(app, base_url="https://you-analyzer.onrender.com") as client:
+            vm = client.get("/vm", follow_redirects=False)
+            assert vm.status_code == 200
+            assert vm.text.startswith("#!")
+            assert 'SERVED_FROM="https://you-analyzer.onrender.com"' in vm.text
+            assert "evperkm" not in vm.text
+            car = client.get("/car", follow_redirects=False)
+            assert car.status_code == 200 and car.text.startswith("#!")
+            assert "telemetry.evperkm.xyz" not in car.text
+            bridge = client.get("/scripts/telemetry/bridge.py", follow_redirects=False)
+            assert bridge.status_code == 200 and bridge.text.startswith("#!")
     finally:
         settings.app_passcode = old_pc
+
+
+def test_the_public_key_comes_from_the_env_var_when_set(monkeypatch):
+    """TESLA_PUBLIC_KEY lets a fork serve its own key without committing it,
+    so the fork stays identical to the original and syncs never touch it."""
+    key = ("-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE"
+           + "A" * 88 + "\\n-----END PUBLIC KEY-----")
+    path = "/.well-known/appspecific/com.tesla.3p.public-key.pem"
+    with TestClient(app) as client:
+        from_file = client.get(path).text
+        monkeypatch.setenv("TESLA_PUBLIC_KEY", key)
+        served = client.get(path).text
+        assert served.startswith("-----BEGIN PUBLIC KEY-----\nMFkwEwYH")
+        assert served != from_file
+        monkeypatch.setenv("TESLA_PUBLIC_KEY", "not a key")
+        assert client.get(path).text == from_file
 
 
 def test_compare_survives_an_unreadable_shadow_trip():

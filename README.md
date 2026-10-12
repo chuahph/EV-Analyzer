@@ -294,6 +294,20 @@ through is fixed by running it again.
 a publicly trusted certificate, so a domain you control is required (any
 registrar; Cloudflare's is at cost and manages the DNS too).
 
+- **Domain registered with Tesla**: Tesla only streams to a relay whose
+  hostname sits under the app's registered partner domain, so a relay at
+  `telemetry.<yourdomain>` needs `<yourdomain>` registered — not
+  `*.onrender.com` (Step 3 otherwise fails with "hostname domain does not
+  match with partner account"). Either put the app itself on your domain
+  (Render → Settings → Custom Domains, where your plan offers it), or keep the
+  `onrender.com` address, set `TESLA_PARTNER_DOMAIN=<yourdomain>` in Render,
+  add `https://<yourdomain>` to the Tesla app's Allowed Origins, and serve the
+  key on the bare domain with a Cloudflare Worker that proxies
+  `/.well-known/appspecific/com.tesla.3p.public-key.pem` from the app (the
+  in-app setup guide, step 5f, has the code).
+- **Google Cloud billing**: upgrade the account to pay-as-you-go straight
+  away. A new account is a 90-day trial, and when it ends Google stops the
+  server unless the account was upgraded. The e2-micro stays free afterwards.
 - **Server**: Google Cloud → Compute Engine → Create instance: `e2-micro`
   (free tier) in `us-central1`, `us-west1` or `us-east1`; boot disk
   **Ubuntu 24.04 LTS (x86/64)**, standard persistent disk, 30 GB or less;
@@ -312,30 +326,34 @@ registrar; Cloudflare's is at cost and manages the DNS too).
 curl -sL https://<your-app>/vm -o v.sh && sudo bash v.sh
 ```
 
-It prompts for the telemetry hostname, the app URL, `SYNC_KEY` (same value as
-the app's) and an optional Let's Encrypt email; the bracketed defaults are
-this project's own, so type yours.
+It prompts for the telemetry hostname (no default), the app URL (defaults to
+the app that served the script), `SYNC_KEY` (same value as the app's; shown
+back as its length and last 4 characters, with any stray control keys
+stripped) and an optional Let's Encrypt email. A blank hostname or app URL
+stops the script: there is no fallback to anyone else's servers. All four are
+saved to `/etc/tesla/bridge.env`, which step 3 reads back.
 
 Installs `tesla/fleet-telemetry`, generates the keypair into `/etc/tesla/keys`,
-and installs the bridge as a service. (`/vm` is a short redirect to the real
-script. Google's SSH-in-browser will not reliably paste on iOS, which makes a
-130-character raw URL a genuine obstacle rather than a cosmetic one — and the
-launcher downloads to a file and checks it before running, because an empty
-body from a deploy still in flight is a valid empty script that runs silently
-and reports success.)
+and installs the bridge as a service. (`/vm`, `/car` and the bridge are served
+by your own app from the code it is running, so the relay is built from your
+fork at the deployed commit and never from another repository or domain. The
+URL is short because Google's SSH-in-browser will not reliably paste on iOS.)
 
 **2. Publish the key, register the domain, pair the virtual key.** Needs a
 browser and the Tesla app; the setup script deliberately does not attempt it.
 
 - Copy the public key the script printed (also in `/etc/tesla/NEXT-STEPS.txt`)
-  into `app/static/well-known/com.tesla.3p.public-key.pem` in your fork and
-  push; the app serves that file at Tesla's well-known path.
+  into Render → Environment as `TESLA_PUBLIC_KEY` (the whole block); the app
+  serves it at Tesla's well-known path. Kept out of the repo so your fork stays
+  identical to the original and syncing never touches it. (The committed file
+  is only the fallback when the variable is unset.)
 - Only then sign in with Tesla from the app. The first sign-in from an address
   registers that domain with Tesla, which reads the key at that moment — and
   the app does not register the same domain twice, so signing in before the
   key is published leaves Tesla holding the wrong one.
-- Pair the key with the car: open `https://tesla.com/_ak/<your-app-domain>` on
-  the phone with the Tesla app and approve.
+- Pair the key with the car: open `https://tesla.com/_ak/<registered domain>`
+  (the app's domain, or `TESLA_PARTNER_DOMAIN` when set) on the phone with the
+  Tesla app and approve.
 
 **3. Tell the car to stream:**
 
@@ -938,8 +956,9 @@ scripts/telemetry/
   bridge.py         ZMQ -> /api/telemetry, with a disk spool. Deliberately
                     dumb: it interprets nothing, so no wrong judgement can
                     hide on a box nobody looks at.
-vm.sh, car.sh       Short launchers for the two scripts above, served at
-                    /vm and /car so they can be typed into a phone SSH window
+                    The app serves all three itself (/vm, /car and
+                    /scripts/telemetry/bridge.py), from the code it runs, so
+                    a relay is only ever built from your own fork.
 tests/              pytest suite (587 tests)
 ```
 

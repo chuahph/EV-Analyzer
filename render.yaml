@@ -52,3 +52,13 @@ services:
         sync: false
       - key: TESLA_CLIENT_SECRET
         sync: false
+      # Your relay's public key (Step 5 of the setup guide prints it). Leave
+      # blank for now; set it before signing in with Tesla. Kept here rather
+      # than committed so your fork stays identical to the original.
+      - key: TESLA_PUBLIC_KEY
+        sync: false
+      # Only when the app stays on *.onrender.com: the domain your relay's
+      # hostname sits under (e.g. yourdomain.xyz), registered with Tesla in
+      # place of the onrender.com address. Leave blank otherwise.
+      - key: TESLA_PARTNER_DOMAIN
+        sync: false

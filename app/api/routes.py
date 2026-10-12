@@ -3510,7 +3510,8 @@ def oauth_start(request: Request, session: Session = Depends(get_session)):
     # "some domain was registered" makes moving to a new one silently skip the
     # step, and the failure surfaces much later as a vehicle refusing to pair
     # against a domain Tesla was never told about.
-    domain = request.url.hostname or ""
+    domain = (get_settings().tesla_partner_domain or "").strip().lower() \
+        or request.url.hostname or ""
     registered_key = f"partner_registered:{domain}"
     if state.get(session, registered_key) != "yes":
         try:

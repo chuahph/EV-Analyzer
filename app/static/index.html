@@ -333,12 +333,23 @@
                   <code>https://ev-drive-analyzer.onrender.com</code>. Note it down — you'll
                   reuse it in Step 4.</li>
               </ol>
-              <p class="gs-note gs-note-info">🌐 <strong>Using your own domain for the app?</strong>
-                Optional, but decide now: in Render open your service →
-                <strong>Settings → Custom Domains</strong>, add it, and create the DNS record
-                Render shows you. Then use <em>that</em> address everywhere below instead of the
-                <code>onrender.com</code> one — Tesla registers whichever address you first
-                sign in from (Step 6).</p>
+              <p class="gs-note gs-note-warn">🌐 <strong>Decide now: which domain Tesla
+                registers.</strong> Tesla only streams to a relay whose name sits under the domain
+                registered for your app. Your relay will be <code>telemetry.&lt;yourdomain&gt;</code>
+                (Step 5), so the registered domain must be <code>&lt;yourdomain&gt;</code>, not
+                <code>onrender.com</code>. Otherwise Step 7 fails with "hostname domain does not
+                match with partner account". Two ways:</p>
+              <ul>
+                <li><strong>A · Your app on your own domain.</strong> Only if your Render service
+                  shows <strong>Settings → Custom Domains</strong> (free services may not). Add e.g.
+                  <code>app.&lt;yourdomain&gt;</code>, create the DNS record Render shows, and use
+                  that address everywhere below.</li>
+                <li><strong>B · Keep the <code>onrender.com</code> address</strong> (works on the
+                  free plan). In Render → <strong>Environment</strong> add
+                  <code>TESLA_PARTNER_DOMAIN</code> = <code>&lt;yourdomain&gt;</code> (e.g.
+                  <code>alexev.xyz</code>), then follow <strong>5f</strong> after Step 5 so that
+                  domain serves your public key.</li>
+              </ul>
             </div>
           </details>
         </li>
@@ -389,11 +400,14 @@
                 yourself: tap <strong>+ Add Environment Variable</strong>, type the key name exactly
                 (<code>TESLA_CLIENT_ID</code>, then again for <code>TESLA_CLIENT_SECRET</code>),
                 paste each value, and <strong>Save changes</strong> — it redeploys automatically.</p>
+              <p class="gs-note gs-note-info">🌐 <strong>Using option B (TESLA_PARTNER_DOMAIN)?</strong>
+                Add <code>https://&lt;yourdomain&gt;</code> as a second <strong>Allowed
+                Origin</strong>, beside your app's address.</p>
               <p class="gs-note gs-note-warn">⛔ <strong>Don't sign in to the app yet.</strong>
-                Your first sign-in registers your app's address with Tesla, and Tesla reads your
+                Your first sign-in registers your domain with Tesla, and Tesla reads your
                 <strong>public key</strong> at that moment. That key is made on your relay server
-                in Step 5 — until you've put it in your fork, your copy still serves the
-                original author's key, and your car will refuse to pair.</p>
+                in Step 5 — until it is in <code>TESLA_PUBLIC_KEY</code>, your copy still serves
+                the original author's key, and your car will refuse to pair.</p>
             </div>
           </details>
         </li>
@@ -423,6 +437,11 @@
               <ol>
                 <li>Open <strong>console.cloud.google.com</strong>, sign in with a Google
                   account and set up billing. A card is required even for the free tier.</li>
+                <li><strong>⚠️ Upgrade to a full (pay-as-you-go) account straight away:</strong>
+                  <strong>Billing → Upgrade</strong>. A new account starts on a 90-day free trial,
+                  and when the trial ends Google <strong>stops the server</strong> unless the
+                  account was upgraded, and your car's trips stop arriving. The e2-micro stays
+                  free after upgrading; only usage beyond the free tier is charged.</li>
                 <li>Create a project (any name), then open <strong>Compute Engine</strong> and
                   tap <strong>Enable</strong> if asked (the first time takes a minute).</li>
                 <li><strong>VM instances → Create instance</strong>, and set:
@@ -449,7 +468,9 @@
               </ol>
               <p class="gs-note gs-note-warn">💳 The free tier covers one e2-micro and its
                 disk. Check <strong>Billing</strong> after the first month in case your
-                account is charged a small amount for the static IP.</p>
+                account is charged a small amount for the static IP. And if you skipped the
+                upgrade above, do it before day 90: a trial account's server is stopped when
+                the trial ends.</p>
 
               <p><strong>5c · Point a name at the server</strong></p>
               <ol>
@@ -469,16 +490,19 @@
                   the key it asks to add.</li>
                 <li>Run:
                   <code>curl -sL https://&lt;your-app&gt;/vm -o v.sh &amp;&amp; sudo bash v.sh</code></li>
-                <li>Answer its four questions. The defaults in brackets are the original
-                  author's, so type your own:
+                <li>Answer its four questions:
                   <ul>
-                    <li><strong>Telemetry hostname:</strong> <code>telemetry.&lt;yourdomain&gt;</code></li>
-                    <li><strong>App URL:</strong> your app's address from Step 3, with
-                      <code>https://</code></li>
-                    <li><strong>SYNC_KEY:</strong> the same value as in Render (nothing shows
-                      as you type)</li>
+                    <li><strong>Telemetry hostname:</strong> <code>telemetry.&lt;yourdomain&gt;</code>
+                      (no default: type it)</li>
+                    <li><strong>App URL:</strong> your app's address from Step 3. It is offered in
+                      brackets, because the script came from your app; press Enter to accept.</li>
+                    <li><strong>SYNC_KEY:</strong> the same value as in Render. Nothing shows as you
+                      type; afterwards it shows the key's length and last 4 characters, so you can
+                      check them against Render.</li>
                     <li><strong>Email:</strong> optional, for certificate expiry notices</li>
-                  </ul></li>
+                  </ul>
+                  The script and everything it installs come from <em>your own</em> app, so the
+                  relay is built from your fork's code.</li>
                 <li>It takes about five minutes: Docker, a Let's Encrypt certificate, the
                   Tesla receiver and the bridge to your app. If anything fails it says why.
                   Fix that and run the same command again; finished steps are skipped.</li>
@@ -489,17 +513,39 @@
                 <li>The script ends with <strong>Done</strong> and a <strong>PUBLIC KEY</strong>
                   block. See it again any time with
                   <code>cat /etc/tesla/NEXT-STEPS.txt</code>.</li>
-                <li>On GitHub, open your fork's
-                  <code>app/static/well-known/com.tesla.3p.public-key.pem</code> → ✏️ edit →
-                  replace everything with that block, from <code>-----BEGIN</code> to
-                  <code>-----END PUBLIC KEY-----</code> → <strong>Commit changes</strong>.</li>
+                <li>Render → your service → <strong>Environment</strong> → <strong>+ Add
+                  Environment Variable</strong>: key <code>TESLA_PUBLIC_KEY</code>, value = that
+                  whole block, from <code>-----BEGIN PUBLIC KEY-----</code> to
+                  <code>-----END PUBLIC KEY-----</code> → <strong>Save changes</strong>.</li>
                 <li>Render redeploys by itself. Before Step 6, check that
                   <code>&lt;your-app&gt;/.well-known/appspecific/com.tesla.3p.public-key.pem</code>
                   shows your new key.</li>
               </ol>
               <p class="gs-note gs-note-info">🔒 The <em>private</em> key never leaves the
-                server (<code>/etc/tesla/keys</code>) — only the public half goes in your fork,
-                which is safe to share.</p>
+                server (<code>/etc/tesla/keys</code>). The public half lives in Render's settings,
+                not in your fork, so your fork stays identical to the original and
+                <strong>Sync fork</strong> never touches it.</p>
+
+              <p><strong>5f · Only for option B (TESLA_PARTNER_DOMAIN): serve the key on your
+                domain</strong></p>
+              <ol>
+                <li>Cloudflare → <strong>Workers &amp; Pages → Create → Worker</strong>, name it
+                  e.g. <code>tesla-key</code>, <strong>Deploy</strong>, then <strong>Edit
+                  code</strong> and replace it with (your app's address in the first line):
+                  <pre class="gs-pre">const APP = "https://you-analyzer.onrender.com";
+const KEY = "/.well-known/appspecific/com.tesla.3p.public-key.pem";
+export default {
+  async fetch(req) {
+    if (new URL(req.url).pathname !== KEY) return new Response("", { status: 404 });
+    return fetch(APP + KEY);
+  },
+};</pre>
+                  → <strong>Deploy</strong>.</li>
+                <li>Worker → <strong>Settings → Domains &amp; Routes → Add → Custom
+                  domain</strong>: <code>&lt;yourdomain&gt;</code> (the bare domain).</li>
+                <li>Check that <code>https://&lt;yourdomain&gt;/.well-known/appspecific/com.tesla.3p.public-key.pem</code>
+                  shows the same key as your app.</li>
+              </ol>
             </div>
           </details>
         </li>
@@ -511,13 +557,14 @@
               <ol>
                 <li>Open your app's address and enter your <code>APP_PASSCODE</code>.</li>
                 <li>Tap <strong>🔗 Link Tesla Account → Sign in with Tesla</strong>, then
-                  approve the request on Tesla's page. This also registers your address with
+                  approve the request on Tesla's page. This also registers your domain with
                   Tesla, using the key you published in Step 5.</li>
                 <li><strong>Pair the key with your car:</strong> on the phone that has the Tesla
-                  app, open <code>https://tesla.com/_ak/&lt;your-app-address&gt;</code> (the
-                  address without <code>https://</code>, e.g.
-                  <code>tesla.com/_ak/ev-drive-analyzer.onrender.com</code>) and approve adding
-                  the key. You may be asked to tap your key card on the car.</li>
+                  app, open <code>https://tesla.com/_ak/&lt;registered domain&gt;</code>: your
+                  app's address without <code>https://</code> (option A), or
+                  <code>&lt;yourdomain&gt;</code> with option B (e.g.
+                  <code>tesla.com/_ak/alexev.xyz</code>). Approve adding the key. You may be
+                  asked to tap your key card on the car.</li>
               </ol>
               <p class="gs-note">🚗🚗 <strong>Have two or more cars on one Tesla account?</strong>
                 You still sign in <strong>just once</strong> — a single Tesla login covers every

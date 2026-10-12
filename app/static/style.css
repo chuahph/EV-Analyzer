@@ -1119,6 +1119,14 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
   border-radius: 6px; padding: 8px 10px; margin: 10px 0 0 !important;
   font-size: 12.5px;
 }
+/* A block of code to copy (the Cloudflare Worker): scrolls inside itself
+   rather than widening the guide. */
+.gs-pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin: 6px 0; font-size: 11px; line-height: 1.45;
+  font-family: ui-monospace, Menlo, monospace; overflow-x: auto;
+  white-space: pre; -webkit-user-select: all; user-select: all;
+}
 /* Amber variant for a "watch out / you may need to do this manually" note. */
 .gs-note-warn { border-left-color: var(--amber); }
 /* Blue variant for an informational aside. */

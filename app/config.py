@@ -144,6 +144,12 @@ class Settings(BaseSettings):
         "openid offline_access vehicle_device_data vehicle_location vehicle_cmds"
     )
     tesla_oauth_audience: str = "https://fleet-api.prd.na.vn.cloud.tesla.com"
+    # The domain registered with Tesla as this app's partner domain. Blank =
+    # the address the app is opened from. Tesla only streams to a relay whose
+    # hostname sits under the registered domain, so an app on *.onrender.com
+    # with a relay at telemetry.yourdomain.xyz sets this to yourdomain.xyz —
+    # and that domain must serve the public key (see the setup guide).
+    tesla_partner_domain: str = ""
 
     # Optional passcode protecting the whole app (empty = no login required).
     # Set APP_PASSCODE on a public host so only you can open the dashboard.

@@ -2,8 +2,11 @@
 #
 # Stand up a Tesla Fleet Telemetry receiver on a fresh Ubuntu 24.04 box.
 #
-#   curl -fsSL https://raw.githubusercontent.com/chuahph/Tesla-Analyzer/main/scripts/telemetry/01-vm-setup.sh -o s.sh
-#   sudo bash s.sh
+#   curl -sL https://<your-app>/vm -o v.sh && sudo bash v.sh
+#
+# Served by YOUR app, from the code it is running (your fork, at the commit
+# Render deployed), with your app's address filled in as the default below.
+# Nothing here is fetched from anyone else's repository or domain.
 #
 # Downloaded rather than piped into bash so the script keeps a usable stdin and
 # can prompt. It is safe to re-run: every step checks for its own result first,
@@ -20,11 +23,10 @@ FT_IMAGE="tesla/fleet-telemetry:${FT_VERSION}"
 KEY_DIR="/etc/tesla/keys"
 CONF_DIR="/etc/fleet-telemetry"
 BRIDGE_DIR="/opt/tesla-bridge"
-# Where this script fetches its siblings from. Overridable because a branch
-# that has not been merged to main yet still has to be runnable — otherwise
-# the failure is a 404 inside a pipe, which reports as nothing happening at
-# all rather than as a missing file.
-RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/chuahph/Tesla-Analyzer/main/scripts/telemetry}"
+# The app that served this script. /vm writes its own address over the token
+# below; a copy fetched any other way keeps the token and has no default.
+SERVED_FROM="__SERVED_FROM__"
+case "$SERVED_FROM" in https://*|http://*) ;; *) SERVED_FROM="" ;; esac
 
 LOG="/var/log/tesla-setup.log"
 
@@ -63,22 +65,57 @@ wait_for_apt() {
 # leaves pasting a block into the instance's metadata form as the only way
 # some people can get this script onto the box at all.
 say "Configuration"
+# Defaults are this box's own answers from a previous run, never anyone
+# else's: a blank answer used to fall back to the original author's relay and
+# app, which sent a new user's SYNC_KEY and car stream to a stranger.
+PREV_HOST="" PREV_APP=""
+if [ -r /etc/tesla/bridge.env ]; then
+  PREV_HOST=$(sed -n 's/^TELEMETRY_HOST=//p' /etc/tesla/bridge.env | head -1)
+  PREV_APP=$(sed -n 's/^APP_URL=//p' /etc/tesla/bridge.env | head -1)
+fi
+DEF_HOST="$PREV_HOST"
+DEF_APP="${PREV_APP:-$SERVED_FROM}"
 if [ -t 0 ]; then
   [ -n "${TELEMETRY_HOST:-}" ] || {
-    read -rp "Telemetry hostname [telemetry.evperkm.xyz]: " TELEMETRY_HOST; }
-  [ -n "${APP_URL:-}" ] || { read -rp "App URL [https://evperkm.xyz]: " APP_URL; }
+    read -rp "Telemetry hostname, e.g. telemetry.yourdomain.xyz${DEF_HOST:+ [$DEF_HOST]}: " TELEMETRY_HOST; }
+  [ -n "${APP_URL:-}" ] || {
+    read -rp "Your app's address, e.g. https://you-analyzer.onrender.com${DEF_APP:+ [$DEF_APP]}: " APP_URL; }
   [ -n "${SYNC_KEY:-}" ] || {
-    read -rsp "SYNC_KEY (same value as the app's env var): " SYNC_KEY; echo; }
+    read -rsp "SYNC_KEY (same value as the app's env var; hidden as you type): " SYNC_KEY; echo; }
   [ -n "${LE_EMAIL:-}" ] || {
     read -rp "Email for Let's Encrypt expiry notices (blank to skip): " LE_EMAIL; }
 fi
-TELEMETRY_HOST=${TELEMETRY_HOST:-telemetry.evperkm.xyz}
-APP_URL=${APP_URL:-https://evperkm.xyz}
+TELEMETRY_HOST=${TELEMETRY_HOST:-$DEF_HOST}
+APP_URL=${APP_URL:-$DEF_APP}
+APP_URL=${APP_URL%/}
 LE_EMAIL=${LE_EMAIL:-}
 
-[ -n "${SYNC_KEY:-}" ] || die "SYNC_KEY is required — the app rejects unauthenticated posts.
+[ -n "$TELEMETRY_HOST" ] || die "a telemetry hostname is required, e.g. telemetry.yourdomain.xyz
+  (the DNS name you pointed at this server). Unattended: TELEMETRY_HOST=... bash $0"
+[ -n "$APP_URL" ] || die "your app's address is required, e.g. https://you-analyzer.onrender.com.
+  Unattended: APP_URL=... bash $0"
+case "$APP_URL" in https://*|http://localhost*|http://127.0.0.1*) ;;
+  *) die "the app's address must start with https:// (got '$APP_URL')" ;; esac
+
+# The key is typed blind, so a stray Home, Delete or arrow key lands in it as
+# an escape sequence nobody sees. Keep printable characters only, and show
+# enough of the result to check it against Render without echoing all of it.
+RAW_KEY="${SYNC_KEY:-}"
+# Whole escape sequences first (an arrow key is ESC [ A: dropping only the ESC
+# would leave "[A" in the key), then anything else that is not printable.
+SYNC_KEY=$(printf '%s' "$RAW_KEY" \
+  | LC_ALL=C sed $'s/\x1b\\[[0-9;]*[~A-Za-z]//g; s/\x1bO[A-Za-z]//g' \
+  | LC_ALL=C tr -cd '[:graph:]')
+[ -n "$SYNC_KEY" ] || die "SYNC_KEY is required — the app rejects unauthenticated posts.
   Interactively you are asked for it; unattended, set it in the environment:
     SYNC_KEY=... bash $0"
+[ "$SYNC_KEY" = "$RAW_KEY" ] || echo "  removed spaces or control characters from the SYNC_KEY you typed"
+echo "  SYNC_KEY: ${#SYNC_KEY} characters, ending ...${SYNC_KEY: -4}"
+echo "  (compare with Render -> Environment -> SYNC_KEY; if it differs, re-run)"
+
+# Where this script fetches its siblings (bridge.py): your own app, which
+# serves them from the code it runs. Overridable for testing a branch.
+RAW_BASE="${RAW_BASE:-$APP_URL/scripts/telemetry}"
 
 # ------------------------------------------------------------------ DNS
 # Checked before anything is installed. certbot's HTTP-01 challenge needs the
@@ -109,10 +146,10 @@ apt-get install -y -qq docker.io certbot openssl curl jq \
 systemctl enable --now docker
 
 # --------------------------------------------------------------- key pair
-# The virtual key. Its public half goes in the repo and is served from the
-# app's domain; its private half signs the telemetry configuration the car
-# accepts, and must never leave this box. The repo is public — do not copy
-# this file into it.
+# The virtual key. Its public half goes in the app's TESLA_PUBLIC_KEY setting
+# and is served from the app's domain; its private half signs the telemetry
+# configuration the car accepts, and must never leave this box. The repo is
+# public — do not copy the private key into it.
 say "Partner / virtual key"
 mkdir -p "$KEY_DIR"
 chmod 700 "$KEY_DIR"
@@ -233,14 +270,21 @@ chmod +x /etc/letsencrypt/renewal-hooks/deploy/restart-fleet-telemetry.sh
 # -------------------------------------------------------------- bridge
 say "Installing the ZMQ -> app bridge"
 mkdir -p "$BRIDGE_DIR"
-curl -fsSL "$RAW_BASE/bridge.py" -o "$BRIDGE_DIR/bridge.py"
+curl -fsSL "$RAW_BASE/bridge.py" -o "$BRIDGE_DIR/bridge.py.new" \
+  || die "could not fetch the bridge from $RAW_BASE/bridge.py — is the app up?"
+head -1 "$BRIDGE_DIR/bridge.py.new" | grep -q '^#!' \
+  || die "$RAW_BASE/bridge.py did not return the bridge script"
+mv "$BRIDGE_DIR/bridge.py.new" "$BRIDGE_DIR/bridge.py"
 chmod 755 "$BRIDGE_DIR/bridge.py"
 
 # SYNC_KEY lives here rather than in the unit file so it is not world-readable
 # in `systemctl cat`.
+# TELEMETRY_HOST too: 02-configure-vehicle.sh reads all of its answers back
+# from here, and without it had nothing but a hard-coded fallback.
 cat > /etc/tesla/bridge.env <<EOF
 APP_URL=$APP_URL
 SYNC_KEY=$SYNC_KEY
+TELEMETRY_HOST=$TELEMETRY_HOST
 ZMQ_ADDR=tcp://127.0.0.1:5284
 EOF
 chmod 600 /etc/tesla/bridge.env
@@ -278,9 +322,10 @@ cat > /etc/tesla/NEXT-STEPS.txt <<EOF
 
 Next, and none of it can be done from this box:
 
-  1. Copy the public key below into the repo, replacing
-     app/static/well-known/com.tesla.3p.public-key.pem, and push. Render
+  1. Copy the public key below into Render -> your service -> Environment
+     as TESLA_PUBLIC_KEY (the whole block, BEGIN to END lines). Render
      redeploys and serves it at $APP_URL/.well-known/appspecific/com.tesla.3p.public-key.pem
+     — your fork stays identical to the original, so syncing never touches it.
   2. Add $APP_URL as an Allowed Origin and
      $APP_URL/api/link/oauth/callback as an Allowed Redirect URI at
      developer.tesla.com

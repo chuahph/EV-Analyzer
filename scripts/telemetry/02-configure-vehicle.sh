@@ -10,7 +10,7 @@
 #
 # or, from anywhere:
 #
-#   curl -sL https://evperkm.xyz/car -o c.sh && sudo bash c.sh
+#   curl -sL https://<your-app>/car -o c.sh && sudo bash c.sh
 #
 # (it reads the same values back out of /etc/tesla/bridge.env).
 #
@@ -35,7 +35,20 @@ echo "=== $(date -Is) configuring vehicle ==="
 
 # ---------------------------------------------------------------- inputs
 [ -f /etc/tesla/bridge.env ] && . /etc/tesla/bridge.env
-TELEMETRY_HOST="${TELEMETRY_HOST:-telemetry.evperkm.xyz}"
+# A box set up before 01-vm-setup.sh saved TELEMETRY_HOST still knows its own
+# name: the certificate the receiver serves was issued for it. Taken from
+# there and saved, rather than from any hard-coded host.
+if [ -z "${TELEMETRY_HOST:-}" ] && [ -r /etc/fleet-telemetry/config.json ]; then
+  TELEMETRY_HOST=$(jq -r '.tls.server_cert // empty' /etc/fleet-telemetry/config.json \
+                   | sed -n 's#^/etc/letsencrypt/live/\([^/]*\)/.*#\1#p')
+  if [ -n "$TELEMETRY_HOST" ] && [ -w /etc/tesla/bridge.env ]; then
+    echo "TELEMETRY_HOST=$TELEMETRY_HOST" >> /etc/tesla/bridge.env
+    echo "  TELEMETRY_HOST=$TELEMETRY_HOST (from this box's certificate; saved to bridge.env)"
+  fi
+fi
+[ -n "${TELEMETRY_HOST:-}" ] || die "TELEMETRY_HOST not set and /etc/tesla/bridge.env has none.
+  Add a line TELEMETRY_HOST=telemetry.yourdomain.xyz to /etc/tesla/bridge.env
+  (the name 01-vm-setup.sh got its certificate for), or re-run 01-vm-setup.sh."
 [ -n "${APP_URL:-}" ] || die "APP_URL not set and /etc/tesla/bridge.env has none"
 [ -n "${SYNC_KEY:-}" ] || die "SYNC_KEY not set and /etc/tesla/bridge.env has none"
 [ -f "$KEY_DIR/private-key.pem" ] || die "no virtual key at $KEY_DIR — run 01-vm-setup.sh first"
@@ -204,11 +217,7 @@ kill -0 $PROXY_PID 2>/dev/null || die "the proxy exited on startup (see $LOG)"
 # proto but Tesla's API rejects it as an unknown field, so either the name
 # differs on this firmware or it is not configurable. Left out rather than
 # left in to fail the whole request.
-# --- The second set, sent only when asked for -------------------------------
-#
-# Run with TELEMETRY_V2=1 to add these:
-#
-#   curl -sL https://evperkm.xyz/car -o c.sh && sudo TELEMETRY_V2=1 bash c.sh
+# --- The second set (level 2; part of the default full set) ------------------
 #
 # LifetimeEnergyUsed is the reason this exists. Trip energy is currently the
 # difference of two EnergyRemaining readings, and that field moves in steps of
@@ -217,22 +226,17 @@ kill -0 $PROXY_PID 2>/dev/null || die "the proxy exited on startup (see $LOG)"
 # counter has no such step, so the same trip measured both ways says how much
 # of the disagreement is quantisation and how much is real.
 #
-# LifetimeEnergyUsedDrive, which the current set asks for, is marked
-# "Semi-truck only" in Tesla's proto. It has never arrived and never will; it
-# is replaced here rather than kept alongside.
+# LifetimeEnergyUsedDrive, which the first set once asked for, is marked
+# "Semi-truck only" in Tesla's proto. It never arrives on a Model 3 or Y, so
+# every level now sends LifetimeEnergyUsed instead.
 #
 # BMSState carries the pack's own notion of driving (BMSStateDrive). Trip
 # boundaries are inferred today from Gear and speed, which has measured exact
 # in simulation but is an inference; this is the car's own answer.
 #
-# Kept out of the default set deliberately. A field list is only changed
-# between measurement runs, never in the middle of one — the point of the
-# comparison is that the two sides differ in one thing at a time.
-# --- The third set: what a break-in would look like ---------------------------
-#
-# Run with TELEMETRY_V3=1 (which includes everything V2 adds):
-#
-#   curl -sL https://evperkm.xyz/car -o c.sh && sudo TELEMETRY_V3=1 bash c.sh
+# Once kept out of the default for a measurement run; the default is now the
+# full set (level 3), because the app reads trip ends from BMSState.
+# --- The third set: what a break-in would look like (level 3, the default) ---
 #
 # The four window fields are the reason. The app already alerts on a car being
 # opened while parked and locked, and already writes a SecurityEvent row for
@@ -249,27 +253,30 @@ kill -0 $PROXY_PID 2>/dev/null || die "the proxy exited on startup (see $LOG)"
 # question: somebody opened the port, or somebody got in and buckled up. All
 # of these change only when something happens, so they cost almost no stream.
 EXTRA_FIELDS=""
-DEFAULT_DRIVE_COUNTER='      "LifetimeEnergyUsedDrive":   {"interval_seconds": 30},'
-# What was sent last time, unless this run says otherwise. Re-running this
-# script is normal — after a certificate renewal, or because the car was
-# asleep — and without this, a plain `bash c.sh` would quietly send the
-# smallest set and take back whatever had been added. Fields would simply stop
-# arriving, with nothing anywhere to say why.
-LEVEL_FILE=/etc/tesla/telemetry-level
-if [ -z "${TELEMETRY_V2:-}" ] && [ -z "${TELEMETRY_V3:-}" ] && [ -r "$LEVEL_FILE" ]; then
-  case "$(cat "$LEVEL_FILE")" in
-    3) TELEMETRY_V3=1; say "Re-sending the set this car already has (V3)" ;;
-    2) TELEMETRY_V2=1; say "Re-sending the set this car already has (V2)" ;;
-  esac
+# LifetimeEnergyUsed at every level. The set used to default to
+# LifetimeEnergyUsedDrive, which Tesla's proto marks Semi-only: on a Model 3
+# or Y it never arrives, so a default install got 33 of 34 fields and no drive
+# energy counter at all.
+DEFAULT_DRIVE_COUNTER='      "LifetimeEnergyUsed":        {"interval_seconds": 30},'
+# The full set (level 3) unless asked for less. The app reads trip ends from
+# BMSState (level 2) and break-ins from the windows (level 3), so a smaller
+# set is a measurement choice, not a safe default:
+#   TELEMETRY_LEVEL=1|2|3   (TELEMETRY_V2=1 / TELEMETRY_V3=1 still work)
+LEVEL="${TELEMETRY_LEVEL:-}"
+if [ -z "$LEVEL" ]; then
+  if [ "${TELEMETRY_V3:-0}" = "1" ]; then LEVEL=3
+  elif [ "${TELEMETRY_V2:-0}" = "1" ]; then LEVEL=2
+  else LEVEL=3; fi
 fi
+case "$LEVEL" in 1|2|3) ;; *) die "TELEMETRY_LEVEL must be 1, 2 or 3 (got '$LEVEL')" ;; esac
+TELEMETRY_V2=0; TELEMETRY_V3=0
+if [ "$LEVEL" -ge 2 ]; then TELEMETRY_V2=1; fi
+if [ "$LEVEL" -ge 3 ]; then TELEMETRY_V3=1; fi
+LEVEL_FILE=/etc/tesla/telemetry-level
 
-# V3 includes V2: the sets are cumulative, so asking for the newer one never
-# silently drops the older one's fields.
-if [ "${TELEMETRY_V3:-0}" = "1" ]; then TELEMETRY_V2=1; fi
 if [ "${TELEMETRY_V2:-0}" = "1" ]; then
-  DEFAULT_DRIVE_COUNTER='      "LifetimeEnergyUsed":        {"interval_seconds": 30},'
   EXTRA_FIELDS='      "BMSState":                  {"interval_seconds": 10}'
-  say "TELEMETRY_V2 set: LifetimeEnergyUsed replaces the Semi-only drive counter, BMSState added"
+  say "Level $LEVEL: BMSState added"
 fi
 if [ "${TELEMETRY_V3:-0}" = "1" ]; then
   EXTRA_FIELDS="$EXTRA_FIELDS,
@@ -280,7 +287,7 @@ if [ "${TELEMETRY_V3:-0}" = "1" ]; then
       \"PairedPhoneKeyAndKeyFobQty\": {\"interval_seconds\": 300},
       \"ChargePortDoorOpen\":         {\"interval_seconds\": 60},
       \"DriverSeatBelt\":             {\"interval_seconds\": 30}"
-  say "TELEMETRY_V3 set: four windows, paired-key count, charge port door, driver seat belt"
+  say "Level 3: four windows, paired-key count, charge port door, driver seat belt"
 fi
 
 # Belt and braces behind the level file, because the level file is local state
@@ -399,7 +406,7 @@ if [ "${HTTP:0:1}" = "2" ]; then
   if [ "${TELEMETRY_V3:-0}" = "1" ]; then echo 3 > "$LEVEL_FILE"
   elif [ "${TELEMETRY_V2:-0}" = "1" ]; then echo 2 > "$LEVEL_FILE"
   else echo 1 > "$LEVEL_FILE"; fi
-  echo "  level recorded: $(cat "$LEVEL_FILE") (a plain re-run will resend this set)"
+  echo "  level recorded: $(cat "$LEVEL_FILE") (a plain re-run sends the full set, level 3)"
 fi
 
 if [ "${HTTP:0:1}" = "2" ]; then
