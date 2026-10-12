@@ -14341,6 +14341,10 @@ def telemetry_config(session: Session = Depends(get_session)):
     config = body.get("config") or {}
     fields = sorted((config.get("fields") or {}).keys())
     arrived = set(telemetry_fields(session)["fields"])
+    # Live-only fields (pack voltage and current) never reach the database by
+    # design, so the stored evidence above can never show them; the live
+    # page's memory can, for as long as this process has been up.
+    arrived |= {k for car in _LIVE_MEM.values() for k in car if k in LIVE_ONLY_FIELDS}
     if not fields:
         # Nothing readable. Reporting every arriving field as "unconfigured"
         # here would be worse than saying nothing: the car is plainly
