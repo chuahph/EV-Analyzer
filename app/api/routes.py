@@ -15170,7 +15170,14 @@ def live_now(
     # fast lane's in-memory readings, so distance, time and energy are as
     # fresh as the stream (the car sends them every 2 s).
     cached = _LIVE_TRIP_CACHE.get(vin)
-    if cached and time.time() - cached[0] < (8.0 if cached[1] else 30.0):
+    # Parked, the trip check waits 30 s — but not once the stream shows the
+    # car in gear or rolling: then it is re-made every 2 s until the drive
+    # opens, so the trip appears seconds after setting off.
+    setting_off = bool(now) and now.get("age_sec", 999) < 30 and (
+        float(now.get("speed_kmh") or 0.0) > 0.0
+        or str(now.get("shift") or "").upper() in ("D", "R", "N"))
+    max_age = 8.0 if cached and cached[1] else (2.0 if setting_off else 30.0)
+    if cached and time.time() - cached[0] < max_age:
         pair = cached[1]
     else:
         open_trip, snap = _live_from_stream(session, vin)

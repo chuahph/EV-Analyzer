@@ -12545,8 +12545,15 @@ def test_live_reports_the_drive_in_flight_and_the_car_now():
                         "speed_kmh": 60.0}
                 state.put(s, state.TELEMETRY_SHADOW_KEY, _json.dumps({vin: {"open": start, "last": last}}))
                 s.commit()
-            from app.api import routes as routes_mod
-            routes_mod._LIVE_TRIP_CACHE.clear()   # the readout is re-read every 8 s
+            # Setting off: the parked check was 3 s ago and found no trip; the
+            # stream now shows Drive, so the trip must not wait out the 30 s.
+            import time as _time
+            from datetime import datetime as _dtm, timezone as _tz
+            routes_mod._live_mem_fold(vin, _dtm.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                      {"Gear": "D", "VehicleSpeed": 5.0})
+            routes_mod._LIVE_TRIP_CACHE[vin] = (_time.time() - 3.0, None)
+            assert client.get("/api/live?capacity_kwh=68.3").json()["driving"] is True
+            routes_mod._LIVE_MEM.pop(vin, None); routes_mod._LIVE_TRIP_CACHE.clear()
             moving = client.get("/api/live?capacity_kwh=68.3").json()
             assert moving["driving"] is True
             assert moving["trip"]["distance_km"] == 10.0

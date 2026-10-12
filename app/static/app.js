@@ -4422,7 +4422,9 @@ async function glLivePoll() {
     glLiveState.timer = setTimeout(glLivePoll, 3000);
     return;
   }
-  let wait = 30000;
+  // Parked, every 3 s: a poll costs the server no database read, and a
+  // drive starting should show within seconds.
+  let wait = 3000;
   try {
     const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
     // The vin too, so the app need not look the car up on every poll.
