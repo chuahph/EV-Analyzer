@@ -1621,40 +1621,35 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
 #range-model .mx-sub { display: block; font-size: 11px; opacity: .6; }
 
 /* --- Glance: a one-screen landscape summary ---------------------------------
+   Laid out like a car's instrument cluster: three dials (battery, Wh/km,
+   driving score) with the efficiency dial largest in the middle, a
+   trip-computer strip under them and the last trip as the message line.
+
    Fixed over the dashboard rather than in its flow, so turning a phone back
    upright returns to exactly the scroll position it left. Shown by the
    landscape-phone media query below, or by body.glance-on (the Glance
-   shortcut, offered on wide screens only).
-
-   A bento grid: six columns, two rows. The battery is the hero (2x2),
-   efficiency and the last trip are wide (2x1), the rest single — so the
-   page has an order to read in, not eight equal boxes. */
+   shortcut, offered on wide screens only). */
 .glance {
   display: none; position: fixed; inset: 0; z-index: 60;
-  background: radial-gradient(120% 90% at 0% 0%, #13202a 0%, var(--bg) 55%);
+  background:
+    radial-gradient(60% 70% at 50% 38%, #142234 0%, transparent 70%),
+    radial-gradient(120% 100% at 50% 120%, #0b1320 0%, var(--bg) 60%);
   overflow: auto;
-  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
-           max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-template-rows: auto repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  padding: max(8px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+           max(8px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  flex-direction: column; gap: 8px;
 }
-body.glance-on .glance {
-  display: grid; grid-template-columns: repeat(6, minmax(0, 190px));
-  grid-template-rows: auto repeat(2, 210px); justify-content: center;
-  align-content: center; gap: 14px;
-}
+body.glance-on .glance { display: flex; justify-content: center; align-items: center; }
+body.glance-on .glance > * { width: min(1100px, 100%); }
 @media (orientation: landscape) and (max-height: 560px) {
-  body:not(.view-home) .glance { display: grid; }
+  body:not(.view-home) .glance { display: flex; }
   body:not(.view-home) .glance .gl-close { display: none; }
 }
 /* The shortcut only where a phone cannot simply be turned sideways. */
 .qn-btn.qn-glance { display: none; }
 @media (min-width: 900px) { .qn-btn.qn-glance { display: flex; } }
-.gl-head {
-  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px;
-  min-width: 0;
-}
+
+.gl-head { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 0 auto; }
 .gl-head h2 { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .gl-head .gl-sub { color: var(--muted); font-size: 12px; white-space: nowrap;
@@ -1662,60 +1657,44 @@ body.glance-on .glance {
 .gl-close { margin-left: auto; background: none; border: 1px solid var(--border);
   color: var(--text); border-radius: 8px; padding: 2px 10px; font-size: 13px; }
 
-.gl-tile {
-  --c: var(--accent-2);
-  position: relative; overflow: hidden;
-  background:
-    radial-gradient(140% 90% at 100% 0%, color-mix(in srgb, var(--c) 16%, transparent) 0%, transparent 60%),
-    linear-gradient(180deg, #1b212b, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--c) 22%, var(--border));
-  border-radius: 16px;
-  box-shadow: var(--edge-hi), var(--elev-1);
-  padding: 10px 12px; min-width: 0; min-height: 0;
-  display: flex; flex-direction: column; gap: 5px;
+/* The three dials: the middle one larger, the side pods set slightly lower
+   like a cluster's flanking gauges. */
+.gl-cluster {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 1fr 1.45fr 1fr; align-items: center; gap: 6px;
 }
-/* A short accent stroke in the tile's colour, top left. */
-.gl-tile::before {
-  content: ""; position: absolute; left: 12px; top: 0; width: 28px; height: 3px;
-  border-radius: 0 0 3px 3px; background: var(--c);
-}
-.gl-c-green { --c: var(--green); } .gl-c-amber { --c: var(--amber); }
-.gl-c-blue { --c: var(--accent-2); } .gl-c-violet { --c: var(--violet); }
-.gl-c-teal { --c: var(--teal); } .gl-c-red { --c: #ff6b70; }
-.gl-hero { grid-column: span 2; grid-row: span 2; border-radius: 22px; }
-.gl-wide { grid-column: span 2; }
+.gl-pod { min-height: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
+.gl-pod-side { height: 82%; align-self: end; }
+.gl-dial { height: 100%; max-height: 100%; width: auto; max-width: 100%; aspect-ratio: 200 / 175;
+  filter: drop-shadow(0 0 14px rgba(59, 130, 246, .10)); }
+.gl-pod-main .gl-dial { filter: drop-shadow(0 0 22px rgba(245, 158, 11, .14)); }
+.gl-needle { filter: drop-shadow(0 0 4px currentColor); }
+body.glance-on .gl-cluster { height: 330px; flex: 0 0 auto; }
 
-.gl-label { color: var(--muted); font-size: 11px; font-weight: 650;
-  text-transform: uppercase; letter-spacing: .05em; }
-.gl-big { font-size: clamp(20px, 4.4vh, 30px); font-weight: 760; line-height: 1.05;
-  font-variant-numeric: tabular-nums; white-space: nowrap; }
-.gl-big small { font-size: .48em; font-weight: 600; color: var(--muted); margin-left: 3px; }
-.gl-big-2 { font-size: clamp(16px, 3.4vh, 22px); }
-.gl-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
-.gl-line { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+/* Trip computer. */
+.gl-strip {
+  flex: 0 0 auto; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+  background: linear-gradient(180deg, #161c25, #11161d);
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--edge-hi);
+  overflow: hidden;
+}
+.gl-cell { padding: 6px 8px; display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  border-left: 1px solid var(--border); }
+.gl-cell:first-child { border-left: 0; }
+.gl-cell-l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gl-line strong { color: var(--text); font-weight: 650; }
-.gl-chip { align-self: flex-start; font-size: 11px; font-weight: 650; padding: 2px 8px;
-  border-radius: 999px; background: var(--panel-2); color: var(--muted); }
-.gl-tile .tone-good { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
-.gl-tile .tone-warn { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
-.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+.gl-cell-v { font-size: clamp(14px, 3.6vh, 19px); font-weight: 720; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-cell-v small { font-size: .58em; font-weight: 600; color: var(--muted); margin-left: 2px; }
 
-/* Hero: the ring as large as the tile allows, the figures in a 2x2 under it. */
-.gl-hero-ring { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
-.gl-hero-ring svg { height: 100%; max-height: 190px; width: auto; aspect-ratio: 1; }
-.gl-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
-.gl-stats div { display: flex; justify-content: space-between; gap: 6px; font-size: 12px;
-  color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
-.gl-stats strong { color: var(--text); font-weight: 650; white-space: nowrap; }
-
-.gl-gauge { flex: 1 1 auto; min-height: 0; width: 100%; max-height: 120px; }
-.gl-split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px;
-  background: var(--panel-2); margin: 4px 0 2px; }
-.gl-split span { height: 100%; }
-.gl-spark { flex: 1 1 auto; min-height: 30px; width: 100%; margin-top: auto; }
-.gl-bars { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
-.gl-bar { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.gl-bar .track { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
-.gl-bar .fill { height: 100%; border-radius: 3px; }
+/* The last trip as the cluster's message line. */
+.gl-msg { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; min-width: 0;
+  font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.gl-msg > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gl-msg strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.gl-msg-l { color: var(--teal); font-weight: 700; text-transform: uppercase; font-size: 10.5px;
+  letter-spacing: .05em; }
+.gl-chip { font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 999px;
+  background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.glance .tone-good { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.glance .tone-warn { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }

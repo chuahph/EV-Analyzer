@@ -4009,64 +4009,56 @@ document.getElementById("quick-nav")?.addEventListener("click", (e) => {
 // (Battery Health, Efficiency and Charging cards all hide themselves when
 // their data isn't available) — a shortcut to a hidden card would be dead.
 // --- Glance: the window on one landscape screen ---------------------------
-// Eight tiles from the same /summary payload the cards use, drawn as plain SVG
-// so they cost no chart instances and redraw instantly on rotate.
-function glRing(pct, colour, centre, sub) {
-  const p = Math.max(0, Math.min(100, Number(pct) || 0));
-  const r = 42, c = 2 * Math.PI * r;
-  // No arc at all for nothing: a round cap on a zero-length arc draws a dot.
-  const arc = p > 0 ? `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${colour}" stroke-width="10"
-      stroke-linecap="round" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}"
-      transform="rotate(-90 50 50)"/>` : "";
-  return `<svg viewBox="0 0 100 100" role="img" aria-label="${h(centre)}">
-    <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="10"/>
-    ${arc}
-    <text x="50" y="${sub ? 52 : 57}" text-anchor="middle" font-size="22" font-weight="750"
-      fill="var(--text)">${h(centre)}</text>
-    ${sub ? `<text x="50" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">${h(sub)}</text>` : ""}
+// An instrument cluster drawn as plain SVG from the same /summary payload the
+// cards use, so it costs no chart instances and redraws instantly on rotate.
+// A cluster dial: a 240° sweep with ticks, coloured bands, a needle and an
+// optional marker (e.g. the rated line). Drawn on a 200x200 box.
+function glDial({ value, min, max, step, bands = [], mark = null, centre, unit, sub,
+  colour = "var(--text)", label = "" }) {
+  const A0 = 150, SWEEP = 240, cx = 100, cy = 100;
+  const clamp = (x) => Math.max(min, Math.min(max, x));
+  const ang = (x) => (A0 + (clamp(x) - min) / (max - min) * SWEEP) * Math.PI / 180;
+  const pt = (a, r) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const arc = (from, to, r) => {
+    const [x1, y1] = pt(ang(from), r), [x2, y2] = pt(ang(to), r);
+    const large = (clamp(to) - clamp(from)) / (max - min) * SWEEP > 180 ? 1 : 0;
+    return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  };
+  let ticks = "";
+  for (let t = min; t <= max + 1e-9; t += step) {
+    const major = Math.round((t - min) / step) % 2 === 0;
+    const [x1, y1] = pt(ang(t), major ? 70 : 74), [x2, y2] = pt(ang(t), 80);
+    ticks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+      stroke="${major ? "var(--muted)" : "var(--border-lift)"}" stroke-width="${major ? 2 : 1.2}"/>`;
+    // No numbers at the two ends: they sit beside the readout and crowd it.
+    if (major && t > min + 1e-9 && t < max - 1e-9) {
+      const [tx, ty] = pt(ang(t), 58);
+      ticks += `<text x="${tx.toFixed(1)}" y="${(ty + 3.5).toFixed(1)}" text-anchor="middle" font-size="9.5"
+        fill="var(--muted)">${Math.round(t)}</text>`;
+    }
+  }
+  const bandArcs = bands.map((b) => `<path d="${arc(b.from, b.to, 87)}" fill="none" stroke="${b.colour}"
+      stroke-width="5" stroke-linecap="butt" opacity=".9"/>`).join("");
+  let markLine = "";
+  if (mark != null) {
+    const [x1, y1] = pt(ang(mark), 82), [x2, y2] = pt(ang(mark), 93);
+    markLine = `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"
+      stroke="var(--text)" stroke-width="2.5"/>`;
+  }
+  let needle = "";
+  if (value != null && Number.isFinite(+value)) {
+    const a = ang(+value), [nx, ny] = pt(a, 76), [bx1, by1] = pt(a + Math.PI / 2, 4), [bx2, by2] = pt(a - Math.PI / 2, 4);
+    needle = `<polygon points="${nx.toFixed(1)},${ny.toFixed(1)} ${bx1.toFixed(1)},${by1.toFixed(1)} ${bx2.toFixed(1)},${by2.toFixed(1)}"
+        fill="${colour}" class="gl-needle"/>
+      <circle cx="${cx}" cy="${cy}" r="7" fill="var(--panel-2)" stroke="${colour}" stroke-width="2"/>`;
+  }
+  return `<svg class="gl-dial" viewBox="0 0 200 175" role="img" aria-label="${h(label)} ${h(centre)}">
+    <path d="${arc(min, max, 87)}" fill="none" stroke="var(--panel-2)" stroke-width="5"/>
+    ${bandArcs}${ticks}${markLine}${needle}
+    <text x="100" y="140" text-anchor="middle" font-size="26" font-weight="760" fill="var(--text)">${h(centre)}</text>
+    <text x="100" y="156" text-anchor="middle" font-size="10" fill="var(--muted)">${h(unit || "")}</text>
+    ${sub ? `<text x="100" y="171" text-anchor="middle" font-size="10" font-weight="650" fill="${sub.colour || "var(--muted)"}">${h(sub.text)}</text>` : ""}
   </svg>`;
-}
-
-function glSpark(values, colour) {
-  const v = values.filter((x) => Number.isFinite(x));
-  if (v.length < 2) return "";
-  const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
-  const W = 200, H = 50;
-  const pts = v.map((y, i) => `${(i / (v.length - 1) * W).toFixed(1)},${(H - 4 - (y - lo) / span * (H - 8)).toFixed(1)}`);
-  return `<svg class="gl-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <polygon points="0,${H} ${pts.join(" ")} ${W},${H}" fill="${colour}" fill-opacity=".14"/>
-    <polyline points="${pts.join(" ")}" fill="none" stroke="${colour}" stroke-width="2"
-      vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
-  </svg>`;
-}
-
-function glBar(label, value, max, colour, text) {
-  const w = max > 0 ? Math.max(2, Math.min(100, value / max * 100)) : 0;
-  return `<div class="gl-bar"><span>${h(label)}</span>
-    <span class="track"><span class="fill" style="width:${w.toFixed(1)}%;background:${colour}"></span></span>
-    <strong>${h(text)}</strong></div>`;
-}
-
-// Half-circle gauge, for a score out of 100.
-function glGauge(score, colour, grade) {
-  const p = Math.max(0, Math.min(100, Number(score) || 0));
-  const len = Math.PI * 40;
-  const arc = p > 0 ? `<path d="M10 52 A40 40 0 0 1 90 52" fill="none" stroke="${colour}" stroke-width="10"
-      stroke-linecap="round" stroke-dasharray="${(len * p / 100).toFixed(1)} ${len.toFixed(1)}"/>` : "";
-  return `<svg class="gl-gauge" viewBox="0 0 100 60" role="img" aria-label="score ${Math.round(p)}">
-    <path d="M10 52 A40 40 0 0 1 90 52" fill="none" stroke="var(--panel-2)" stroke-width="10" stroke-linecap="round"/>
-    ${arc}
-    <text x="50" y="48" text-anchor="middle" font-size="22" font-weight="750" fill="var(--text)">${score == null ? "—" : Math.round(p)}</text>
-    ${grade ? `<text x="50" y="59" text-anchor="middle" font-size="8.5" fill="var(--muted)">grade ${h(grade)}</text>` : ""}
-  </svg>`;
-}
-
-// One bar split into parts: [{v, colour, label}].
-function glSplit(parts) {
-  const tot = parts.reduce((a, p) => a + (p.v > 0 ? p.v : 0), 0);
-  const seg = parts.map((p) => tot > 0 && p.v > 0
-    ? `<span style="width:${(p.v / tot * 100).toFixed(1)}%;background:${p.colour}"></span>` : "").join("");
-  return `<div class="gl-split">${seg || '<span style="width:100%;background:var(--panel-2)"></span>'}</div>`;
 }
 
 function renderGlance(d) {
@@ -4076,81 +4068,86 @@ function renderGlance(d) {
   const chg = d.charging || {}, bat = d.battery || {}, v = d.vehicle || {};
   const cur = d.currency || "";
   const n = (x, dg = 0) => (x == null || !Number.isFinite(+x) ? "—" : fmt(+x, dg));
-  // Bento: one hero, two wide tiles and four small ones, each with its own
-  // colour, so the eye has an order to read in instead of eight equal boxes.
-  const tile = (cls, label, body) =>
-    `<div class="gl-tile ${cls}"><div class="gl-label">${h(label)}</div>${body}</div>`;
 
-  // Hero · battery: the one big ring.
+  // Centre: Wh/km as the big dial, the rated line marked, green below it and
+  // amber above, so where the needle sits against the mark is the answer.
+  const whkm = eff.avg_efficiency_wh_per_km ?? drv.avg_efficiency_wh_per_km;
+  const rated = eff.rated_wh_per_km;
+  const vsRated = eff.vs_rated_pct;
+  const top = Math.max(300, Math.ceil(((whkm || 0) * 1.25) / 50) * 50);
+  const centreDial = glDial({
+    value: whkm, min: 0, max: top, step: 25,
+    bands: rated ? [{ from: 0, to: rated, colour: "var(--green)" },
+      { from: rated, to: top, colour: "var(--amber)" }] : [],
+    mark: rated, centre: n(whkm), unit: "Wh/km",
+    colour: vsRated != null && vsRated > 0 ? "var(--amber)" : "var(--green)",
+    sub: vsRated == null ? null : {
+      text: `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}% vs rated`,
+      colour: vsRated > 0 ? "var(--amber)" : "var(--green)" },
+    label: "Efficiency",
+  });
+
+  // Left: battery as a fuel gauge — the level now, or the share used.
   const level = bal.current_level_pct ?? bal.current_soc_pct;
   const used = bal.used_pct;
-  const ring = level != null
-    ? glRing(level, "var(--green)", `${Math.round(level)}%`, "battery now")
-    : glRing(used ?? 0, "var(--amber)", used != null ? `${n(used, 1)}%` : "—", "used");
-  const ch = bat.capacity_health;
-  const hero = tile("gl-hero gl-c-green", "Battery", `<div class="gl-hero-ring">${ring}</div>
-    <div class="gl-stats">
-      <div><span>Used</span><strong>${n(used, 1)}%</strong></div>
-      <div><span>Energy</span><strong>${n(bal.used_kwh, 1)} kWh</strong></div>
-      <div><span>Pack</span><strong>${n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 1)} kWh</strong></div>
-      ${ch ? `<div><span>Health</span><strong>${n(ch.health_pct, 1)}%</strong></div>` : ""}
-    </div>`);
+  const battDial = level != null
+    ? glDial({ value: level, min: 0, max: 100, step: 10,
+        bands: [{ from: 0, to: 20, colour: "#ff6b70" }, { from: 20, to: 100, colour: "var(--green)" }],
+        centre: `${Math.round(level)}%`, unit: "battery", colour: "var(--green)",
+        sub: { text: `used ${n(used, 1)}% · ${n(bal.used_kwh, 1)} kWh` }, label: "Battery" })
+    : glDial({ value: used, min: 0, max: 100, step: 10,
+        bands: [{ from: 0, to: 100, colour: "var(--accent-2)" }],
+        centre: `${n(used, 1)}%`, unit: "battery used", colour: "var(--accent-2)",
+        sub: { text: `${n(bal.used_kwh, 1)} of ${n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 0)} kWh` },
+        label: "Battery used" });
 
-  // Wide · efficiency with its trend.
-  const vsRated = eff.vs_rated_pct;
-  const daily = Object.values(eff.daily_efficiency || {}).map(Number);
-  const effT = tile("gl-wide gl-c-amber", "Efficiency", `<div class="gl-row">
-      <div class="gl-big">${n(eff.avg_efficiency_wh_per_km ?? drv.avg_efficiency_wh_per_km)}<small>Wh/km</small></div>
-      ${vsRated == null ? "" : `<span class="gl-chip ${vsRated <= 0 ? "tone-good" : "tone-warn"}">${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}% vs rated</span>`}
-    </div>${glSpark(daily, "#f59e0b")}`);
-
-  // Small · driving score as a half gauge.
+  // Right: driving score.
   const score = drv.eco_score;
-  const sc = score == null ? "var(--muted)" : score >= 80 ? "var(--green)" : score >= 60 ? "var(--accent-2)" : "var(--amber)";
-  const scoreT = tile("gl-c-blue", "Driving score", glGauge(score, sc, drv.eco_grade));
+  const scoreDial = glDial({ value: score, min: 0, max: 100, step: 10,
+    bands: [{ from: 0, to: 60, colour: "var(--amber)" }, { from: 60, to: 80, colour: "var(--accent-2)" },
+      { from: 80, to: 100, colour: "var(--green)" }],
+    centre: score == null ? "—" : String(Math.round(score)), unit: "driving score",
+    colour: score == null ? "var(--muted)" : score >= 80 ? "var(--green)" : score >= 60 ? "var(--accent-2)" : "var(--amber)",
+    sub: drv.eco_grade ? { text: `grade ${drv.eco_grade}` } : null, label: "Driving score" });
 
-  // Small · distance, with this week against last when there is one.
-  const wk = d.week_compare;
-  const mx = wk && wk.this && wk.last ? Math.max(wk.this.distance_km || 0, wk.last.distance_km || 0) : 0;
-  const drivenT = tile("gl-c-violet", "Driven", `<div class="gl-big">${n(drv.total_distance_km, 1)}<small>km</small></div>
-    <div class="gl-line"><strong>${n(drv.total_drives)}</strong> trips · <strong>${n(drv.total_duration_h, 1)}</strong> h</div>
-    ${mx ? "" : `<div class="gl-line">avg <strong>${n(drv.avg_speed_kmh)}</strong> km/h</div>
-      <div class="gl-line">longest <strong>${n(drv.longest_trip_km, 1)}</strong> km</div>`}
-    ${mx ? `<div class="gl-bars">
-      ${glBar("7 days", wk.this.distance_km || 0, mx, "var(--violet)", `${n(wk.this.distance_km)}`)}
-      ${glBar("before", wk.last.distance_km || 0, mx, "var(--panel-2)", `${n(wk.last.distance_km)}`)}</div>` : ""}`);
-
-  // Small · where the energy went, as one split bar.
+  // Trip computer: the strip under the dials, as a car shows it.
   const tripK = +bal.trip_kwh || +drv.trip_energy_used_kwh || 0, parkK = +bal.vampire_kwh || 0;
-  const energyT = tile("gl-c-blue", "Energy used", `<div class="gl-big">${n(tripK + parkK, 1)}<small>kWh</small></div>
-    ${glSplit([{ v: tripK, colour: "var(--accent-2)" }, { v: parkK, colour: "var(--amber)" }])}
-    <div class="gl-line"><b class="dot" style="background:var(--accent-2)"></b>driving <strong>${n(tripK, 1)}</strong></div>
-    <div class="gl-line"><b class="dot" style="background:var(--amber)"></b>parked <strong>${n(parkK, 2)}</strong>
-      · ${n(bal.vampire_hours, 0)} h</div>`);
+  const cell = (label, value, unit) =>
+    `<div class="gl-cell"><span class="gl-cell-l">${h(label)}</span>
+      <span class="gl-cell-v">${value}<small>${h(unit)}</small></span></div>`;
+  const strip = [
+    cell("Distance", n(drv.total_distance_km, 1), "km"),
+    cell("Trips", n(drv.total_drives), ""),
+    cell("Drive time", n(drv.total_duration_h, 1), "h"),
+    cell("Avg speed", n(drv.avg_speed_kmh), "km/h"),
+    cell("Energy", n(tripK + parkK, 1), "kWh"),
+    cell("Parked", n(parkK, 2), "kWh"),
+    cell("Cost", n(drv.total_cost, 2), cur),
+    cell("Per km", n(drv.cost_per_km, 3), cur),
+  ].join("");
 
-  // Wide · the last trip.
+  // Last trip, as the cluster's message line.
   const lt = (drv.recent_trips || [])[0];
   const band = lt && lt.efficiency_band;
   const bandCls = band === "efficient" ? "tone-good" : band === "inefficient" ? "tone-warn" : "";
-  const tripT = tile("gl-wide gl-c-teal", "Last trip", lt ? `<div class="gl-row">
-      <div class="gl-big">${n(lt.distance_km, 1)}<small>km</small></div>
-      <div class="gl-big gl-big-2">${n(lt.wh_per_km)}<small>Wh/km</small></div>
-      <div class="gl-big gl-big-2">${n(lt.duration_min)}<small>min</small></div>
-    </div>
-    <div class="gl-line">${h(lt.route || tripWhen(lt.start_time))}${lt.id != null ? ` · #${lt.id}` : ""}</div>
-    ${band ? `<span class="gl-chip ${bandCls}">${h(band)}${lt.vs_expected_pct != null ? ` · ${lt.vs_expected_pct > 0 ? "+" : ""}${n(lt.vs_expected_pct, 0)}% vs expected` : ""}</span>` : ""}`
-    : `<div class="gl-line">No trips in this window</div>`);
+  const last = lt ? `<div class="gl-msg"><span class="gl-msg-l">Last trip${lt.id != null ? ` #${lt.id}` : ""}</span>
+      <span>${h(lt.route || tripWhen(lt.start_time))}</span>
+      <strong>${n(lt.distance_km, 1)} km</strong><strong>${n(lt.wh_per_km)} Wh/km</strong><strong>${n(lt.duration_min)} min</strong>
+      ${band ? `<span class="gl-chip ${bandCls}">${h(band)}</span>` : ""}</div>` : "";
 
-  // Small · cost.
-  const costT = tile("gl-c-red", "Cost", `<div class="gl-big">${n(drv.total_cost, 2)}<small>${h(cur)}</small></div>
-    <div class="gl-line"><strong>${n(drv.cost_per_km, 3)}</strong> ${h(cur)}/km</div>
-    <div class="gl-line">charged <strong>${n(chg.total_energy_kwh, 1)}</strong> kWh</div>`);
-
+  const ch = bat.capacity_health;
   const name = v.name || v.model || "Tesla";
   el.innerHTML = `<div class="gl-head"><h2>${h(name)}</h2>
       <span class="gl-sub">${h(d.window_label || `${d.window_days}-day window`)}</span>
+      ${ch ? `<span class="gl-chip">battery health ${n(ch.health_pct, 1)}%</span>` : ""}
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
-    ${hero}${effT}${scoreT}${drivenT}${energyT}${tripT}${costT}`;
+    <div class="gl-cluster">
+      <div class="gl-pod gl-pod-side">${battDial}</div>
+      <div class="gl-pod gl-pod-main">${centreDial}</div>
+      <div class="gl-pod gl-pod-side">${scoreDial}</div>
+    </div>
+    <div class="gl-strip">${strip}</div>
+    ${last}`;
 }
 
 document.addEventListener("click", (e) => {
