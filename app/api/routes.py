@@ -15063,16 +15063,21 @@ def telemetry_set_charge_end(
 
 # --- Live view, in memory ----------------------------------------------------
 # The live page wants the car as it is this second; nothing else does. So the
-# newest value of every field is kept in this process as well as folded into
-# the stored composite, and the live page reads it from here: no database read
-# on its poll. Fields only the live page uses (pack voltage and current, for
-# instant power) are kept here only and never written anywhere. One worker
-# process serves the app (run.py), so one dict is the whole picture; after a
-# restart it refills from the next record, and the page falls back to the
-# stored composite until it has.
+# newest value of every field is kept in this process, and the live page is
+# answered from here alone: it never reads the database, and nothing it shows
+# is saved for it. The same records still reach the stored path in the
+# bridge's batches, which is where trips, charges and history come from — the
+# live page simply does not wait for them. Fields only the live page uses
+# (pack voltage and current, for instant power) are kept here only and never
+# written anywhere. One worker process serves the app (run.py), so one dict is
+# the whole picture; after a restart it refills from the car's next record.
 LIVE_ONLY_FIELDS = frozenset({"PackVoltage", "PackCurrent"})
 _LIVE_MEM: dict[str, dict] = {}
-_LIVE_TRIP_CACHE: dict[str, tuple[float, Any]] = {}
+# A drive the live page tracks ends once the car has sat in Park this long:
+# the car's own "Current Drive" runs on through a wait in P until it powers
+# down, which the stored trip machine allows the same 15 minutes for.
+LIVE_TRIP_PARK_END_SEC = sync_mod.PARK_END_MIN * 60.0
+_LIVE_KEYS = ("ts", "odo_km", "energy_kwh", "soc", "range_km", "battery_level")
 
 
 def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
@@ -15089,26 +15094,35 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
         car["_t"] = ts
         car["_ts"] = created_at
     car["_seen"] = time.time()
-    # Where a drive starts, kept in memory so the live page can show the trip
-    # the moment the car leaves Park — before the stored trip machine has
-    # opened it. While parked, the newest reading is the would-be start;
-    # once in gear or rolling, that reading is frozen as the start.
-    from .. import sync as sync_mod
+    car["_v"] = int(car.get("_v") or 0) + 1      # wakes the live streams
     stamp = float(car.get("_t") or 0.0)
     if not stamp:
         return
+    # The drive in flight, from the stream alone. While parked, the newest
+    # reading is the would-be start; leaving Park (or rolling) freezes it —
+    # odometer and pack energy from that last parked reading, the clock from
+    # the moment the car left P, so a wait awake in P is not drive time. A
+    # stop in P keeps the drive open, as the car's own Current Drive does,
+    # until it has lasted LIVE_TRIP_PARK_END_SEC.
     snap = sync_mod.snapshot_from_telemetry(car, stamp)
-    moving = (snap.get("shift") or "P") != "P" or float(snap.get("speed_kmh") or 0.0) > 0.0
-    if not moving:
-        car["_park"] = {k: snap.get(k) for k in (
-            "ts", "odo_km", "energy_kwh", "soc", "range_km", "battery_level")}
-        car.pop("_go", None)
-    elif "_go" not in car:
-        base = car.get("_park") or {k: snap.get(k) for k in (
-            "ts", "odo_km", "energy_kwh", "soc", "range_km", "battery_level")}
-        # Odometer and energy from the last parked reading; the clock from the
-        # moment the car left Park, so a wait awake in P is not drive time.
-        car["_go"] = {**base, "ts": snap.get("ts"), "max_speed": 0.0}
+    speed = float(snap.get("speed_kmh") or 0.0)
+    moving = (snap.get("shift") or "P") != "P" or speed > 0.0
+    go = car.get("_go")
+    if moving:
+        car.pop("_stop", None)
+        if go is None:
+            base = car.get("_park") or {k: snap.get(k) for k in _LIVE_KEYS}
+            car["_go"] = {**base, "ts": stamp, "max_speed": speed}
+        else:
+            go["max_speed"] = max(float(go.get("max_speed") or 0.0), speed)
+    else:
+        if go is not None:
+            stop = car.setdefault("_stop", stamp)
+            if stamp - stop > LIVE_TRIP_PARK_END_SEC:
+                car.pop("_go", None)
+                car.pop("_stop", None)
+        if "_go" not in car:
+            car["_park"] = {k: snap.get(k) for k in _LIVE_KEYS}
 
 
 @router.post("/telemetry/live")
@@ -15129,98 +15143,93 @@ def telemetry_live_push(payload: dict = Body(...)):
     return {"ok": True}
 
 
+def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
+    """The live page's whole answer, built from memory only."""
+    if not vin and _LIVE_MEM:
+        vin = max(_LIVE_MEM, key=lambda k: float(_LIVE_MEM[k].get("_seen") or 0.0))
+    cap = capacity_kwh or 75.0
+    car = _LIVE_MEM.get(vin) if vin else None
+    ts = _telemetry_ts(car.get("_ts")) if car else None
+    if not car or not ts:
+        return {"driving": False, "vin": vin, "trip": None, "now": None,
+                "server_ts": time.time()}
+    snap = sync_mod.snapshot_from_telemetry(car, ts)
+    v, a = car.get("PackVoltage"), car.get("PackCurrent")
+    try:
+        power = round(float(v) * float(a) / 1000.0, 2) if v is not None and a is not None else None
+    except (TypeError, ValueError):
+        power = None
+    now = {
+        "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)), "source": "memory",
+        "speed_kmh": snap.get("speed_kmh"), "shift": snap.get("shift"),
+        "odo_km": snap.get("odo_km"), "energy_kwh": snap.get("energy_kwh"),
+        "battery_level": snap.get("battery_level"), "soc": snap.get("soc"),
+        "range_km": snap.get("range_km"), "out_temp": snap.get("out_temp"),
+        "climate_on": snap.get("climate_on"), "charging": snap.get("charging"),
+        "power_kw": power,
+    }
+    go = car.get("_go")
+    stop = car.get("_stop")
+    # A car that powered down in Park sends nothing more, so the drive is
+    # closed here too once the wait in P has run out on the clock.
+    if go and stop and time.time() - float(stop) > LIVE_TRIP_PARK_END_SEC:
+        go = None
+    trip = sync_mod.live_trip(go, snap, cap, get_settings().drive_min_km) if go else None
+    return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
+            "server_ts": time.time()}
+
+
 @router.get("/live")
 def live_now(
     vin: str | None = Query(None),
     capacity_kwh: float | None = Query(None, gt=20, lt=200),
-    session: Session = Depends(get_session),
 ):
-    """The car right now, for the live driving view.
-
-    Read from memory (_LIVE_MEM) where the stream has filled it, so a poll
-    every two seconds costs no database read; the stored composite is the
-    fallback after a restart. The trip readout (distance, time, energy so
-    far) comes from the stored trip machine, re-read at most every 8 s.
+    """The car right now, for the live driving view — from the telemetry
+    stream in memory, never the database. The trip readout (distance, time,
+    energy since leaving Park) is tracked in memory too (_live_mem_fold).
     ``power_kw`` is pack voltage x current when the car streams them,
-    discharge positive.
-    """
-    import json as _json
+    discharge positive."""
+    return _live_payload(vin, capacity_kwh)
 
-    from .. import sync as sync_mod
 
-    if not vin:
-        vehicle = _first_vehicle(session)
-        if vehicle is None:
-            return {"driving": False, "trip": None, "now": None}
-        vin = vehicle.vin
-        cap = capacity_kwh or float(vehicle.battery_capacity_kwh or 75.0)
-    else:
-        cap = capacity_kwh or 75.0
-    car = _LIVE_MEM.get(vin)
-    source = "memory"
-    if not car or not car.get("_ts"):
-        source = "stored"
-        try:
-            latest = _json.loads(state.get(session, state.TELEMETRY_LATEST_KEY) or "{}") or {}
-        except ValueError:
-            latest = {}
-        car = latest.get(vin) if isinstance(latest, dict) else None
-    now = None
-    if isinstance(car, dict):
-        ts = _telemetry_ts(car.get("_ts"))
-        if ts:
-            snap = sync_mod.snapshot_from_telemetry(car, ts)
-            v, a = car.get("PackVoltage"), car.get("PackCurrent")
-            try:
-                power = round(float(v) * float(a) / 1000.0, 2) if v is not None and a is not None else None
-            except (TypeError, ValueError):
-                power = None
-            now = {
-                "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)), "source": source,
-                "speed_kmh": snap.get("speed_kmh"), "shift": snap.get("shift"),
-                "odo_km": snap.get("odo_km"), "energy_kwh": snap.get("energy_kwh"),
-                "battery_level": snap.get("battery_level"), "soc": snap.get("soc"),
-                "range_km": snap.get("range_km"), "out_temp": snap.get("out_temp"),
-                "climate_on": snap.get("climate_on"), "charging": snap.get("charging"),
-                "power_kw": power,
-            }
-    # The trip's opening snapshot is re-read from the database at most every
-    # 8 s while driving and every 30 s parked: the only database reads a live
-    # poll ever makes. Its "now" end is recomputed on every poll from the
-    # fast lane's in-memory readings, so distance, time and energy are as
-    # fresh as the stream (the car sends them every 2 s).
-    cached = _LIVE_TRIP_CACHE.get(vin)
-    # A drive the stream has seen start but the stored machine has not yet
-    # opened: shown at once from memory (see _live_mem_fold), while the
-    # stored trip is looked for at the driving cadence rather than every 30 s.
-    go = (car.get("_go") if source == "memory" and isinstance(car, dict)
-          and now and now.get("age_sec", 999) < 30 else None)
-    max_age = 8.0 if (cached and cached[1]) or go else 30.0
-    if cached and time.time() - cached[0] < max_age:
-        pair = cached[1]
-    else:
-        open_trip, snap = _live_from_stream(session, vin)
-        pair = (open_trip, snap) if open_trip and snap else None
-        _LIVE_TRIP_CACHE[vin] = (time.time(), pair)
-    trip = None
-    if pair:
-        open_trip, snap = pair
-        if source == "memory" and isinstance(car, dict):
-            mem_ts = _telemetry_ts(car.get("_ts"))
-            if mem_ts and mem_ts > float(snap.get("ts") or 0.0):
-                mem = sync_mod.snapshot_from_telemetry(car, mem_ts)
-                snap = {**snap, "ts": mem_ts, **{k: mem[k] for k in (
-                    "odo_km", "energy_kwh", "soc", "battery_level", "range_km",
-                    "speed_kmh", "out_temp") if mem.get(k) is not None}}
-        trip = sync_mod.live_trip(open_trip, snap, cap, get_settings().drive_min_km)
-    elif go:
-        mem_ts = _telemetry_ts(car.get("_ts"))
-        trip = sync_mod.live_trip(go, sync_mod.snapshot_from_telemetry(car, mem_ts),
-                                  cap, get_settings().drive_min_km)
-        if trip:
-            trip["provisional"] = True
-    return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
-            "server_ts": time.time()}
+@router.get("/live/stream")
+async def live_stream(
+    request: Request,
+    vin: str | None = Query(None),
+    capacity_kwh: float | None = Query(None, gt=20, lt=200),
+):
+    """The same answer as /api/live, pushed the instant a record arrives
+    (Server-Sent Events), so the page shows each reading as the relay
+    delivers it instead of on its next poll. Memory only, like /api/live: a
+    connection costs the database nothing. A comment line every 15 s keeps
+    proxies from closing a quiet connection, and the stream ends after an
+    hour so a forgotten tab does not hold one open for ever (the page simply
+    reconnects)."""
+    import asyncio
+
+    from fastapi.responses import StreamingResponse
+
+    async def events():
+        last_v, last_beat, opened = None, time.monotonic(), time.monotonic()
+        while time.monotonic() - opened < 3600:
+            if await request.is_disconnected():
+                return
+            target = vin or (max(_LIVE_MEM, key=lambda k: float(_LIVE_MEM[k].get("_seen") or 0.0))
+                             if _LIVE_MEM else None)
+            car = _LIVE_MEM.get(target) if target else None
+            v = (car or {}).get("_v")
+            if v != last_v:
+                last_v = v
+                last_beat = time.monotonic()
+                yield "data: " + _json_mod.dumps(_live_payload(target, capacity_kwh)) + "\n\n"
+            elif time.monotonic() - last_beat > 15:
+                last_beat = time.monotonic()
+                # The age on screen keeps counting while the car is quiet.
+                yield "data: " + _json_mod.dumps(_live_payload(target, capacity_kwh)) + "\n\n"
+            await asyncio.sleep(0.1)
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.api_route("/telemetry/charge-end-level", methods=["GET", "POST"])

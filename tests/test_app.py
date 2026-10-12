@@ -12512,85 +12512,84 @@ def test_charge_end_level_refuses_a_reading_taken_on_a_drive():
 
 
 def test_live_reports_the_drive_in_flight_and_the_car_now():
-    """/api/live: the stream's open trip as live_trip's readout, plus the
-    newest composite (speed, energy, odometer) for instant figures."""
+    """/api/live answers from the telemetry stream in memory alone — the car
+    now, and the drive since it left Park — and never reads the database."""
     import json as _json
-    from app import state
-    from app.database import SessionLocal
+    from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+
+    from app.api import routes as routes_mod
 
     settings = get_settings()
     old = settings.app_passcode
     settings.app_passcode = ""
-    keys = (state.TELEMETRY_LATEST_KEY, state.TELEMETRY_SHADOW_KEY)
+    vin = "LIVEMEM000000001"
+    t0 = _dtm.now(_tz.utc) - _td(seconds=300)    # the stop in P lands on "now"
+    at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mi = 1.609344
+    fold = lambda d, f: routes_mod._live_mem_fold(vin, at(d), f)
+    reads = []
+    real = routes_mod._live_from_stream
+    routes_mod._live_from_stream = lambda *a: reads.append(1) or real(*a)
     try:
         with TestClient(app) as client:
-            from app.api.routes import _first_vehicle
-            with SessionLocal() as s:
-                saved = {k: state.get(s, k) for k in keys}
-                vin = _first_vehicle(s).vin
-                car = {"_ts": "2026-10-12T00:10:00Z", "VehicleSpeed": 37.0, "Odometer": 6.2,
-                       "EnergyRemaining": 50.0, "BatteryLevel": 70.5, "Soc": 70.0, "Gear": "D"}
-                state.put(s, state.TELEMETRY_LATEST_KEY, _json.dumps({vin: car}))
-                state.put(s, state.TELEMETRY_SHADOW_KEY, "{}")
-                s.commit()
-            from app.api import routes as routes_mod
-            routes_mod._LIVE_MEM.pop(vin, None); routes_mod._LIVE_TRIP_CACHE.clear()
-            parked = client.get("/api/live?capacity_kwh=68.3").json()
-            assert parked["driving"] is False and parked["trip"] is None
-            assert parked["now"]["energy_kwh"] == 50.0
-            assert parked["now"]["battery_level"] == 70.5
-            with SessionLocal() as s:
-                start = {"ts": 1791720000.0, "odo_km": 8.0, "soc": 71.0, "energy_kwh": 51.0}
-                last = {"ts": 1791720600.0, "odo_km": 18.0, "soc": 70.0, "energy_kwh": 49.5,
-                        "speed_kmh": 60.0}
-                state.put(s, state.TELEMETRY_SHADOW_KEY, _json.dumps({vin: {"open": start, "last": last}}))
-                s.commit()
-            # Setting off: the stream shows the car leave Park. The trip shows
-            # at once, worked out from memory, with no database read at all:
-            # the start is the last parked reading, the clock from leaving P.
-            import time as _time
-            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
-            t0 = _dtm.now(_tz.utc)
-            at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            mi = 1.609344
+            get = lambda: client.get(f"/api/live?vin={vin}&capacity_kwh=68.3").json()
             routes_mod._LIVE_MEM.pop(vin, None)
-            routes_mod._live_mem_fold(vin, at(-80), {"Gear": "ShiftStateP", "VehicleSpeed": 0.0,
-                                      "Odometer": 100.0 / mi, "EnergyRemaining": 60.0})
-            routes_mod._live_mem_fold(vin, at(-60), {"Gear": "ShiftStateD", "VehicleSpeed": 8.0,
-                                      "Odometer": 100.05 / mi, "EnergyRemaining": 59.98})
-            routes_mod._live_mem_fold(vin, at(0), {"VehicleSpeed": 30.0,
-                                      "Odometer": 100.5 / mi, "EnergyRemaining": 59.9})
-            routes_mod._LIVE_TRIP_CACHE[vin] = (_time.time() - 3.0, None)
-            reads, real = [], routes_mod._live_from_stream
-            routes_mod._live_from_stream = lambda *a: reads.append(1) or real(*a)
-            try:
-                go = client.get("/api/live?capacity_kwh=68.3").json()
-            finally:
-                routes_mod._live_from_stream = real
-            assert go["driving"] is True and go["trip"]["provisional"] is True
-            assert reads == []
+            empty = get()
+            assert empty["now"] is None and empty["driving"] is False
+
+            # Parked and awake: the car now, no drive.
+            fold(0, {"Gear": "ShiftStateP", "VehicleSpeed": 0.0, "Odometer": 100.0 / mi,
+                     "EnergyRemaining": 60.0, "BatteryLevel": 80.5})
+            parked = get()
+            assert parked["driving"] is False and parked["trip"] is None
+            assert parked["now"]["energy_kwh"] == 60.0 and parked["now"]["battery_level"] == 80.5
+
+            # Sitting awake in P for a minute is not drive time; leaving P
+            # starts the drive from the last parked reading.
+            fold(60, {"Gear": "ShiftStateD", "VehicleSpeed": 8.0,
+                      "Odometer": 100.05 / mi, "EnergyRemaining": 59.98})
+            fold(120, {"VehicleSpeed": 30.0, "Odometer": 100.5 / mi, "EnergyRemaining": 59.9})
+            go = get()
+            assert go["driving"] is True
             assert go["trip"]["distance_km"] == 0.5
             assert go["trip"]["energy_kwh"] == 0.1
             assert go["trip"]["duration_min"] == 1
-            routes_mod._LIVE_MEM.pop(vin, None); routes_mod._LIVE_TRIP_CACHE.clear()
-            moving = client.get("/api/live?capacity_kwh=68.3").json()
-            assert moving["driving"] is True
-            assert moving["trip"]["distance_km"] == 10.0
-            assert moving["trip"]["duration_min"] == 10
-            # Two seconds later the fast lane brings the next reading: the trip
-            # moves on this poll, without waiting for the 8 s database re-read.
-            routes_mod._live_mem_fold(vin, "2026-10-11T12:10:02Z", {"Odometer": 18.4 / 1.609344,
-                                      "EnergyRemaining": 49.4, "VehicleSpeed": 62.0})
-            fresh = client.get("/api/live?capacity_kwh=68.3").json()
-            assert fresh["trip"]["distance_km"] == 10.4
-            assert fresh["trip"]["energy_kwh"] == 1.6
-            routes_mod._LIVE_MEM.pop(vin, None)
+
+            # Every reading moves it at once.
+            fold(122, {"VehicleSpeed": 42.0, "Odometer": 100.6 / mi, "EnergyRemaining": 59.88})
+            assert get()["trip"]["distance_km"] == 0.6
+
+            # A stop in P keeps the drive open, as the car's Current Drive does...
+            fold(300, {"Gear": "ShiftStateP", "VehicleSpeed": 0.0})
+            assert get()["driving"] is True
+            # ...until it has lasted the 15 minutes the car allows to power down.
+            fold(300 + 16 * 60, {"VehicleSpeed": 0.0})
+            assert get()["driving"] is False
+
+            # The pushed stream sends the same answer the moment it connects.
+            import asyncio
+
+            class _Req:
+                async def is_disconnected(self):
+                    return False
+
+            async def first_frame():
+                resp = await routes_mod.live_stream(_Req(), vin, 68.3)
+                assert resp.media_type == "text/event-stream"
+                it = resp.body_iterator
+                try:
+                    return await it.__anext__()
+                finally:
+                    await it.aclose()
+
+            first = asyncio.run(first_frame())
+            assert first.startswith("data: ")
+            assert _json.loads(first[6:])["now"]["battery_level"] == 80.5
+        assert reads == []
     finally:
+        routes_mod._live_from_stream = real
+        routes_mod._LIVE_MEM.pop(vin, None)
         settings.app_passcode = old
-        with SessionLocal() as s:
-            for k, v in saved.items():
-                state.put(s, k, v or "{}")
-            s.commit()
 
 
 def test_the_live_fast_lane_stays_in_memory():

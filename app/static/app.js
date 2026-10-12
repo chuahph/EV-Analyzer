@@ -4353,7 +4353,8 @@ const GLANCE_TABS = [
 // Instant kW and Wh/km come from pack voltage x current when the car streams
 // them, else from the change in energy and odometer between two polls at
 // least 20 s apart.
-const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0, hist: [] };
+const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null, sign: 0, hist: [],
+  es: null, esQuery: "", esOpened: 0, esLast: 0 };
 function glanceVisible() {
   const el = document.getElementById("glance");
   return !!el && getComputedStyle(el).display !== "none";
@@ -4415,63 +4416,89 @@ document.addEventListener("visibilitychange", () => { glWakeSync(); });
 window.addEventListener("orientationchange", () => setTimeout(glWakeSync, 400));
 window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
 
+// One reading from the server, pushed or polled: fold it into the page.
+function glLiveApply(L) {
+  const nw = L.now || {};
+  const p = glLiveState.prev;
+  // Pack power, when the car streams voltage and current: the power this
+  // second. Its sign convention is learned rather than assumed — at
+  // cruising speed the pack is mostly giving power out, so whichever sign
+  // dominates there is "discharge"; the other is regen.
+  if (nw.power_kw != null && (nw.speed_kmh || 0) > 30) {
+    glLiveState.sign = Math.max(-20, Math.min(20, glLiveState.sign + Math.sign(nw.power_kw)));
+  }
+  if (L.driving && p && nw.ts && nw.ts - p.ts >= 20 && nw.energy_kwh != null && p.energy_kwh != null) {
+    const dkwh = p.energy_kwh - nw.energy_kwh, dkm = (nw.odo_km || 0) - (p.odo_km || 0);
+    const hours = (nw.ts - p.ts) / 3600;
+    glLiveState.inst = { kw: dkwh >= 0 ? dkwh / hours : null, whkm: dkm > 0.05 ? dkwh * 1000 / dkm : null };
+    glLiveState.prev = nw;
+  } else if (!p || !L.driving || (nw.ts && nw.ts - p.ts > 300)) {
+    glLiveState.prev = nw.ts ? nw : null;
+    if (!L.driving) glLiveState.inst = null;
+  }
+  glLiveState.data = L;
+  if (nw.power_kw != null) {
+    const kw = nw.power_kw * (glLiveState.sign < 0 ? -1 : 1);
+    const v = nw.speed_kmh || 0;
+    glLiveState.inst = { kw, regen: kw < 0, whkm: v > 5 && kw > 0 ? kw * 1000 / v : null, measured: true };
+  }
+  // The last three minutes of speed and power, for the trace on the page.
+  if (L.driving && nw.ts) {
+    const hst = glLiveState.hist, lastT = hst.length ? hst[hst.length - 1].t : 0;
+    if (nw.ts > lastT) hst.push({ t: nw.ts, v: +nw.speed_kmh || 0,
+      kw: glLiveState.inst && glLiveState.inst.kw != null ? glLiveState.inst.kw : null });
+    while (hst.length && hst[0].t < nw.ts - 180) hst.shift();
+  } else if (!L.driving) glLiveState.hist = [];
+  if (lastData && glanceTab === "live" && glanceVisible()) renderGlance(lastData);
+}
+
+function glLiveQuery() {
+  const q = new URLSearchParams();
+  const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+  if (cap) q.set("capacity_kwh", cap);
+  if (lastData && lastData.vehicle && lastData.vehicle.vin) q.set("vin", lastData.vehicle.vin);
+  return q.toString();
+}
+
+// The Live page is fed by a stream the server pushes down the moment each
+// record reaches it from the car — no polling interval between the car and
+// the screen. The stream is open only while the Live page is on screen. If it
+// cannot connect (an old browser, a proxy in the way), the page asks once a
+// second instead. Either way the server answers from memory, never the
+// database.
 async function glLivePoll() {
   clearTimeout(glLiveState.timer);
   glWakeSync();
-  if (glanceTab !== "live" || !glanceVisible() || document.hidden) {
-    glLiveState.timer = setTimeout(glLivePoll, 3000);
+  const want = glanceTab === "live" && glanceVisible() && !document.hidden;
+  const es = glLiveState.es;
+  if (!want) {
+    if (es) { es.close(); glLiveState.es = null; }
+    glLiveState.timer = setTimeout(glLivePoll, 1000);
     return;
   }
-  // Every second, parked too: a poll is answered from memory (no database
-  // read), and a drive should show the moment the car leaves Park.
-  let wait = 1000;
-  try {
-    const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
-    // The vin too, so the app need not look the car up on every poll.
-    const q = new URLSearchParams();
-    if (cap) q.set("capacity_kwh", cap);
-    if (lastData && lastData.vehicle && lastData.vehicle.vin) q.set("vin", lastData.vehicle.vin);
-    const r = await fetch("/api/live?" + q, { credentials: "same-origin" });
-    if (r.ok) {
-      const L = await r.json();
-      const nw = L.now || {};
-      const p = glLiveState.prev;
-      // Pack power, when the car streams voltage and current: the power this
-      // second. Its sign convention is learned rather than assumed — at
-      // cruising speed the pack is mostly giving power out, so whichever sign
-      // dominates there is "discharge"; the other is regen.
-      if (nw.power_kw != null && (nw.speed_kmh || 0) > 30) {
-        glLiveState.sign = Math.max(-20, Math.min(20, glLiveState.sign + Math.sign(nw.power_kw)));
-      }
-      if (L.driving && p && nw.ts && nw.ts - p.ts >= 20 && nw.energy_kwh != null && p.energy_kwh != null) {
-        const dkwh = p.energy_kwh - nw.energy_kwh, dkm = (nw.odo_km || 0) - (p.odo_km || 0);
-        const hours = (nw.ts - p.ts) / 3600;
-        glLiveState.inst = { kw: dkwh >= 0 ? dkwh / hours : null, whkm: dkm > 0.05 ? dkwh * 1000 / dkm : null };
-        glLiveState.prev = nw;
-      } else if (!p || !L.driving || (nw.ts && nw.ts - p.ts > 300)) {
-        glLiveState.prev = nw.ts ? nw : null;
-        if (!L.driving) glLiveState.inst = null;
-      }
-      glLiveState.data = L;
-      if (nw.power_kw != null) {
-        const kw = nw.power_kw * (glLiveState.sign < 0 ? -1 : 1);
-        const v = nw.speed_kmh || 0;
-        glLiveState.inst = { kw, regen: kw < 0, whkm: v > 5 && kw > 0 ? kw * 1000 / v : null, measured: true };
-      }
-      // The last three minutes of speed and power, for the trace on the page.
-      if (L.driving && nw.ts) {
-        const hst = glLiveState.hist, lastT = hst.length ? hst[hst.length - 1].t : 0;
-        if (nw.ts > lastT) hst.push({ t: nw.ts, v: +nw.speed_kmh || 0,
-          kw: glLiveState.inst && glLiveState.inst.kw != null ? glLiveState.inst.kw : null });
-        while (hst.length && hst[0].t < nw.ts - 180) hst.shift();
-      } else if (!L.driving) glLiveState.hist = [];
-      // Every second while driving: the server answers from memory, so the
-      // trip and speed are never more than a second or two behind the car.
-      if (L.driving) wait = 1000;
-      if (lastData && glanceTab === "live") renderGlance(lastData);
-    }
-  } catch (_) { /* offline: try again later */ }
-  glLiveState.timer = setTimeout(glLivePoll, wait);
+  const q = glLiveQuery();
+  if (window.EventSource && (!es || es.readyState === 2 || glLiveState.esQuery !== q)) {
+    if (es) es.close();
+    const s = new EventSource("/api/live/stream?" + q);
+    glLiveState.es = s;
+    glLiveState.esQuery = q;
+    glLiveState.esOpened = Date.now();
+    s.onmessage = (e) => {
+      glLiveState.esLast = Date.now();
+      try { glLiveApply(JSON.parse(e.data)); } catch (_) { /* a bad frame: wait for the next */ }
+    };
+  }
+  // No frame from the stream for 20 s (it sends one at least every 15 s):
+  // fall back to asking, and let the stream retry on its own.
+  const live = glLiveState.es;
+  const quiet = !live || Date.now() - Math.max(glLiveState.esLast || 0, glLiveState.esOpened || 0) > 20000;
+  if (quiet) {
+    try {
+      const r = await fetch("/api/live?" + q, { credentials: "same-origin" });
+      if (r.ok) glLiveApply(await r.json());
+    } catch (_) { /* offline: try again shortly */ }
+  }
+  glLiveState.timer = setTimeout(glLivePoll, 1000);
 }
 setTimeout(glLivePoll, 1500);
 // A drive starting opens the Live page once, so turning the phone sideways
