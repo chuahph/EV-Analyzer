@@ -4363,9 +4363,40 @@ function glanceVisible() {
 // page is left, the phone turned upright or the app put away; the browser
 // drops the lock itself when the app is hidden, so it is asked for again on
 // return. Unsupported browsers just carry on and the page says so.
-const glWake = { lock: null, supported: "wakeLock" in navigator, failed: false };
+const glWake = { lock: null, supported: "wakeLock" in navigator, failed: false, video: null, videoOn: false };
+// iPhones drop or ignore the Wake Lock (it reports success but lets the
+// screen sleep in a home-screen app before iOS 18.4), so there a muted,
+// looping, inline video also plays while the Live page is up: iOS keeps the
+// screen on during video playback.
+const glWakeIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+  || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function glWakeVideo(on) {
+  if (on) {
+    if (!glWake.video) {
+      const v = document.createElement("video");
+      v.src = "/static/keepawake.mp4";
+      v.muted = true; v.loop = true; v.playsInline = true;
+      v.setAttribute("muted", ""); v.setAttribute("playsinline", ""); v.setAttribute("aria-hidden", "true");
+      v.style.cssText = "position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:.01;pointer-events:none";
+      document.body.appendChild(v);
+      glWake.video = v;
+    }
+    if (!glWake.videoOn) {
+      const p = glWake.video.play();
+      if (p && p.then) {
+        p.then(() => { glWake.videoOn = true; })
+          .catch(() => { glWake.videoOn = false; });   // blocked until a tap (Low Power Mode)
+      }
+    }
+  } else if (glWake.video && glWake.videoOn) {
+    glWake.video.pause();
+    glWake.videoOn = false;
+  }
+}
+function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !document.hidden; }
 async function glWakeSync() {
-  const want = glanceTab === "live" && glanceVisible() && !document.hidden;
+  const want = glWakeWanted();
+  if (glWakeIOS) glWakeVideo(want);
   if (want && !glWake.lock && glWake.supported) {
     try {
       glWake.lock = await navigator.wakeLock.request("screen");
@@ -4377,6 +4408,9 @@ async function glWakeSync() {
     glWake.lock = null;
   }
 }
+// A tap counts as the gesture iOS wants before it plays media, and lets a
+// refused Wake Lock be asked for again.
+document.addEventListener("pointerdown", () => { if (glWakeWanted()) { glWake.failed = false; glWakeSync(); } }, { passive: true });
 document.addEventListener("visibilitychange", () => { glWakeSync(); });
 window.addEventListener("orientationchange", () => setTimeout(glWakeSync, 400));
 window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
@@ -4496,8 +4530,8 @@ function renderGlance(d) {
         : t ? (fresh ? `live · updated ${nw.age_sec}s ago` : `drive open · last heard ${Math.round(nw.age_sec / 60)} min ago`)
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
-        ${glWake.lock ? '<span class="gl-chip">screen kept on</span>'
-          : !glWake.supported || glWake.failed ? '<span class="gl-chip tone-warn">screen may sleep</span>' : ""}
+        ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip">screen kept on</span>'
+          : '<span class="gl-chip tone-warn">tap to keep screen on</span>'}
         ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
