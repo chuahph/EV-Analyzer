@@ -4061,6 +4061,58 @@ function glDial({ value, min, max, step, bands = [], mark = null, centre, unit, 
   </svg>`;
 }
 
+// Vertical bars with their values on top. HTML rather than SVG so the bars
+// stretch to whatever panel they are given; mark draws a dashed reference
+// line (e.g. rated Wh/km) labelled at its left end, clear of the bars.
+function glVBars(items, { mark = null, digits = 0 } = {}) {
+  const vals = items.map((it) => (Number.isFinite(+it.value) ? +it.value : null));
+  const top = Math.max(1, ...vals.filter((x) => x != null), mark || 0) * 1.15;
+  const pct = (x) => (x / top * 100).toFixed(1);
+  const cols = items.map((it, k) => {
+    const v = vals[k];
+    return `<div class="gl-vcol">
+      <div class="gl-vslot">${v == null ? "" : `<div class="gl-vbar" style="height:${pct(v)}%;background:${it.colour || "var(--accent-2)"}">
+        <span>${fmt(v, digits)}</span></div>`}</div>
+      <div class="gl-vlab">${h(it.label)}</div></div>`;
+  }).join("");
+  const m = mark ? `<div class="gl-vover"><div class="gl-vmark" style="bottom:${pct(mark)}%">
+      <span>rated ${fmt(mark)}</span></div></div>` : "";
+  return `<div class="gl-vbars"><div class="gl-vplot">${m}${cols}</div></div>`;
+}
+
+function glBox(label, value, unit, tone = "") {
+  return `<div class="gl-box ${tone}"><span class="gl-box-l">${h(label)}</span>
+    <span class="gl-box-v">${value}<small>${h(unit || "")}</small></span></div>`;
+}
+
+function glSplit(parts) {
+  const tot = parts.reduce((a, p) => a + (p.v > 0 ? p.v : 0), 0);
+  const seg = parts.map((p) => tot > 0 && p.v > 0
+    ? `<span style="width:${(p.v / tot * 100).toFixed(1)}%;background:${p.colour}"></span>` : "").join("");
+  const legend = parts.map((p) => `<span><b class="dot" style="background:${p.colour}"></b>${h(p.label)}
+    <strong>${p.text}</strong></span>`).join("");
+  return `<div class="gl-split">${seg || '<span style="width:100%;background:var(--panel-2)"></span>'}</div>
+    <div class="gl-legend">${legend}</div>`;
+}
+
+function glHBars(rows, colour) {
+  const max = Math.max(1, ...rows.map((r) => +r.value || 0));
+  return `<div class="gl-hbars">${rows.map((r) => `<div class="gl-hbar"><span>${h(r.label)}</span>
+    <span class="track"><span class="fill" style="width:${Math.max(2, (+r.value || 0) / max * 100).toFixed(1)}%;background:${r.colour || colour}"></span></span>
+    <strong>${r.text}</strong></div>`).join("")}</div>`;
+}
+
+const GLANCE_TABS = [
+  { id: "drive", label: "Drive", ico: '<path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 15 4-5"/>' },
+  { id: "eff", label: "Efficiency", ico: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>' },
+  { id: "battery", label: "Battery", ico: '<rect x="2" y="7" width="16" height="10" rx="2.5"/><path d="M21 10.5v3"/>' },
+  { id: "trips", label: "Trips", ico: '<circle cx="12" cy="12" r="9"/><path d="m15.9 8.1-2.2 5.6-5.6 2.2 2.2-5.6 5.6-2.2Z"/>' },
+  { id: "charge", label: "Charging", ico: '<path d="M13 2.5 4 13.5h7l-1 8 9-11h-7l1-8Z"/>' },
+];
+const glPref = (k, fallback) => { try { return localStorage.getItem(k) || fallback; } catch (_) { return fallback; } };
+const glSave = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } };
+let glanceTab = glPref("glanceTab", "drive");
+
 function renderGlance(d) {
   const el = document.getElementById("glance");
   if (!el || !d) return;
@@ -4068,89 +4120,172 @@ function renderGlance(d) {
   const chg = d.charging || {}, bat = d.battery || {}, v = d.vehicle || {};
   const cur = d.currency || "";
   const n = (x, dg = 0) => (x == null || !Number.isFinite(+x) ? "—" : fmt(+x, dg));
-
-  // Centre: Wh/km as the big dial, the rated line marked, green below it and
-  // amber above, so where the needle sits against the mark is the answer.
   const whkm = eff.avg_efficiency_wh_per_km ?? drv.avg_efficiency_wh_per_km;
   const rated = eff.rated_wh_per_km;
   const vsRated = eff.vs_rated_pct;
-  const top = Math.max(300, Math.ceil(((whkm || 0) * 1.25) / 50) * 50);
-  const centreDial = glDial({
-    value: whkm, min: 0, max: top, step: 25,
-    bands: rated ? [{ from: 0, to: rated, colour: "var(--green)" },
-      { from: rated, to: top, colour: "var(--amber)" }] : [],
-    mark: rated, centre: n(whkm), unit: "Wh/km",
-    colour: vsRated != null && vsRated > 0 ? "var(--amber)" : "var(--green)",
-    sub: vsRated == null ? null : {
-      text: `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}% vs rated`,
-      colour: vsRated > 0 ? "var(--amber)" : "var(--green)" },
-    label: "Efficiency",
-  });
+  const tripK = +bal.trip_kwh || +drv.trip_energy_used_kwh || 0, parkK = +bal.vampire_kwh || 0;
+  const lt = (drv.recent_trips || [])[0];
+  const bandTone = (b) => (b === "efficient" ? "tone-good" : b === "inefficient" ? "tone-warn" : "");
+  const bandColour = (b) => (b === "efficient" ? "var(--green)" : b === "inefficient" ? "var(--amber)" : "var(--accent-2)");
 
-  // Left: battery as a fuel gauge — the level now, or the share used.
+  const effDial = () => {
+    const top = Math.max(300, Math.ceil(((whkm || 0) * 1.25) / 50) * 50);
+    return glDial({ value: whkm, min: 0, max: top, step: 25,
+      bands: rated ? [{ from: 0, to: rated, colour: "var(--green)" }, { from: rated, to: top, colour: "var(--amber)" }] : [],
+      mark: rated, centre: n(whkm), unit: "Wh/km",
+      colour: vsRated != null && vsRated > 0 ? "var(--amber)" : "var(--green)",
+      sub: vsRated == null ? null : { text: `${vsRated > 0 ? "+" : ""}${n(vsRated, 1)}% vs rated`,
+        colour: vsRated > 0 ? "var(--amber)" : "var(--green)" }, label: "Efficiency" });
+  };
   const level = bal.current_level_pct ?? bal.current_soc_pct;
   const used = bal.used_pct;
-  const battDial = level != null
+  // The level now; else the share this window used; else, for a window
+  // longer than one charge (where neither is one number), km per 1%.
+  const kmPct = drv.km_per_soc_pct;
+  const battDial = () => (level != null
     ? glDial({ value: level, min: 0, max: 100, step: 10,
         bands: [{ from: 0, to: 20, colour: "#ff6b70" }, { from: 20, to: 100, colour: "var(--green)" }],
         centre: `${Math.round(level)}%`, unit: "battery", colour: "var(--green)",
-        sub: { text: `used ${n(used, 1)}% · ${n(bal.used_kwh, 1)} kWh` }, label: "Battery" })
-    : glDial({ value: used, min: 0, max: 100, step: 10,
-        bands: [{ from: 0, to: 100, colour: "var(--accent-2)" }],
-        centre: `${n(used, 1)}%`, unit: "battery used", colour: "var(--accent-2)",
-        sub: { text: `${n(bal.used_kwh, 1)} of ${n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 0)} kWh` },
-        label: "Battery used" });
-
-  // Right: driving score.
+        sub: used != null ? { text: `used ${n(used, 1)}%` } : null, label: "Battery" })
+    : used != null
+    ? glDial({ value: used, min: 0, max: 100, step: 10, bands: [{ from: 0, to: 100, colour: "var(--accent-2)" }],
+        centre: `${n(used, 1)}%`, unit: "battery used", colour: "var(--accent-2)", label: "Battery used" })
+    : glDial({ value: kmPct, min: 0, max: 8, step: 0.5,
+        bands: [{ from: 0, to: 4, colour: "var(--amber)" }, { from: 4, to: 8, colour: "var(--green)" }],
+        centre: n(kmPct, 2), unit: "km per 1% battery", colour: "var(--green)", label: "km per percent" }));
   const score = drv.eco_score;
-  const scoreDial = glDial({ value: score, min: 0, max: 100, step: 10,
+  const scoreDial = () => glDial({ value: score, min: 0, max: 100, step: 10,
     bands: [{ from: 0, to: 60, colour: "var(--amber)" }, { from: 60, to: 80, colour: "var(--accent-2)" },
       { from: 80, to: 100, colour: "var(--green)" }],
     centre: score == null ? "—" : String(Math.round(score)), unit: "driving score",
     colour: score == null ? "var(--muted)" : score >= 80 ? "var(--green)" : score >= 60 ? "var(--accent-2)" : "var(--amber)",
     sub: drv.eco_grade ? { text: `grade ${drv.eco_grade}` } : null, label: "Driving score" });
-
-  // Trip computer: the strip under the dials, as a car shows it.
-  const tripK = +bal.trip_kwh || +drv.trip_energy_used_kwh || 0, parkK = +bal.vampire_kwh || 0;
-  const cell = (label, value, unit) =>
-    `<div class="gl-cell"><span class="gl-cell-l">${h(label)}</span>
-      <span class="gl-cell-v">${value}<small>${h(unit)}</small></span></div>`;
-  const strip = [
-    cell("Distance", n(drv.total_distance_km, 1), "km"),
-    cell("Trips", n(drv.total_drives), ""),
-    cell("Drive time", n(drv.total_duration_h, 1), "h"),
-    cell("Avg speed", n(drv.avg_speed_kmh), "km/h"),
-    cell("Energy", n(tripK + parkK, 1), "kWh"),
-    cell("Parked", n(parkK, 2), "kWh"),
-    cell("Cost", n(drv.total_cost, 2), cur),
-    cell("Per km", n(drv.cost_per_km, 3), cur),
-  ].join("");
-
-  // Last trip, as the cluster's message line.
-  const lt = (drv.recent_trips || [])[0];
-  const band = lt && lt.efficiency_band;
-  const bandCls = band === "efficient" ? "tone-good" : band === "inefficient" ? "tone-warn" : "";
-  const last = lt ? `<div class="gl-msg"><span class="gl-msg-l">Last trip${lt.id != null ? ` #${lt.id}` : ""}</span>
+  const lastLine = lt ? `<div class="gl-msg"><span class="gl-msg-l">Last trip${lt.id != null ? ` #${lt.id}` : ""}</span>
       <span>${h(lt.route || tripWhen(lt.start_time))}</span>
       <strong>${n(lt.distance_km, 1)} km</strong><strong>${n(lt.wh_per_km)} Wh/km</strong><strong>${n(lt.duration_min)} min</strong>
-      ${band ? `<span class="gl-chip ${bandCls}">${h(band)}</span>` : ""}</div>` : "";
+      ${lt.efficiency_band ? `<span class="gl-chip ${bandTone(lt.efficiency_band)}">${h(lt.efficiency_band)}</span>` : ""}</div>` : "";
+  const panel = (title, body, cls = "") => `<div class="gl-panel ${cls}">${title ? `<div class="gl-label">${h(title)}</div>` : ""}${body}</div>`;
 
-  const ch = bat.capacity_health;
+  const pages = {
+    // Drive: the big dial on one side, the trip computer as boxes on the other.
+    drive: () => `<div class="gl-page gl-split-2">
+        <div class="gl-pod">${effDial()}</div>
+        <div class="gl-col">
+          <div class="gl-boxes">
+            ${glBox("Distance", n(drv.total_distance_km, 1), "km")}
+            ${glBox("Trips", n(drv.total_drives), "")}
+            ${glBox("Drive time", n(drv.total_duration_h, 1), "h")}
+            ${glBox("Avg speed", n(drv.avg_speed_kmh), "km/h")}
+            ${glBox("Energy", n(tripK + parkK, 1), "kWh")}
+            ${glBox("Cost", n(drv.total_cost, 2), cur)}
+          </div>
+          ${lastLine}
+        </div></div>`,
+    // Efficiency: bars by speed with the rated line, and the daily trend.
+    eff: () => {
+      const bands = Object.entries(drv.efficiency_by_speed_band || {});
+      const daily = Object.entries(eff.daily_efficiency || {}).slice(-10);
+      return `<div class="gl-page gl-grid-eff">
+        ${panel("Wh/km by speed", bands.length ? glVBars(bands.map(([k, x]) => ({
+          label: k.replace(/\s*\(.*\)/, ""), value: x,
+          colour: rated && x > rated ? "var(--amber)" : "var(--green)" })), { mark: rated, unit: "" })
+          : '<div class="gl-line">No speed data</div>')}
+        ${panel("Wh/km by day", daily.length ? glVBars(daily.map(([k, x]) => ({
+          label: k.slice(8), value: x, colour: rated && x > rated ? "var(--amber)" : "var(--teal)" })), { mark: rated })
+          : '<div class="gl-line">No daily data</div>')}
+        <div class="gl-boxes gl-boxes-col">
+          ${glBox("Average", n(whkm), "Wh/km", vsRated != null && vsRated > 0 ? "tone-warn" : "tone-good")}
+          ${glBox("Best", n(eff.best_efficiency_wh_per_km), "Wh/km")}
+          ${glBox("Worst", n(eff.worst_efficiency_wh_per_km), "Wh/km")}
+        </div></div>`;
+    },
+    // Battery: the gauge, where the energy went, and the pack figures.
+    battery: () => {
+      const ch = bat.capacity_health;
+      return `<div class="gl-page gl-split-2">
+        <div class="gl-pod">${battDial()}</div>
+        <div class="gl-col">
+          ${panel("Where the energy went", glSplit([
+            { v: tripK, colour: "var(--accent-2)", label: "driving", text: `${n(tripK, 1)} kWh` },
+            { v: parkK, colour: "var(--amber)", label: "parked", text: `${n(parkK, 2)} kWh` }]))}
+          <div class="gl-boxes gl-boxes-2">
+            ${glBox("Used", n(bal.used_kwh, 1), "kWh")}
+            ${glBox("Pack", n(bal.full_charge_kwh ?? v.usable_capacity_kwh, 1), "kWh")}
+            ${glBox("Parked", n(bal.vampire_hours, 0), "h")}
+            ${ch ? glBox("Health", n(ch.health_pct, 1), "%", "tone-good")
+              : glBox("Full packs", n((+bal.used_kwh || 0) / (+(bal.full_charge_kwh ?? v.usable_capacity_kwh) || 1), 1), "×")}
+          </div>
+        </div></div>`;
+    },
+    // Trips: the recent trips as bars coloured by how well each went.
+    trips: () => {
+      const rec = (drv.recent_trips || []).slice(0, 8).reverse();
+      return `<div class="gl-page gl-grid-trips">
+        ${panel("Recent trips · Wh/km", rec.length ? glVBars(rec.map((t) => ({
+          label: t.id != null ? `#${t.id}` : tripWhen(t.start_time).slice(0, 6),
+          value: t.wh_per_km, colour: bandColour(t.efficiency_band) })), { mark: rated })
+          : '<div class="gl-line">No trips in this window</div>')}
+        <div class="gl-pod gl-pod-sm">${scoreDial()}</div>
+        <div class="gl-boxes gl-boxes-row">
+          ${glBox("Longest", n(drv.longest_trip_km, 1), "km")}
+          ${glBox("Avg trip", n(drv.avg_trip_distance_km, 1), "km")}
+          ${glBox("Avg time", n(drv.avg_trip_duration_min), "min")}
+          ${glBox("Top speed", n(drv.max_speed_kmh), "km/h")}
+        </div></div>`;
+    },
+    // Charging: totals, AC against DC, and when charging happens.
+    charge: () => {
+      const hours = Object.entries(chg.energy_by_hour || {});
+      const groups = [0, 6, 12, 18].map((s0) => ({
+        label: `${String(s0).padStart(2, "0")}–${String(s0 + 6).padStart(2, "0")}`,
+        value: hours.filter(([hr]) => +hr >= s0 && +hr < s0 + 6).reduce((a, [, x]) => a + (+x || 0), 0),
+        colour: "var(--violet)" }));
+      return `<div class="gl-page gl-split-2">
+        <div class="gl-col">
+          <div class="gl-boxes gl-boxes-2">
+            ${glBox("Charged", n(chg.total_energy_kwh, 1), "kWh")}
+            ${glBox("Sessions", n(chg.total_sessions), "")}
+            ${glBox("Paid", n(chg.total_cost, 2), cur)}
+            ${glBox("Avg to", n(chg.avg_end_soc), "%")}
+          </div>
+          ${panel("AC vs DC", glSplit([
+            { v: +chg.ac_energy_kwh || 0, colour: "var(--teal)", label: "AC", text: `${n(chg.ac_energy_kwh, 1)} kWh` },
+            { v: +chg.dc_energy_kwh || 0, colour: "#ff6b70", label: "DC", text: `${n(chg.dc_energy_kwh, 1)} kWh` }]))}
+        </div>
+        ${panel("When you charge · kWh", glVBars(groups, { digits: 1 }))}
+      </div>`;
+    },
+  };
+  if (!pages[glanceTab]) glanceTab = "drive";
+  const side = glPref("glanceRail", "left");
+  el.classList.toggle("gl-rail-right", side === "right");
+  const rail = `<nav class="gl-rail" aria-label="Glance pages">
+      ${GLANCE_TABS.map((t) => `<button type="button" class="gl-tab${t.id === glanceTab ? " on" : ""}" data-gl-tab="${t.id}"
+        aria-label="${t.label}"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ico}</svg><span>${t.label}</span></button>`).join("")}
+      <button type="button" class="gl-tab gl-swap" data-gl-swap aria-label="Move tabs to the other side">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg><span>Swap</span></button>
+    </nav>`;
   const name = v.name || v.model || "Tesla";
-  el.innerHTML = `<div class="gl-head"><h2>${h(name)}</h2>
-      <span class="gl-sub">${h(d.window_label || `${d.window_days}-day window`)}</span>
-      ${ch ? `<span class="gl-chip">battery health ${n(ch.health_pct, 1)}%</span>` : ""}
+  el.innerHTML = `${rail}<div class="gl-main">
+    <div class="gl-head"><h2>${h(name)}</h2>
+      <span class="gl-sub">${h(GLANCE_TABS.find((t) => t.id === glanceTab).label)} · ${h(d.window_label || `${d.window_days}-day window`)}</span>
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
-    <div class="gl-cluster">
-      <div class="gl-pod gl-pod-side">${battDial}</div>
-      <div class="gl-pod gl-pod-main">${centreDial}</div>
-      <div class="gl-pod gl-pod-side">${scoreDial}</div>
-    </div>
-    <div class="gl-strip">${strip}</div>
-    ${last}`;
+    ${pages[glanceTab]()}</div>`;
 }
 
 document.addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-gl-tab]");
+  if (tab) {
+    glanceTab = tab.dataset.glTab;
+    glSave("glanceTab", glanceTab);
+    if (lastData) renderGlance(lastData);
+    return;
+  }
+  if (e.target.closest("[data-gl-swap]")) {
+    glSave("glanceRail", glPref("glanceRail", "left") === "left" ? "right" : "left");
+    if (lastData) renderGlance(lastData);
+    return;
+  }
   if (e.target.closest("[data-glance]")) {
     if (lastData) renderGlance(lastData);
     document.body.classList.add("glance-on");

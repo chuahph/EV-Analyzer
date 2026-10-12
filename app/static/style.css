@@ -1640,7 +1640,6 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
   flex-direction: column; gap: 8px;
 }
 body.glance-on .glance { display: flex; justify-content: center; align-items: center; }
-body.glance-on .glance > * { width: min(1100px, 100%); }
 @media (orientation: landscape) and (max-height: 560px) {
   body:not(.view-home) .glance { display: flex; }
   body:not(.view-home) .glance .gl-close { display: none; }
@@ -1657,39 +1656,93 @@ body.glance-on .glance > * { width: min(1100px, 100%); }
 .gl-close { margin-left: auto; background: none; border: 1px solid var(--border);
   color: var(--text); border-radius: 8px; padding: 2px 10px; font-size: 13px; }
 
-/* The three dials: the middle one larger, the side pods set slightly lower
-   like a cluster's flanking gauges. */
-.gl-cluster {
-  flex: 1 1 auto; min-height: 0;
-  display: grid; grid-template-columns: 1fr 1.45fr 1fr; align-items: center; gap: 6px;
-}
-.gl-pod { min-height: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
-.gl-pod-side { height: 82%; align-self: end; }
-.gl-dial { height: 100%; max-height: 100%; width: auto; max-width: 100%; aspect-ratio: 200 / 175;
-  filter: drop-shadow(0 0 14px rgba(59, 130, 246, .10)); }
-.gl-pod-main .gl-dial { filter: drop-shadow(0 0 22px rgba(245, 158, 11, .14)); }
-.gl-needle { filter: drop-shadow(0 0 4px currentColor); }
-body.glance-on .gl-cluster { height: 330px; flex: 0 0 auto; }
+/* Tabs: a rail on one edge (left by default, Swap moves it), pages beside it. */
+.glance { flex-direction: row; gap: 10px; }
+.glance.gl-rail-right { flex-direction: row-reverse; }
+body.glance-on .glance > .gl-rail { width: auto; }
+body.glance-on .glance > .gl-main { flex: 0 1 1040px; height: min(560px, 100%); }
+.gl-rail { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; justify-content: center;
+  padding: 4px 0; overflow: auto; }
+.gl-tab { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 62px;
+  padding: 7px 2px; border-radius: 12px; border: 1px solid var(--border);
+  background: linear-gradient(180deg, #1a2029, var(--panel)); color: var(--muted);
+  font-size: 10px; font-weight: 650; cursor: pointer; }
+.gl-tab svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.gl-tab.on { color: var(--text); border-color: color-mix(in srgb, var(--accent-2) 60%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-2) 22%, #1a2029), var(--panel));
+  box-shadow: 0 0 14px -4px var(--accent-2); }
+.gl-swap { margin-top: auto; opacity: .7; }
+.gl-main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 
-/* Trip computer. */
-.gl-strip {
-  flex: 0 0 auto; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
-  background: linear-gradient(180deg, #161c25, #11161d);
-  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--edge-hi);
-  overflow: hidden;
-}
-.gl-cell { padding: 6px 8px; display: flex; flex-direction: column; gap: 1px; min-width: 0;
-  border-left: 1px solid var(--border); }
-.gl-cell:first-child { border-left: 0; }
-.gl-cell-l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+/* Page layouts. */
+.gl-page { flex: 1 1 auto; min-height: 0; display: grid; gap: 10px; }
+.gl-split-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: stretch; }
+.gl-grid-eff { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .55fr); }
+.gl-grid-trips { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.gl-grid-trips .gl-boxes-row { grid-column: 1 / -1; }
+.gl-col { min-height: 0; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+.gl-panel { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px;
+  background: linear-gradient(180deg, #19202a, var(--panel)); border: 1px solid var(--border);
+  border-radius: 14px; padding: 8px 12px; box-shadow: var(--edge-hi); }
+.gl-label { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .05em; }
+.gl-line { font-size: 12px; color: var(--muted); }
+.gl-vbars { flex: 1 1 auto; min-height: 0; display: flex; }
+.gl-vplot { position: relative; flex: 1 1 auto; display: flex; gap: 6%; align-items: stretch;
+  padding: 18px 4px 0; }
+.gl-vcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.gl-vslot { flex: 1 1 auto; min-height: 0; display: flex; align-items: flex-end;
+  border-bottom: 1px solid var(--border-lift); }
+.gl-vbar { position: relative; width: 100%; border-radius: 6px 6px 2px 2px; opacity: .92;
+  min-height: 2px; }
+.gl-vbar span { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -3px);
+  font-size: 11px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.gl-vlab { flex: 0 0 18px; font-size: 10.5px; line-height: 18px; color: var(--muted); text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gl-cell-v { font-size: clamp(14px, 3.6vh, 19px); font-weight: 720; font-variant-numeric: tabular-nums;
+/* The reference line, in a layer the exact size of the bar area (inside the
+   top padding, above the 18px label row), so its % lines up with the bars'. */
+.gl-vover { position: absolute; left: 4px; right: 4px; top: 18px; bottom: 18px; pointer-events: none; z-index: 1; }
+.gl-vmark { position: absolute; left: 0; right: 0; height: 0;
+  border-top: 1px dashed rgba(230, 233, 239, .55); }
+.gl-vmark span { position: absolute; left: 0; bottom: 2px; font-size: 9.5px; color: var(--muted);
+  background: var(--panel); padding: 0 4px; border-radius: 4px; }
+.gl-boxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.gl-boxes-col { grid-template-columns: 1fr; align-content: center; }
+.gl-boxes-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gl-boxes-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.gl-box { background: linear-gradient(180deg, #1a2029, #12171e); border: 1px solid var(--border);
+  border-radius: 12px; padding: 7px 10px; display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  box-shadow: var(--edge-hi); }
+.gl-box-l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gl-cell-v small { font-size: .58em; font-weight: 600; color: var(--muted); margin-left: 2px; }
+.gl-box-v { font-size: clamp(16px, 4.6vh, 24px); font-weight: 740; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-box-v small { font-size: .55em; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.gl-box.tone-good .gl-box-v { color: var(--green); }
+.gl-box.tone-warn .gl-box-v { color: var(--amber); }
+.gl-split { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px;
+  background: var(--panel-2); }
+.gl-split span { height: 100%; }
+.gl-legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.gl-legend strong { color: var(--text); margin-left: 4px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+.gl-hbars { display: flex; flex-direction: column; gap: 6px; }
+.gl-hbar { display: grid; grid-template-columns: 70px 1fr auto; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--muted); }
+.gl-hbar .track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.gl-hbar .fill { display: block; height: 100%; border-radius: 4px; }
+
+/* The dials. */
+.gl-pod { min-height: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
+.gl-pod-sm .gl-dial { max-height: 100%; }
+.gl-dial { height: 100%; max-height: 100%; width: auto; max-width: 100%; aspect-ratio: 200 / 175;
+  filter: drop-shadow(0 0 18px rgba(59, 130, 246, .12)); }
+.gl-needle { filter: drop-shadow(0 0 4px currentColor); }
 
 /* The last trip as the cluster's message line. */
-.gl-msg { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; min-width: 0;
-  font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.gl-msg { flex: 0 0 auto; display: flex; align-items: center; gap: 4px 10px; min-width: 0;
+  flex-wrap: wrap; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; }
 .gl-msg > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .gl-msg strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .gl-msg-l { color: var(--teal); font-weight: 700; text-transform: uppercase; font-size: 10.5px;
