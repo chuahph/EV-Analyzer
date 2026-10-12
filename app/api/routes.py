@@ -15053,6 +15053,57 @@ def telemetry_set_charge_end(
                          for p in promoted if p.get("start") == start), None)}
 
 
+@router.get("/live")
+def live_now(
+    capacity_kwh: float | None = Query(None, gt=20, lt=200),
+    session: Session = Depends(get_session),
+):
+    """The car right now, from the stream, for the live driving view.
+
+    Small and cheap on purpose: the view polls it every few seconds while a
+    drive is open. It reads only the two stored stream blobs (no history, no
+    analysis), and takes the pack size from the caller, which already has it
+    from /summary, rather than working it out again on every poll.
+
+    ``trip`` is sync.live_trip's readout when a drive is in progress, else
+    None. ``now`` is the newest composite the car sent: current speed, gear,
+    level and energy, so the page can show instant power and Wh/km from the
+    change between two polls.
+    """
+    import json as _json
+
+    from .. import sync as sync_mod
+
+    vehicle = _first_vehicle(session)
+    if vehicle is None:
+        return {"driving": False, "trip": None, "now": None}
+    cap = capacity_kwh or float(vehicle.battery_capacity_kwh or 75.0)
+    try:
+        latest = _json.loads(state.get(session, state.TELEMETRY_LATEST_KEY) or "{}") or {}
+    except ValueError:
+        latest = {}
+    car = latest.get(vehicle.vin) if isinstance(latest, dict) else None
+    now = None
+    if isinstance(car, dict):
+        ts = _telemetry_ts(car.get("_ts"))
+        if ts:
+            snap = sync_mod.snapshot_from_telemetry(car, ts)
+            now = {
+                "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)),
+                "speed_kmh": snap.get("speed_kmh"), "shift": snap.get("shift"),
+                "odo_km": snap.get("odo_km"), "energy_kwh": snap.get("energy_kwh"),
+                "battery_level": snap.get("battery_level"), "soc": snap.get("soc"),
+                "range_km": snap.get("range_km"), "out_temp": snap.get("out_temp"),
+                "climate_on": snap.get("climate_on"), "charging": snap.get("charging"),
+            }
+    open_trip, snap = _live_from_stream(session, vehicle.vin)
+    trip = None
+    if open_trip and snap:
+        trip = sync_mod.live_trip(open_trip, snap, cap, get_settings().drive_min_km)
+    return {"driving": trip is not None, "trip": trip, "now": now,
+            "server_ts": time.time()}
+
+
 @router.api_route("/telemetry/charge-end-level", methods=["GET", "POST"])
 def telemetry_charge_end_level(
     apply: bool = Query(False),

@@ -4126,6 +4126,7 @@ function glSplit(parts) {
 }
 
 const GLANCE_TABS = [
+  { id: "live", label: "Live", c: "#22d3ee", ico: '<circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/>' },
   { id: "drive", label: "Drive", c: "var(--accent-2)", ico: '<path d="M4 15a8 8 0 1 1 16 0"/><path d="m12 15 4-5"/>' },
   { id: "eff", label: "Efficiency", c: "var(--amber)", ico: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>' },
   { id: "battery", label: "Battery", c: "var(--green)", ico: '<rect x="2" y="7" width="16" height="10" rx="2.5"/><path d="M21 10.5v3"/>' },
@@ -4135,6 +4136,55 @@ const GLANCE_TABS = [
   { id: "cost", label: "Cost", c: "#ff6b70", ico: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v1.5M12 16v1.5"/>' },
   { id: "tips", label: "Tips", c: "#facc15", ico: '<path d="M9.5 18.5h5M10.5 21.5h3"/><path d="M15.1 14.2c.2-1 .7-1.8 1.4-2.5A4.9 4.9 0 0 0 18 8.2a6 6 0 0 0-12 0c0 1.3.5 2.5 1.5 3.5.7.7 1.2 1.5 1.4 2.5"/>' },
 ];
+// Live polling: only while the Live page is on screen, every 5 s during a
+// drive and every 30 s parked. Instant kW and Wh/km come from the change in
+// energy and odometer between two polls at least 20 s apart.
+const glLiveState = { data: null, inst: null, prev: null, timer: null, lastStart: null };
+function glanceVisible() {
+  const el = document.getElementById("glance");
+  return !!el && getComputedStyle(el).display !== "none";
+}
+async function glLivePoll() {
+  clearTimeout(glLiveState.timer);
+  if (glanceTab !== "live" || !glanceVisible() || document.hidden) {
+    glLiveState.timer = setTimeout(glLivePoll, 3000);
+    return;
+  }
+  let wait = 30000;
+  try {
+    const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+    const r = await fetch("/api/live" + (cap ? `?capacity_kwh=${cap}` : ""), { credentials: "same-origin" });
+    if (r.ok) {
+      const L = await r.json();
+      const nw = L.now || {};
+      const p = glLiveState.prev;
+      if (L.driving && p && nw.ts && nw.ts - p.ts >= 20 && nw.energy_kwh != null && p.energy_kwh != null) {
+        const dkwh = p.energy_kwh - nw.energy_kwh, dkm = (nw.odo_km || 0) - (p.odo_km || 0);
+        const hours = (nw.ts - p.ts) / 3600;
+        glLiveState.inst = { kw: dkwh >= 0 ? dkwh / hours : null, whkm: dkm > 0.05 ? dkwh * 1000 / dkm : null };
+        glLiveState.prev = nw;
+      } else if (!p || !L.driving || (nw.ts && nw.ts - p.ts > 300)) {
+        glLiveState.prev = nw.ts ? nw : null;
+        if (!L.driving) glLiveState.inst = null;
+      }
+      glLiveState.data = L;
+      if (L.driving) wait = 5000;
+      if (lastData && glanceTab === "live") renderGlance(lastData);
+    }
+  } catch (_) { /* offline: try again later */ }
+  glLiveState.timer = setTimeout(glLivePoll, wait);
+}
+setTimeout(glLivePoll, 1500);
+// A drive starting opens the Live page once, so turning the phone sideways
+// in the car lands on it; any tab chosen after that is left alone.
+function glAutoLive(d) {
+  const st = d && d.live_trip && d.live_trip.start_time;
+  if (st && st !== glLiveState.lastStart) {
+    glLiveState.lastStart = st;
+    glanceTab = "live";
+  }
+}
+
 const glPref = (k, fallback) => { try { return localStorage.getItem(k) || fallback; } catch (_) { return fallback; } };
 const glSave = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } };
 let glanceTab = glPref("glanceTab", "drive");
@@ -4142,6 +4192,7 @@ let glanceTab = glPref("glanceTab", "drive");
 function renderGlance(d) {
   const el = document.getElementById("glance");
   if (!el || !d) return;
+  glAutoLive(d);
   const drv = d.driving || {}, eff = d.efficiency || {}, bal = d.battery_balance || {};
   const chg = d.charging || {}, bat = d.battery || {}, v = d.vehicle || {};
   const asmt = d.assessment || {};
@@ -4173,6 +4224,48 @@ function renderGlance(d) {
       ${lt.efficiency_band ? `<span class="gl-chip ${bandTone(lt.efficiency_band)}">${h(lt.efficiency_band)}</span>` : ""}</div>` : "";
 
   const pages = {
+    // Live: the drive in progress, polled from /api/live (see glLive below).
+    live: () => {
+      const L = glLiveState.data, t = L && L.trip, nw = (L && L.now) || {};
+      const spd = nw.speed_kmh != null ? +nw.speed_kmh : null;
+      const inst = glLiveState.inst;   // {whkm, kw} from the last two polls
+      const lvl = nw.battery_level ?? nw.soc;
+      const fresh = nw.age_sec != null && nw.age_sec < 120;
+      const status = !L ? "connecting…"
+        : t ? (fresh ? `live · updated ${nw.age_sec}s ago` : `drive open · last heard ${Math.round(nw.age_sec / 60)} min ago`)
+        : "parked · no drive in progress";
+      const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
+        ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
+        ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
+        ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
+      if (!t) {
+        return page(
+          boxes(glBox("Battery", lvl != null ? n(lvl, 1) : "—", "%"), glBox("Range", n(nw.range_km), "km"),
+            glBox("Odometer", n(nw.odo_km), "km")),
+          glDial({ value: spd ?? 0, min: 0, max: 160, step: 10,
+            bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
+            centre: spd != null ? n(spd) : "—", unit: "km/h", colour: "#22d3ee",
+            sub: { text: nw.shift ? `gear ${nw.shift}` : "waiting for the car" }, label: "Speed" }),
+          lt ? boxes(glBox("Last trip", n(lt.distance_km, 1), "km"), glBox("Its Wh/km", n(lt.wh_per_km), ""),
+            glBox("Its time", n(lt.duration_min), "min")) : "",
+          foot);
+      }
+      const tw = t.driving_wh_per_km ?? t.wh_per_km;
+      const instTone = inst && rated ? (inst.whkm > rated ? "tone-warn" : "tone-good") : "";
+      return page(
+        boxes(glBox("Distance", n(t.distance_km, 1), "km"), glBox("Time", n(t.duration_min), "min"),
+          glBox("Avg speed", n(t.avg_speed_kmh), "km/h")),
+        glDial({ value: spd ?? t.avg_speed_kmh, min: 0, max: 160, step: 10,
+          bands: [{ from: 0, to: 110, colour: "#22d3ee" }, { from: 110, to: 160, colour: "var(--amber)" }],
+          mark: t.max_speed_kmh, centre: spd != null ? n(spd) : "—", unit: "km/h now",
+          colour: spd != null && spd > 110 ? "var(--amber)" : "#22d3ee",
+          sub: { text: `max ${n(t.max_speed_kmh)} km/h` }, label: "Speed" }),
+        boxes(glBox("Trip Wh/km", n(tw), "", rated && tw ? (tw > rated ? "tone-warn" : "tone-good") : ""),
+          glBox(inst ? "Now" : "Energy", inst ? (inst.kw != null ? n(inst.kw, 1) : "—") : n(t.energy_kwh, 2),
+            inst ? `kW${inst.whkm != null ? ` · ${n(inst.whkm)} Wh/km` : ""}` : "kWh", instTone),
+          glBox("Battery", lvl != null ? n(lvl, 1) : "—", `% · used ${n(t.soc_used, 1)}`)),
+        foot);
+    },
     drive: () => {
       const top = Math.max(300, Math.ceil(((whkm || 0) * 1.25) / 50) * 50);
       return page(
@@ -4319,7 +4412,8 @@ function renderGlance(d) {
   const side = glPref("glanceRail", "left");
   el.classList.toggle("gl-rail-right", side === "right");
   const rail = `<nav class="gl-rail" aria-label="Glance pages">
-      ${GLANCE_TABS.map((t) => `<button type="button" class="gl-tab${t.id === glanceTab ? " on" : ""}" data-gl-tab="${t.id}"
+      ${GLANCE_TABS.map((t) => `<button type="button" class="gl-tab${t.id === glanceTab ? " on" : ""}${
+        t.id === "live" && ((glLiveState.data && glLiveState.data.driving) || d.live_trip) ? " gl-tab-live" : ""}" data-gl-tab="${t.id}"
         style="--tc:${t.c}" title="${t.label}" aria-label="${t.label}"><span class="gl-tab-face"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ico}</svg></span></button>`).join("")}
     </nav>`;
   const cur_tab = GLANCE_TABS.find((t) => t.id === glanceTab);
@@ -4329,7 +4423,9 @@ function renderGlance(d) {
   // spine lines up with the side boxes rather than the whole screen.
   el.innerHTML = `<div class="gl-main" style="--tc:${cur_tab.c}">
     <div class="gl-head"><span class="gl-tabname">${h(cur_tab.label)}</span><h2>${h(name)}</h2>
-      <span class="gl-sub">${h(d.window_label || `${d.window_days}-day window`)}</span>
+      <span class="gl-sub">${h(glanceTab === "live"
+        ? (glLiveState.data && glLiveState.data.driving ? `drive since ${tripWhen(glLiveState.data.trip.start_time)}` : "right now")
+        : (d.window_label || `${d.window_days}-day window`))}</span>
       <button type="button" class="gl-swap" data-gl-swap title="Move the tabs to the other side"
         aria-label="Move the tabs to the other side"><svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>
@@ -4344,6 +4440,7 @@ document.addEventListener("click", (e) => {
     glanceTab = tab.dataset.glTab;
     glSave("glanceTab", glanceTab);
     if (lastData) renderGlance(lastData);
+    if (glanceTab === "live") glLivePoll();
     return;
   }
   if (e.target.closest("[data-gl-swap]")) {

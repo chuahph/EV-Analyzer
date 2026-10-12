@@ -12509,3 +12509,47 @@ def test_charge_end_level_refuses_a_reading_taken_on_a_drive():
                                                     state.TELEMETRY_CHARGE_SHADOW_KEY)
                                       else "[]"))
             s.commit()
+
+
+def test_live_reports_the_drive_in_flight_and_the_car_now():
+    """/api/live: the stream's open trip as live_trip's readout, plus the
+    newest composite (speed, energy, odometer) for instant figures."""
+    import json as _json
+    from app import state
+    from app.database import SessionLocal
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    keys = (state.TELEMETRY_LATEST_KEY, state.TELEMETRY_SHADOW_KEY)
+    try:
+        with TestClient(app) as client:
+            from app.api.routes import _first_vehicle
+            with SessionLocal() as s:
+                saved = {k: state.get(s, k) for k in keys}
+                vin = _first_vehicle(s).vin
+                car = {"_ts": "2026-10-12T00:10:00Z", "VehicleSpeed": 37.0, "Odometer": 6.2,
+                       "EnergyRemaining": 50.0, "BatteryLevel": 70.5, "Soc": 70.0, "Gear": "D"}
+                state.put(s, state.TELEMETRY_LATEST_KEY, _json.dumps({vin: car}))
+                state.put(s, state.TELEMETRY_SHADOW_KEY, "{}")
+                s.commit()
+            parked = client.get("/api/live?capacity_kwh=68.3").json()
+            assert parked["driving"] is False and parked["trip"] is None
+            assert parked["now"]["energy_kwh"] == 50.0
+            assert parked["now"]["battery_level"] == 70.5
+            with SessionLocal() as s:
+                start = {"ts": 1791720000.0, "odo_km": 8.0, "soc": 71.0, "energy_kwh": 51.0}
+                last = {"ts": 1791720600.0, "odo_km": 18.0, "soc": 70.0, "energy_kwh": 49.5,
+                        "speed_kmh": 60.0}
+                state.put(s, state.TELEMETRY_SHADOW_KEY, _json.dumps({vin: {"open": start, "last": last}}))
+                s.commit()
+            moving = client.get("/api/live?capacity_kwh=68.3").json()
+            assert moving["driving"] is True
+            assert moving["trip"]["distance_km"] == 10.0
+            assert moving["trip"]["duration_min"] == 10
+    finally:
+        settings.app_passcode = old
+        with SessionLocal() as s:
+            for k, v in saved.items():
+                state.put(s, k, v or "{}")
+            s.commit()

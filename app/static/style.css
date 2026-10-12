@@ -1969,3 +1969,15 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 }
 .gl-box-l { letter-spacing: .09em; }
 .gl-box-l::before { content: "▸ "; color: var(--tc); }
+
+/* Live page: a pulsing dot while the car is streaming a drive. */
+.gl-live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; font-weight: 650; }
+.gl-live b { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.gl-live.on { color: #22d3ee; }
+.gl-live.on b { background: #22d3ee; box-shadow: 0 0 0 0 rgba(34, 211, 238, .7); animation: gl-ping 1.6s ease-out infinite; }
+@keyframes gl-ping { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, .7); } 100% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); } }
+.gl-tab-live .gl-tab-face::after { content: ""; position: absolute; top: 4px; right: 12px; width: 6px; height: 6px;
+  border-radius: 50%; background: #22d3ee; box-shadow: 0 0 6px #22d3ee; animation: gl-blink 1.2s ease-in-out infinite; }
+@keyframes gl-blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .gl-live.on b, .gl-tab-live .gl-tab-face::after { animation: none; } }
