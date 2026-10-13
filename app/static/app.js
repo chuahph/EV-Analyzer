@@ -5201,7 +5201,7 @@ function renderGlance(d) {
       <span class="gl-sub">${h(glanceTab === "live"
         ? (glLiveState.data && glLiveState.data.driving ? `drive since ${tripWhen(glLiveState.data.trip.start_time)}` : "right now")
         : (d.window_label || `${d.window_days}-day window`))}</span>
-      ${glanceTab === "live" ? '<span class="gl-chip tone-warn gl-stalechip">Car signal weak · Catching up</span>' : ""}
+      ${glanceTab === "live" ? '<span class="gl-chip tone-warn gl-stalechip">Car Signal Weak · Catching Up</span>' : ""}
       <button type="button" class="gl-swap" data-gl-swap title="Move the tabs to the other side"
         aria-label="Move the tabs to the other side"><svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>
