@@ -2491,3 +2491,20 @@ main > .card { max-width: 100%; }
   .gl-mini em { font-size: 8px; }
   .gl-wide-only { display: none; }
 }
+/* Driving: the right column takes the same height as the trip computer on
+   the left (86% of the column, centred), the trace giving way to fit. */
+.gl-3 > .gl-side:has(> .gl-power) { height: 86%; align-self: center; justify-content: space-between; padding: 0; }
+.gl-3 > .gl-side:has(> .gl-power) > .gl-power, .gl-3 > .gl-side:has(> .gl-power) > .gl-battbar { padding: 7px 10px; }
+.gl-3 > .gl-side:has(> .gl-power) .gl-trace { min-height: 0; padding: 6px 10px; }
+.gl-3 > .gl-side:has(> .gl-power) .gl-trace svg { min-height: 24px; }
+.gl-3 > .gl-side:has(> .gl-power) .gl-battbar-cell { height: 13px; margin-top: 4px; }
+@media (orientation: landscape) and (max-height: 440px) {
+  /* Phone height: the scale under the power bar and the gaps give way, so
+     the Wh/km trace keeps room to be read. */
+  .gl-3 > .gl-side:has(> .gl-power) { gap: 5px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-power-scale { display: none; }
+  .gl-3 > .gl-side:has(> .gl-power) > .gl-power, .gl-3 > .gl-side:has(> .gl-power) > .gl-battbar { padding: 5px 8px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-power-top strong, .gl-3 > .gl-side:has(> .gl-power) .gl-battbar-top strong { font-size: clamp(14px, 4.2vh, 18px); }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-power-sub { font-size: 9.5px; margin-top: 1px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-trace { padding: 4px 8px; }
+}
