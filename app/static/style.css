@@ -2451,7 +2451,7 @@ main > .card { max-width: 100%; }
    column height and share it between the tiles. */
 .gl-side > .gl-trip { flex: 1 1 auto; max-height: 75%; margin-block: auto; }
 /* Room for the odometer line under the tiles while driving. */
-.gl-side > .gl-trip:has(.gl-odo) { max-height: 86%; }
+.gl-side > .gl-trip:has(.gl-odo) { max-height: 78%; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
 .gl-side > .gl-trip .gl-rt strong { font-size: clamp(23px, 7.6vh, 35px); line-height: 1; }
 @media (orientation: landscape) and (max-width: 740px) {
@@ -2493,7 +2493,7 @@ main > .card { max-width: 100%; }
 }
 /* Driving: the right column takes the same height as the trip computer on
    the left (86% of the column, centred), the trace giving way to fit. */
-.gl-3 > .gl-side:has(> .gl-power) { height: 86%; align-self: center; justify-content: space-between; padding: 0; }
+.gl-3 > .gl-side:has(> .gl-power) { height: 78%; align-self: center; justify-content: space-between; padding: 0; }
 .gl-3 > .gl-side:has(> .gl-power) > .gl-power, .gl-3 > .gl-side:has(> .gl-power) > .gl-battbar { padding: 7px 10px; }
 .gl-3 > .gl-side:has(> .gl-power) .gl-trace { min-height: 0; padding: 6px 10px; }
 .gl-3 > .gl-side:has(> .gl-power) .gl-trace svg { min-height: 24px; }
@@ -2518,4 +2518,16 @@ main > .card { max-width: 100%; }
   .gl-mini { padding: 3px 5px; }
   .gl-mini span { font-size: 7.5px; letter-spacing: 0; }
   .gl-mini em { display: none; }
+}
+/* Smaller box titles under the power bar. */
+.gl-mini span { font-size: 7.5px; letter-spacing: .04em; }
+@media (orientation: landscape) and (max-width: 740px) { .gl-mini span { font-size: 7px; letter-spacing: 0; } }
+/* iPhone Pro height: the shorter trip panel still holds its tiles and the
+   odometer line. */
+@media (orientation: landscape) and (max-height: 400px) and (min-width: 741px) {
+  .gl-side > .gl-trip:has(.gl-odo) { padding-top: 8px; padding-bottom: 8px; }
+  .gl-side > .gl-trip:has(.gl-odo) .gl-rts { gap: 6px; padding-top: 6px; }
+  .gl-side > .gl-trip:has(.gl-odo) .gl-rt { padding-top: 5px; padding-bottom: 5px; }
+  .gl-side > .gl-trip:has(.gl-odo) .gl-rt strong { font-size: clamp(20px, 6.8vh, 27px); }
+  .gl-side > .gl-trip:has(.gl-odo) .gl-odo { margin-top: 6px; padding-top: 3px; padding-bottom: 3px; }
 }
