@@ -2541,3 +2541,7 @@ main > .card { max-width: 100%; }
 .gl-eco .gl-pod::before, .gl-eco .gl-pod::after { background: none; }
 .gl-eco .gl-speedo > polygon:first-of-type { fill: #000; }
 .gl-eco .gl-power-track { background: #000; box-shadow: inset 0 0 0 1px #243142; }
+/* The strips' moving highlight is held still with the animation, which left
+   one white dash parked on each: without the animation, the dashes alone. */
+.gl-eco .gl-frame .strip { background:
+  repeating-linear-gradient(90deg, color-mix(in srgb, var(--tc) 85%, transparent) 0 10px, transparent 10px 15px); }

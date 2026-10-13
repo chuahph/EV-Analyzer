@@ -5156,15 +5156,22 @@ window.addEventListener("resize", () => {
   }, 150);
 });
 const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini > div, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
+// Shrink each figure or label that overflows its box. All the measuring is
+// done before any size is set, so the page lays out once per redraw instead
+// of once per adjusted element: text width scales with font size, so one
+// reading gives the size that fits. Run every second on the Live page.
 function glFit(root) {
-  root.querySelectorAll(GL_FIT).forEach((e) => {
-    e.style.fontSize = "";
-    let fs = parseFloat(getComputedStyle(e).fontSize), n = 0;
-    while (e.scrollWidth > e.clientWidth + 1 && fs > 8 && n++ < 10) {
-      fs *= 0.92;
-      e.style.fontSize = fs.toFixed(1) + "px";
+  const els = [...root.querySelectorAll(GL_FIT)];
+  for (const e of els) if (e.style.fontSize) e.style.fontSize = "";
+  const fix = [];
+  for (const e of els) {
+    const sw = e.scrollWidth, cw = e.clientWidth;
+    if (sw > cw + 1 && cw > 0) {
+      const fs = parseFloat(getComputedStyle(e).fontSize);
+      fix.push([e, Math.max(8, fs * cw / sw * 0.97)]);
     }
-  });
+  }
+  for (const [e, fs] of fix) e.style.fontSize = fs.toFixed(1) + "px";
 }
 
 document.addEventListener("click", (e) => {
