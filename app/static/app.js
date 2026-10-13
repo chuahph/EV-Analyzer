@@ -4915,10 +4915,10 @@ function renderGlance(d) {
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
         <span class="gl-chip tone-warn gl-stalechip">car signal weak · catching up</span>
-        ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip">screen kept on</span>'
+        ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip gl-keptchip">screen kept on</span>'
           : '<span class="gl-chip tone-warn">tap to keep screen on</span>'}
         <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "always bright" : "auto-dim"}</button>
-        ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
+        ${nw.out_temp != null ? `<span class="gl-chip gl-tempchip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
       const ico = {
@@ -4996,7 +4996,7 @@ function renderGlance(d) {
             <div class="gl-mini"><span>Est. range</span>
               <div><strong>${rangeHere != null ? n(rangeHere) : "—"}<small>km</small></strong>
               <em>${nw.range_km != null ? `rated ${n(nw.range_km)}` : ""}</em></div></div>
-            <div class="gl-mini regen"><span>Regen back</span>
+            <div class="gl-mini regen"><span>Regen</span>
               <div><strong>${t.regen_kwh != null ? n(t.regen_kwh, 2) : "—"}<small>kWh</small></strong>
               <em>${regenPct != null ? `${n(regenPct)}%` : ""}</em></div></div>
           </div>

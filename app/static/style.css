@@ -2568,3 +2568,20 @@ main > .card { max-width: 100%; }
 .gl-stalechip { display: none; }
 .gl-stale .gl-stalechip { display: inline-flex; }
 .gl-stale .gl-speedo .gl-spd { fill: #6f7f94; filter: none; }
+/* Est. range and Regen back: sized to be read at a glance while driving. */
+.gl-mini span { font-size: 9.5px; letter-spacing: .03em; color: #9fb0c3; }
+.gl-mini strong { font-size: clamp(15px, 4.6vh, 21px); }
+.gl-mini em { font-size: 10.5px; color: #9fb0c3; }
+@media (orientation: landscape) and (max-width: 740px) {
+  .gl-mini span { font-size: 8.5px; letter-spacing: 0; }
+  .gl-mini strong { font-size: clamp(14px, 4.4vh, 18px); }
+}
+/* The note sits at the right end of the figure's line. */
+.gl-mini > div em { margin-left: auto; overflow: visible; font-size: 10px; }
+.gl-mini strong small { margin-left: 2px; }
+@media (orientation: landscape) and (max-width: 740px) {
+  /* Room for the late-readings chip on one line. */
+  .gl-stale .gl-tempchip, .gl-stale .gl-keptchip { display: none; }
+}
+/* At this size the figures fill the boxes: the notes give way. */
+.gl-mini > div em { display: none; }
