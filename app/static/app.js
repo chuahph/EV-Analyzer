@@ -4643,26 +4643,19 @@ function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !doc
 // to about a third, as a watch's always-on face does. On an OLED iPhone a
 // dimmer pixel draws less power. A tap brings it all back for another spell.
 //
-// Not while the phone is charging (where the browser can tell: Chrome on
-// Android can, Safari on an iPhone cannot), and not when switched off with
-// the chip at the bottom of the page — for a phone on a cable in the car.
+// On by default every time the app opens. The chip at the bottom of the page
+// switches it to "always bright" for the rest of that visit — for a phone on
+// a cable in the car; reopening the app goes back to auto-dim.
 const GL_DIM_MS = 15000;
 let glDimTimer = null;
-const glDim = { off: (() => { try { return localStorage.getItem("glDimOff") === "1"; } catch (_) { return false; } })(), charging: false };
-function glDimAllowed() { return !glDim.off && !glDim.charging; }
+const glDim = { off: false };
+function glDimAllowed() { return !glDim.off; }
 function glDimArm() {
   clearTimeout(glDimTimer);
   glDimTimer = null;
   document.body.classList.remove("gl-dim");
   if (!glDimAllowed()) return;
   glDimTimer = setTimeout(() => { if (glWakeWanted() && glDimAllowed()) document.body.classList.add("gl-dim"); }, GL_DIM_MS);
-}
-if (navigator.getBattery) {
-  navigator.getBattery().then((b) => {
-    const upd = () => { glDim.charging = !!b.charging; glDimArm(); if (lastData && glanceTab === "live") glLiveDraw(); };
-    b.addEventListener("chargingchange", upd);
-    upd();
-  }).catch(() => { /* not offered here */ });
 }
 async function glWakeSync() {
   const want = glWakeWanted();
@@ -4886,7 +4879,7 @@ function renderGlance(d) {
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
         ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip">screen kept on</span>'
           : '<span class="gl-chip tone-warn">tap to keep screen on</span>'}
-        <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.charging ? "charging · no dim" : glDim.off ? "auto-dim off" : "auto-dim on"}</button>
+        <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "always bright" : "auto-dim"}</button>
         ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
@@ -5221,7 +5214,6 @@ document.addEventListener("click", (e) => {
   }
   if (e.target.closest("[data-gl-dim]")) {
     glDim.off = !glDim.off;
-    glSave("glDimOff", glDim.off ? "1" : "0");
     glDimArm();
     if (lastData) renderGlance(lastData);
     return;
