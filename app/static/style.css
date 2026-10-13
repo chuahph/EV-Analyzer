@@ -2453,9 +2453,12 @@ main > .card { max-width: 100%; }
 /* Room for the odometer line under the tiles while driving. */
 .gl-side > .gl-trip:has(.gl-odo) { max-height: 86%; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
-.gl-side > .gl-trip .gl-rt strong { font-size: clamp(18px, 5.4vh, 26px); }
+.gl-side > .gl-trip .gl-rt strong { font-size: clamp(20px, 6.4vh, 31px); }
 @media (orientation: landscape) and (max-width: 740px) {
-  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, 4.4vh, 18px); }
+  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(16px, 5.2vh, 21px); }
+  /* Narrow phones: the odometer icon says what the reading is. */
+  .gl-odo span { display: none; }
+  .gl-odo { padding: 4px 8px; }
 }
 
 /* Figures and headings are measured and shrunk to fit (glFit in app.js): they
