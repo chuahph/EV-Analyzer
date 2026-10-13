@@ -4651,11 +4651,14 @@ const GL_BRAKE_KMH_S = 10;   // about 0.28 g: firmer than the strongest regen
 let glDimTimer = null;
 const glDim = { off: false };
 function glDimAllowed() { return !glDim.off; }
+// While the brake pedal is held the screen stays bright with no countdown
+// (a wait at the lights); the 15 s start when it is let go.
+let glDimHold = false;
 function glDimArm() {
   clearTimeout(glDimTimer);
   glDimTimer = null;
   document.body.classList.remove("gl-dim");
-  if (!glDimAllowed()) return;
+  if (!glDimAllowed() || glDimHold) return;
   glDimTimer = setTimeout(() => { if (glWakeWanted() && glDimAllowed()) document.body.classList.add("gl-dim"); }, GL_DIM_MS);
 }
 async function glWakeSync() {
@@ -4664,7 +4667,7 @@ async function glWakeSync() {
   // .gl-eco in style.css): measured, they were nine-tenths of the page's work.
   document.body.classList.toggle("gl-eco", want);
   if (!want || !glDimAllowed()) { clearTimeout(glDimTimer); glDimTimer = null; document.body.classList.remove("gl-dim"); }
-  else if (!glDimTimer && !document.body.classList.contains("gl-dim")) glDimArm();
+  else if (!glDimTimer && !glDimHold && !document.body.classList.contains("gl-dim")) glDimArm();
   if (glWakeIOS) glWakeVideo(want);
   if (want && !glWake.lock && glWake.supported) {
     try {
@@ -4735,9 +4738,13 @@ function glLiveApply(L) {
     const braking = nw.brake == null && v != null && lv != null && dt >= 0.5 && dt <= 2.5
       && (lv - v) / dt >= GL_BRAKE_KMH_S;
     // The pedal itself, when the car streams it, is the surest sign of all.
-    const pedal = nw.brake === true && glLiveState.lastBrake !== true;
-    glLiveState.lastBrake = nw.brake;
-    if (pedal || braking || (v === 0 && lv > 0) || (nw.shift && ls && nw.shift !== ls)) glDimArm();
+    // Every reading of the pedal down keeps the screen bright (so a missed
+    // release can never leave a later press unseen); letting it go starts
+    // the 15 s afresh.
+    const wasHeld = glDimHold;
+    glDimHold = nw.brake === true && nw.shift !== "P";
+    if (glDimHold || (wasHeld && !glDimHold) || braking || (v === 0 && lv > 0)
+        || (nw.shift && ls && nw.shift !== ls)) glDimArm();
     if (v != null && nw.ts) { glLiveState.lastV = v; glLiveState.lastT = nw.ts; }
     if (nw.shift) glLiveState.lastShift = nw.shift;
   }
