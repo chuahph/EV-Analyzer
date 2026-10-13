@@ -2554,9 +2554,11 @@ main > .card { max-width: 100%; }
 .gl-odo i, .gl-odo span, .gl-power-top span, .gl-power-track, .gl-mini span, .gl-mini em,
 .gl-trace, .gl-battbar-top span, .gl-battbar-cell, .gl-power-sub, .gl-speedo > :not(text) { transition: opacity .8s ease; }
 .gl-dim .gl-frame, .gl-dim .gl-rail, .gl-dim .gl-head, .gl-dim .gl-foot { opacity: .3; }
-.gl-dim .gl-trip-h, .gl-dim .gl-rt i, .gl-dim .gl-rt span, .gl-dim .gl-rt::after, .gl-dim .gl-odo i, .gl-dim .gl-odo span,
-.gl-dim .gl-power-top span, .gl-dim .gl-mini span, .gl-dim .gl-mini em, .gl-dim .gl-battbar-top span,
-.gl-dim .gl-power-sub { opacity: .4; }
+/* The labels of the readings that stay bright stay readable too (KM, MIN,
+   AVG KM/H, WH/KM, EST. RANGE, REGEN, ODOMETER, POWER, BATTERY): a bare
+   number says nothing about what it is. Icons, headings and notes fade. */
+.gl-dim .gl-trip-h, .gl-dim .gl-rt i, .gl-dim .gl-rt::after, .gl-dim .gl-odo i,
+.gl-dim .gl-mini em, .gl-dim .gl-power-sub { opacity: .4; }
 .gl-dim .gl-power-track, .gl-dim .gl-battbar-cell, .gl-dim .gl-trace { opacity: .45; }
 .gl-dim .gl-speedo > :not(text) { opacity: .35; }
 .gl-dim .gl-trip, .gl-dim .gl-rt, .gl-dim .gl-odo, .gl-dim .gl-mini, .gl-dim .gl-power, .gl-dim .gl-battbar,
