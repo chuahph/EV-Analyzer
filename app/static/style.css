@@ -2531,3 +2531,13 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip:has(.gl-odo) .gl-rt strong { font-size: clamp(20px, 6.8vh, 27px); }
   .gl-side > .gl-trip:has(.gl-odo) .gl-odo { margin-top: 6px; padding-top: 3px; padding-bottom: 3px; }
 }
+/* Live page on screen (body.gl-eco): true black behind everything. On the
+   OLED screen of a recent iPhone a black pixel is switched off, and the deep
+   navy here lit almost every pixel on the screen (95% of them, against 31%
+   in black) for the whole drive. Borders, figures and colours stay. */
+.gl-eco .glance, .gl-eco .gl-main, .gl-eco .gl-body, .gl-eco .gl-pod, .gl-eco .gl-trip, .gl-eco .gl-rt,
+.gl-eco .gl-odo, .gl-eco .gl-mini, .gl-eco .gl-trace, .gl-eco .gl-power, .gl-eco .gl-battbar { background: #000; }
+.gl-eco .glance::before, .gl-eco .glance::after, .gl-eco .gl-main::before, .gl-eco .gl-main::after,
+.gl-eco .gl-pod::before, .gl-eco .gl-pod::after { background: none; }
+.gl-eco .gl-speedo > polygon:first-of-type { fill: #000; }
+.gl-eco .gl-power-track { background: #000; box-shadow: inset 0 0 0 1px #243142; }
