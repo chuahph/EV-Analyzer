@@ -2585,3 +2585,8 @@ main > .card { max-width: 100%; }
 }
 /* At this size the figures fill the boxes: the notes give way. */
 .gl-mini > div em { display: none; }
+/* The car's own rated range beside the battery title, to set against
+   Est. range above it. */
+.gl-rated { font-style: normal; margin-left: 8px; text-transform: none; letter-spacing: 0; font-size: .85em; color: #9fb0c3; }
+.gl-rated i { font-style: normal; }
+@media (orientation: landscape) and (max-width: 740px) { .gl-rated { margin-left: 5px; margin-right: 6px; } }

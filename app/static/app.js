@@ -5006,7 +5006,7 @@ function renderGlance(d) {
       const packKwh = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
       const usedPct = Math.max(+t.soc_used || 0, packKwh && t.energy_kwh > 0 ? t.energy_kwh / packKwh * 100 : 0);
       const battBar = `<div class="gl-battbar">
-          <div class="gl-battbar-top"><span>Battery</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
+          <div class="gl-battbar-top"><span>Battery${nw.range_km != null ? `<em class="gl-rated">rated ${n(nw.range_km)}<i class="gl-wide-only"> km</i></em>` : ""}</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
           <div class="gl-power-sub">used ${n(usedPct, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
