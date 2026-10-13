@@ -4918,8 +4918,8 @@ function renderGlance(d) {
         : t ? (fresh ? `live · updated ${nw.age_sec}s ago` : `drive open · last heard ${Math.round(nw.age_sec / 60)} min ago`)
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
-        <span class="gl-chip tone-warn gl-stalechip">car signal weak · catching up</span>
-        <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "always bright" : "auto-dim"}</button>
+        <span class="gl-chip tone-warn gl-stalechip">Car signal weak · Catching up</span>
+        <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "ALWAYS BRIGHT" : "AUTO-DIM"}</button>
         ${nw.out_temp != null ? `<span class="gl-chip gl-opt">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip gl-opt">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip gl-opt">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
