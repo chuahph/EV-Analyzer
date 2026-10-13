@@ -36,14 +36,18 @@ def _clear_full_history_cache():
     failure mode is a wrong number with no error — never inherits a test's
     fixture data.
     """
+    from app import state
     from app.api import routes
 
+    state.clear_process_cache()
     routes._FULL_HISTORY_CACHE.clear()
     routes._PARKED_READINGS_CACHE.clear()
+    routes._PARKED_READINGS_ROWS.clear()
     routes._HEALTH_CHECKS_CACHE = None
     yield
     routes._FULL_HISTORY_CACHE.clear()
     routes._PARKED_READINGS_CACHE.clear()
+    routes._PARKED_READINGS_ROWS.clear()
     routes._HEALTH_CHECKS_CACHE = None
 
 

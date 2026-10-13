@@ -143,3 +143,58 @@ def test_drop_column_removes_it_once_and_then_does_nothing():
         db._drop_column("no_such_table", "dashcam_state")
     finally:
         db.engine = was
+
+
+def test_process_state_copy_follows_commits_and_ignores_rollbacks():
+    """The in-memory copy of the telemetry stores (state._PROC) must only
+    ever hold what the database holds: updated after a commit, never by a
+    write that was rolled back, and seen by every later session."""
+    from sqlalchemy import create_engine
+    from sqlalchemy import event as sa_event
+    from sqlalchemy.orm import sessionmaker
+
+    from app import state
+    from app.models import Base, Setting
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    Make = sessionmaker(bind=engine, expire_on_commit=False)
+    key = state.TELEMETRY_SHADOW_KEY
+    loads: list[str] = []
+
+    def count(target, _ctx):
+        loads.append(target.key)
+
+    sa_event.listen(Setting, "load", count)
+    try:
+        with Make() as a:
+            assert state.get(a, key) == ""
+            state.put(a, key, "one")
+        with Make() as b:
+            loads.clear()
+            assert state.get(b, key) == "one"
+            state.enable_cache(b, key)
+            assert state.get(b, key) == "one"
+            assert loads == []  # served from memory both ways
+            state.put(b, key, "two")
+        with Make() as c:
+            row = c.get(Setting, key)
+            assert row.value == "two"  # the write through memory reached the database
+            row.value = "rolled back"
+            state._proc_pending(c, key, "rolled back")
+            c.rollback()
+        with Make() as d:
+            assert state.get(d, key) == "two"
+            state.delete(d, key)
+        with Make() as e:
+            assert state.get(e, key) == ""
+            assert e.get(Setting, key) is None
+        # Keys outside the telemetry stores are always read from the database.
+        with Make() as f:
+            state.put(f, state.TOKEN_KEY, "t")
+        with Make() as g:
+            loads.clear()
+            assert state.get(g, state.TOKEN_KEY) == "t"
+            assert loads == [state.TOKEN_KEY]
+    finally:
+        sa_event.remove(Setting, "load", count)

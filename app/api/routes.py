@@ -1242,6 +1242,9 @@ SENTRY_HISTORY_DAYS = 90
 # again on every reload even when nothing in that window could have changed.
 _PARKED_READINGS_CACHE: dict[int, tuple[float, object]] = {}
 _PARKED_READINGS_TTL_SEC = 120.0
+# The rows behind it, topped up rather than re-read — see _parked_readings.
+_PARKED_READINGS_ROWS: dict[int, tuple[float, list]] = {}
+_PARKED_READINGS_FULL_SEC = 6 * 3600.0
 
 
 def _parked_readings(session: Session, vehicle_id: int):
@@ -1272,20 +1275,36 @@ def _parked_readings(session: Session, vehicle_id: int):
     cached = _PARKED_READINGS_CACHE.get(vehicle_id)
     if cached is not None and now - cached[0] < _PARKED_READINGS_TTL_SEC:
         return cached[1]
-    rows = session.execute(
-        select(BatteryReading.ts, BatteryReading.sentry_state,
-               BatteryReading.sentry_mode)
-        .where(BatteryReading.vehicle_id == vehicle_id,
-               BatteryReading.ts >= (sync_mod.now_local()
-                                     - timedelta(days=SENTRY_HISTORY_DAYS)),
-               # A reading that knows nothing about Sentry answers nothing:
-               # the index skips them when it reads a gap, so carrying them
-               # only makes the list longer. Either column will do — a row
-               # written since the stream carried the state has both, an
-               # older one has only the flag.
-               or_(BatteryReading.sentry_state.is_not(None),
-                   BatteryReading.sentry_mode.is_not(None)))
-        .order_by(BatteryReading.ts)).all()
+    since = sync_mod.now_local() - timedelta(days=SENTRY_HISTORY_DAYS)
+    # Past the short TTL, only the readings added since are fetched: the full
+    # 90 days was ~4,000 rows and 180 KB of database egress on every dashboard
+    # open, to learn about the handful written since the last one. The whole
+    # window is re-read every _PARKED_READINGS_FULL_SEC, which picks up the
+    # rare reading written out of order (an import) or removed.
+    old = _PARKED_READINGS_ROWS.get(vehicle_id)
+    fresh = old is None or now - old[0] >= _PARKED_READINGS_FULL_SEC
+    q = select(BatteryReading.ts, BatteryReading.sentry_state,
+               BatteryReading.sentry_mode).where(
+        BatteryReading.vehicle_id == vehicle_id,
+        BatteryReading.ts >= since,
+        # A reading that knows nothing about Sentry answers nothing:
+        # the index skips them when it reads a gap, so carrying them
+        # only makes the list longer. Either column will do — a row
+        # written since the stream carried the state has both, an
+        # older one has only the flag.
+        or_(BatteryReading.sentry_state.is_not(None),
+            BatteryReading.sentry_mode.is_not(None)))
+    if fresh:
+        rows = [tuple(r) for r in session.execute(q.order_by(BatteryReading.ts)).all()]
+        full_at = now
+    else:
+        full_at, kept = old
+        last = kept[-1][0] if kept else None
+        if last is not None:
+            q = q.where(BatteryReading.ts > last)
+        rows = [r for r in kept if r[0] >= since] + [
+            tuple(r) for r in session.execute(q.order_by(BatteryReading.ts)).all()]
+    _PARKED_READINGS_ROWS[vehicle_id] = (full_at, rows)
     index = driving_analysis.SentryIndex.from_sorted(
         (ts, driving_analysis.sentry_armed(state, flag))
         for ts, state, flag in rows)

@@ -584,6 +584,7 @@ def test_the_parked_readings_reach_the_sleep_gap_recovery():
     from app import sync as sync_mod
     from app.api import routes
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     made = []
@@ -1592,6 +1593,7 @@ def test_idle_inducer_detects_sentry_and_climate_but_never_a_negative():
     of a real gap is unobserved)."""
     from app.api.routes import _idle_inducer
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     with SessionLocal() as s:
@@ -1646,6 +1648,7 @@ def test_idle_inducer_prefers_cabin_overheat_protection_over_generic_climate():
     was left enabled, not because it ever activated)."""
     from app.api.routes import _idle_inducer
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     with SessionLocal() as s:
@@ -2015,6 +2018,7 @@ def test_sentry_drain_alert_fires_once_per_parked_episode(monkeypatch):
 
     from app.api.routes import _process_vehicle
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     settings = SimpleNamespace(
@@ -2148,6 +2152,7 @@ def test_sentry_drain_alert_respects_the_streams_open_trip(monkeypatch):
     from app import state
     from app.api.routes import _process_vehicle
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     vin = "TESTVIN-SENTRY2"
@@ -2227,6 +2232,7 @@ def test_sentry_drain_alert_ignores_an_idle_park_that_never_arms(monkeypatch):
 
     from app.api.routes import _evaluate_alerts
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     vin = "TESTVIN-IDLESENTRY"
@@ -2452,6 +2458,7 @@ def test_intrusion_alert_fires_once_per_opening(monkeypatch):
 
     from app.api.routes import _process_vehicle
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     settings = SimpleNamespace(
@@ -7805,6 +7812,7 @@ def test_sentry_idle_is_not_armed(session):
 
     from app.analysis.driving import SentryIndex, sentry_armed
     from app.api.routes import _parked_readings
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     assert sentry_armed("SentryModeStateIdle", True) is False
@@ -8054,6 +8062,7 @@ def test_the_sentry_index_answers_the_same_from_two_columns_as_from_whole_rows(s
 
     from app.api.routes import _parked_readings
     from app.analysis.driving import SentryIndex
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     car = Vehicle(name="Mine", vin="SENTRYVIN0000001")
@@ -8384,6 +8393,7 @@ def test_telemetry_writes_battery_readings_on_pollings_own_rules():
     from app import state
     from app.config import get_settings
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     settings = get_settings()
@@ -9921,6 +9931,7 @@ def test_a_park_that_arms_sentry_writes_a_reading_saying_so():
     """
     from app.api import routes
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
     from app.analysis import driving as driving_analysis
 
@@ -10006,6 +10017,7 @@ def test_telemetry_battery_reading_does_not_scan_the_whole_table():
 
     from app.api import routes
     from app.database import SessionLocal, engine
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     with TestClient(app):
@@ -12100,6 +12112,7 @@ def test_current_soc_prefers_the_streams_decimal_over_a_whole_point_reading():
     from app import sync as sync_mod
     from app.api.routes import _current_soc
     from app.database import SessionLocal
+    from app import sync as sync_mod
     from app.models import BatteryReading, Vehicle
 
     with TestClient(app):
@@ -12734,3 +12747,93 @@ def test_the_live_fast_lane_stays_in_memory():
     finally:
         settings.app_passcode, settings.sync_key = old_pc, old_sk
         routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_telemetry_batches_do_not_read_back_what_they_just_wrote():
+    """A relay batch every few seconds re-read the same stores it had written
+    a moment before — about 8 KB of database egress each, megabytes an hour
+    of driving. The server is the only writer, so the second batch must take
+    them from memory and only write."""
+    from sqlalchemy import event as sa_event
+
+    from app.models import Setting
+
+    settings = get_settings()
+    old_sk = settings.sync_key
+    settings.sync_key = "cronkey"
+
+    def batch(sec):
+        return {"records": [{
+            "vin": "5YJ3PROC",
+            "createdAt": f"2026-09-07T14:00:{sec:02d}Z",
+            "data": [{"key": "Odometer", "value": {"doubleValue": 100.0 + sec / 100}},
+                     {"key": "VehicleSpeed", "value": {"doubleValue": 40.0}},
+                     {"key": "Gear", "value": {"shiftStateValue": "ShiftStateD"}}],
+        }]}
+
+    loaded: list[str] = []
+
+    def count(target, _ctx):
+        loaded.append(target.key)
+
+    try:
+        with TestClient(app) as client:
+            assert client.post("/api/telemetry?key=cronkey", json=batch(1)).status_code == 200
+            sa_event.listen(Setting, "load", count)
+            try:
+                assert client.post("/api/telemetry?key=cronkey", json=batch(6)).status_code == 200
+            finally:
+                sa_event.remove(Setting, "load", count)
+            assert not [k for k in loaded if k.startswith("telemetry_")], loaded
+            # And what was written is what the next reader sees.
+            from app import state
+            from app.database import SessionLocal
+
+            state.clear_process_cache()
+            with SessionLocal() as s:
+                latest = json.loads(state.get(s, state.TELEMETRY_LATEST_KEY) or "{}")
+            assert latest["5YJ3PROC"]["VehicleSpeed"] == 40.0
+    finally:
+        settings.sync_key = old_sk
+
+
+def test_sentry_history_is_topped_up_not_reread(seeded):
+    """The 90-day Sentry history was re-read in full on every dashboard open
+    (~4,000 rows, 180 KB). Past its short cache it now fetches only readings
+    newer than the last one it has, and still sees them."""
+    from datetime import timedelta
+
+    from sqlalchemy import event as sa_event
+
+    from app.api import routes
+    from app import sync as sync_mod
+    from app.models import BatteryReading, Vehicle
+
+    vid = seeded.scalar(select(Vehicle.id))
+    newest = sync_mod.now_local().replace(microsecond=0, tzinfo=None) - timedelta(hours=1)
+    seeded.add(BatteryReading(vehicle_id=vid, ts=newest - timedelta(minutes=1),
+                              soc=50.0, range_km=250.0, sentry_mode=True))
+    seeded.commit()
+    first = routes._parked_readings(seeded, vid)
+    n0 = len(first._ts)
+    assert n0 >= 1
+
+    seeded.add(BatteryReading(vehicle_id=vid, ts=newest + timedelta(minutes=5),
+                              soc=50.0, range_km=250.0, sentry_mode=True))
+    seeded.commit()
+    routes._PARKED_READINGS_CACHE.clear()  # the short TTL has passed
+    engine = seeded.get_bind()
+    fetched: list = []
+
+    def count(conn, cursor, statement, params, context, executemany):
+        if "sentry_mode" in statement and "battery_readings" in statement:
+            fetched.append(statement)
+
+    sa_event.listen(engine, "after_cursor_execute", count)
+    try:
+        again = routes._parked_readings(seeded, vid)
+    finally:
+        sa_event.remove(engine, "after_cursor_execute", count)
+    assert len(again._ts) == n0 + 1
+    assert again._ts[-1] == newest + timedelta(minutes=5)
+    assert len(fetched) == 1 and "battery_readings.ts >" in fetched[0].replace("  ", " ")

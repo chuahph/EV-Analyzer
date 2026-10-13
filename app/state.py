@@ -5,6 +5,9 @@ data set, and a linked Tesla account without restarting or editing ``.env``.
 """
 from __future__ import annotations
 
+import time
+
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -263,23 +266,135 @@ PRICE_UPDATED_AT_KEY = "price_updated_at"
 _CACHE = "state_cache"
 
 
+# Process-wide copy of the telemetry stores, kept current by every commit.
+#
+# Each relay batch (every ~5 s while the car is awake) read the same handful
+# of stores back from the database before writing them again — about 8 KB of
+# database egress a batch, 3-5 MB an hour of driving, for values this process
+# had itself written a few seconds earlier. Every write to the settings table
+# goes through put()/delete() below and the server runs one worker, so the
+# last committed value is already known here; the database is read only for
+# a key this process has not seen, or one older than _PROC_TTL_SEC (a guard
+# against a write from outside, such as a CLI run, rather than something the
+# server relies on).
+#
+# Updated only after a commit succeeds, so a rolled-back write is never served.
+_PROC: dict[tuple[int, str], tuple[float, str | None]] = {}
+_PROC_TTL_SEC = 30 * 60.0
+_PROC_PENDING = "state_proc_pending"
+_MISS = object()
+_PROC_LOCK = __import__("threading").Lock()
+
+
+def _tracked(key: str) -> bool:
+    base = key.split("::", 1)[0]
+    return (base.startswith("telemetry_") or base in (
+        PROMOTE_REFUSED_KEY, PROMOTE_FAIL_KEY, LAST_STATUS_KEY,
+        SENTRY_AWARE_PENDING_KEY))
+
+
+def _bind_id(session: Session) -> int:
+    try:
+        return id(session.get_bind())
+    except Exception:  # noqa: BLE001 — unbound session: no shared copy
+        return 0
+
+
+def _proc_get(session: Session, key: str):
+    if not _tracked(key):
+        return _MISS
+    with _PROC_LOCK:
+        hit = _PROC.get((_bind_id(session), key))
+    if hit is None or time.monotonic() - hit[0] > _PROC_TTL_SEC:
+        return _MISS
+    return hit[1]
+
+
+def _proc_set(session: Session, key: str, value: str | None) -> None:
+    if _tracked(key):
+        with _PROC_LOCK:
+            _PROC[(_bind_id(session), key)] = (time.monotonic(), value)
+
+
+def _proc_pending(session: Session, key: str, value: str | None) -> None:
+    if _tracked(key):
+        session.info.setdefault(_PROC_PENDING, {})[key] = value
+
+
+def clear_process_cache() -> None:
+    with _PROC_LOCK:
+        _PROC.clear()
+
+
+@event.listens_for(Session, "after_commit")
+def _proc_after_commit(session: Session) -> None:
+    pending = session.info.pop(_PROC_PENDING, None)
+    for key, value in (pending or {}).items():
+        _proc_set(session, key, value)
+
+
+@event.listens_for(Session, "after_rollback")
+def _proc_after_rollback(session: Session) -> None:
+    # The database kept its old value, but drop the copy anyway: it is the
+    # cheap side to be wrong on.
+    pending = session.info.pop(_PROC_PENDING, None)
+    if pending:
+        bind = _bind_id(session)
+        with _PROC_LOCK:
+            for key in pending:
+                _PROC.pop((bind, key), None)
+
+
+def _attach(session: Session, key: str, value: str) -> Setting:
+    """A row for a value known to be in the database, without loading it."""
+    from sqlalchemy.orm import make_transient_to_detached
+
+    row = session.identity_map.get(session.identity_key(Setting, key))
+    if row is not None:
+        return row
+    row = Setting(key=key, value=value)
+    make_transient_to_detached(row)
+    session.add(row)
+    return row
+
+
 def enable_cache(session: Session, *preload: str) -> None:
     """Cache state reads for the rest of this session, loading ``preload``
-    in one query instead of one query each."""
+    in one query instead of one query each — and none at all for a key this
+    process already holds (see _PROC)."""
     from sqlalchemy import select
 
     c = session.info.setdefault(_CACHE, {"rows": {}, "absent": set()})
-    if preload:
-        found = session.scalars(select(Setting).where(Setting.key.in_(preload))).all()
+    need = []
+    for key in preload:
+        hit = _proc_get(session, key)
+        if hit is _MISS:
+            need.append(key)
+        elif hit is None:
+            c["absent"].add(key)
+        else:
+            c["rows"][key] = _attach(session, key, hit)
+    if need:
+        found = session.scalars(select(Setting).where(Setting.key.in_(need))).all()
         for row in found:
             c["rows"][row.key] = row
-        c["absent"].update(set(preload) - {row.key for row in found})
+            _proc_set(session, row.key, row.value)
+        for key in set(need) - {row.key for row in found}:
+            c["absent"].add(key)
+            _proc_set(session, key, None)
 
 
 def _row(session: Session, key: str) -> Setting | None:
     c = session.info.get(_CACHE)
     if c is None:
-        return session.get(Setting, key)
+        hit = _proc_get(session, key)
+        if hit is None:
+            return None
+        if hit is not _MISS:
+            return _attach(session, key, hit)
+        row = session.get(Setting, key)
+        _proc_set(session, key, row.value if row is not None else None)
+        return row
     if key in c["absent"]:
         return None
     row = c["rows"].get(key)
@@ -296,6 +411,7 @@ def _row(session: Session, key: str) -> Setting | None:
         c["absent"].add(key)
     else:
         c["rows"][key] = row
+    _proc_set(session, key, row.value if row is not None else None)
     return row
 
 
@@ -322,6 +438,7 @@ def put(session: Session, key: str, value: str) -> None:
         row = c["rows"].get(key)
     if row is None:
         row = session.identity_map.get(session.identity_key(Setting, key))
+    _proc_pending(session, key, value)
     if row is not None:
         row.value = value
         session.commit()
@@ -349,6 +466,7 @@ def delete(session: Session, *keys: str) -> None:
         row = _row(session, key)
         if row is not None:
             session.delete(row)
+        _proc_pending(session, key, None)
         if c is not None:
             c["rows"].pop(key, None)
             c["absent"].add(key)
@@ -367,6 +485,7 @@ def delete_scoped(session: Session, *base_keys: str) -> None:
     ).all()
     for row in rows:
         session.delete(row)
+        _proc_pending(session, row.key, None)
     if _CACHE in session.info:
         session.info[_CACHE] = {"rows": {}, "absent": set()}
     session.commit()
