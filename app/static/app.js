@@ -4927,11 +4927,11 @@ function renderGlance(d) {
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           <div class="gl-minis">
             <div class="gl-mini"><span>Est. range</span>
-              <strong>${rangeHere != null ? n(rangeHere) : "—"}<small>km</small></strong>
-              <em>${nw.range_km != null ? `rated ${n(nw.range_km)}` : "&nbsp;"}</em></div>
+              <div><strong>${rangeHere != null ? n(rangeHere) : "—"}<small>km</small></strong>
+              <em>${nw.range_km != null ? `rated ${n(nw.range_km)}` : ""}</em></div></div>
             <div class="gl-mini regen"><span>Regen back</span>
-              <strong>${t.regen_kwh != null ? n(t.regen_kwh, 2) : "—"}<small>kWh</small></strong>
-              <em>${regenPct != null ? `${n(regenPct)}% of energy` : "&nbsp;"}</em></div>
+              <div><strong>${t.regen_kwh != null ? n(t.regen_kwh, 2) : "—"}<small>kWh</small></strong>
+              <em>${regenPct != null ? `${n(regenPct)}%` : ""}</em></div></div>
           </div>
         </div>`;
       // The car's battery % moves in whole steps, which barely register on a short
@@ -5155,7 +5155,7 @@ window.addEventListener("resize", () => {
     if (el && glanceVisible()) glFit(el);
   }, 150);
 });
-const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini strong, .gl-mini em, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
+const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini > div, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
 function glFit(root) {
   root.querySelectorAll(GL_FIT).forEach((e) => {
     e.style.fontSize = "";

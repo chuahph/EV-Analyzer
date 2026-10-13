@@ -2508,3 +2508,14 @@ main > .card { max-width: 100%; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-power-sub { font-size: 9.5px; margin-top: 1px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-trace { padding: 4px 8px; }
 }
+/* Compact: label on one line, the figure and its note on the next. */
+.gl-mini { padding: 3px 7px; gap: 0; }
+.gl-mini > div { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.gl-mini strong { font-size: clamp(11px, 3.1vh, 14px); }
+.gl-mini em { font-size: 8.5px; }
+.gl-minis { margin-top: 6px; gap: 6px; }
+@media (orientation: landscape) and (max-width: 740px) {
+  .gl-mini { padding: 3px 5px; }
+  .gl-mini span { font-size: 7.5px; letter-spacing: 0; }
+  .gl-mini em { display: none; }
+}
