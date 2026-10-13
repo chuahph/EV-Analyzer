@@ -4157,8 +4157,10 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
   const v = has ? +value : 0;
   // A colour for each speed band, so the panel changes as the car speeds up
   // through town, main road and highway speeds, not only past 110.
-  const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 120 ? "#fb923c" : x > 100 ? "#facc15"
-    : x > 80 ? "#a3e635" : x > 60 ? "#34d399" : x > 30 ? "#22d3ee" : "#60a5fa");
+  // Seven clearly different hues, one per band: blue, cyan, green, yellow,
+  // orange, red, then magenta past 140.
+  const colourAt = (x) => (x > 140 ? "#e040fb" : x > 120 ? "#ff3b3b" : x > 100 ? "#ff8a1f"
+    : x > 80 ? "#ffe03a" : x > 60 ? "#2ee86a" : x > 30 ? "#19e3f5" : "#3d7bff");
   const X0 = 30, X1 = 230, N = 40, step = (X1 - X0) / N, BY = 186, BH = 15;
   const xOf = (x) => X0 + Math.max(0, Math.min(max, x)) / max * (X1 - X0);
   let segs = "";
