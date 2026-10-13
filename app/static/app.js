@@ -4505,6 +4505,55 @@ function glTrace(hist) {
     </svg></div>`;
 }
 
+// Wh/km over the last three minutes, each point averaged over the 15 s
+// before it (energy over distance, not a one-second ratio), against the rated
+// line: green under it, amber over it.
+function glEffTrace(hist, rated) {
+  const W = 300, H = 92, R = rated || 150;
+  const n = (v) => Math.round(v).toLocaleString("en-US");
+  const pts = [];
+  for (let i = 1; i < (hist || []).length; i++) {
+    let e = 0, d = 0;
+    for (let j = i; j > 0 && hist[i].t - hist[j - 1].t <= 15; j--) {
+      const dt = hist[j].t - hist[j - 1].t;
+      if (dt <= 0 || dt > 10 || hist[j].kw == null) continue;
+      e += hist[j].kw * dt / 3600;
+      d += hist[j].v * dt / 3600;
+    }
+    pts.push({ t: hist[i].t, w: d > 0.02 ? e * 1000 / d : null });
+  }
+  const shown = pts.filter((p) => p.w != null);
+  const head = (now) => `<div class="gl-trace-h"><span>Wh/km<i class="gl-wide-only"> · last 3 min</i></span>
+      <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${n(now)}</strong> now · ` : ""}rated ${n(R)}</span></div>`;
+  if (shown.length < 2) {
+    return `<div class="gl-trace">${head(null)}<div class="gl-trace-wait">building the trace…</div></div>`;
+  }
+  const lo = Math.min(...shown.map((p) => p.w)), hi = Math.max(...shown.map((p) => p.w));
+  // The rated line sits near the middle; a spike past the window is drawn at its edge.
+  const top = Math.min(Math.max(hi, R * 1.6), R * 2.5), bot = Math.max(Math.min(lo, R * 0.4), -R * 0.5);
+  const t0 = hist[0].t, t1 = hist[hist.length - 1].t || t0 + 1;
+  const x = (t) => ((t - t0) / Math.max(1, t1 - t0) * W).toFixed(1);
+  const y = (w) => (4 + (top - Math.max(bot, Math.min(top, w))) / (top - bot) * (H - 8)).toFixed(1);
+  const yr = y(R);
+  let path = "", open = false;
+  for (const p of pts) {
+    if (p.w == null) { open = false; continue; }
+    path += `${open ? "L" : "M"}${x(p.t)} ${y(p.w)} `;
+    open = true;
+  }
+  const uid = `ge${++glDialSeq}`;
+  return `<div class="gl-trace">${head(shown[shown.length - 1].w)}
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <defs><clipPath id="${uid}-a"><rect x="0" y="0" width="${W}" height="${yr}"/></clipPath>
+        <clipPath id="${uid}-b"><rect x="0" y="${yr}" width="${W}" height="${H}"/></clipPath></defs>
+      <rect x="0" y="0" width="${W}" height="${yr}" fill="rgba(245,158,11,.07)"/>
+      <rect x="0" y="${yr}" width="${W}" height="${H - yr}" fill="rgba(34,197,94,.07)"/>
+      <line x1="0" x2="${W}" y1="${yr}" y2="${yr}" stroke="#cfe8ff" stroke-width="1.2" stroke-dasharray="5 4" opacity=".7" vector-effect="non-scaling-stroke"/>
+      <path d="${path}" fill="none" stroke="var(--amber)" stroke-width="2.2" clip-path="url(#${uid}-a)" vector-effect="non-scaling-stroke"/>
+      <path d="${path}" fill="none" stroke="var(--green)" stroke-width="2.2" clip-path="url(#${uid}-b)" vector-effect="non-scaling-stroke"/>
+    </svg></div>`;
+}
+
 function glBox(label, value, unit, tone = "") {
   return `<div class="gl-box ${tone}"><span class="gl-box-l">${h(label)}</span>
     <span class="gl-box-v">${value}<small>${h(unit || "")}</small></span></div>`;
@@ -4861,6 +4910,11 @@ function renderGlance(d) {
       // the last few minutes and a battery bar, so neither side repeats the
       // Drive page's LED meters.
       const kw = inst && inst.kw != null ? inst.kw : null;
+      // How far the energy left would go at this drive's Wh/km, beside the
+      // car's own rated figure; and what braking has put back this drive.
+      const rangeHere = nw.energy_kwh != null && tw > 0 ? nw.energy_kwh * 1000 / tw : null;
+      const regenPct = t.regen_kwh > 0 && t.energy_kwh > 0
+        ? t.regen_kwh / (t.energy_kwh + t.regen_kwh) * 100 : null;
       const kwMin = -60, kwMax = 150, zero = -kwMin / (kwMax - kwMin) * 100;
       const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
       const powerBar = `<div class="gl-power">
@@ -4871,7 +4925,14 @@ function renderGlance(d) {
               style="left:${Math.min(zero, kwPos).toFixed(1)}%;width:${Math.abs(kwPos - zero).toFixed(1)}%"></i>`}
             <b style="left:${zero.toFixed(1)}%"></b></div>
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
-          ${inst && inst.whkm != null ? `<div class="gl-power-sub">${n(inst.whkm)} Wh/km right now</div>` : ""}
+          <div class="gl-minis">
+            <div class="gl-mini"><span>Est. range</span>
+              <strong>${rangeHere != null ? n(rangeHere) : "—"}<small>km</small></strong>
+              <em>${nw.range_km != null ? `rated ${n(nw.range_km)}` : "&nbsp;"}</em></div>
+            <div class="gl-mini regen"><span>Regen back</span>
+              <strong>${t.regen_kwh != null ? n(t.regen_kwh, 2) : "—"}<small>kWh</small></strong>
+              <em>${regenPct != null ? `${n(regenPct)}% of energy` : "&nbsp;"}</em></div>
+          </div>
         </div>`;
       // The car's battery % moves in whole steps, which barely register on a short
       // drive: take the larger of that and the energy used over the pack size.
@@ -4897,7 +4958,7 @@ function renderGlance(d) {
         </div>`,
         glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
         `${powerBar}
-         ${glTrace(glLiveState.hist)}
+         ${glEffTrace(glLiveState.hist, rated)}
          ${battBar}`,
         foot);
     },
@@ -5094,7 +5155,7 @@ window.addEventListener("resize", () => {
     if (el && glanceVisible()) glFit(el);
   }, 150);
 });
-const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-box-v, .gl-foot .gl-chip";
+const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini strong, .gl-mini em, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
 function glFit(root) {
   root.querySelectorAll(GL_FIT).forEach((e) => {
     e.style.fontSize = "";

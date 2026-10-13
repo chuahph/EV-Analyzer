@@ -2472,3 +2472,22 @@ main > .card { max-width: 100%; }
 .gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub { white-space: nowrap; }
 .gl-rt strong, .gl-rt span { min-width: 0; overflow: visible; text-overflow: clip; }
 .gl-side > .gl-trip .gl-trip-h em { overflow: visible; text-overflow: clip; }
+
+/* Live, under the power bar: range at this drive's rate, and regen back. */
+.gl-minis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.gl-mini { min-width: 0; padding: 5px 8px; border-radius: 8px; background: #0a1017; border: 1px solid #1d2a38;
+  border-left: 2px solid #22d3ee; display: grid; gap: 1px; white-space: nowrap; }
+.gl-mini.regen { border-left-color: var(--green); }
+.gl-mini span { font-size: 8.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; overflow: hidden; text-overflow: ellipsis; }
+.gl-mini strong { font: 700 clamp(13px, 3.9vh, 18px) ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff; }
+.gl-mini strong small { font-size: .55em; color: var(--muted); margin-left: 3px; font-family: inherit; }
+.gl-mini em { font-style: normal; font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.gl-trace-h strong.good { color: var(--green); } .gl-trace-h strong.warn { color: var(--amber); }
+.gl-trace-h i { font-style: normal; }
+@media (orientation: landscape) and (max-width: 740px) {
+  .gl-minis { gap: 6px; margin-top: 6px; }
+  .gl-mini { padding: 4px 5px; }
+  .gl-mini span { font-size: 7.5px; letter-spacing: 0; }
+  .gl-mini em { font-size: 8px; }
+  .gl-wide-only { display: none; }
+}

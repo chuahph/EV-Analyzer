@@ -15260,6 +15260,9 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             go["e_int"] = max(float(e0) - float(e1), 0.0) if e0 is not None and e1 is not None else 0.0
         if last and 0.0 < stamp - last[0] <= 10.0:
             go["e_int"] = float(go.get("e_int") or 0.0) + last[1] * (stamp - last[0]) / 3600.0
+            if last[1] < 0:
+                # Regen on its own as well: the energy braking put back.
+                go["e_regen"] = float(go.get("e_regen") or 0.0) - last[1] * (stamp - last[0]) / 3600.0
         go["_p"] = (stamp, kw)
     # Wh/km is held at the last odometer tick: energy now over distance as of
     # the tick would saw-tooth, because energy moves every second and the
@@ -15374,6 +15377,8 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         if dist >= max(get_settings().drive_min_km, 0.1) and go["_od"][1] > 0:
             trip["wh_per_km"] = round(go["_od"][1] * 1000.0 / dist)
             trip["driving_wh_per_km"] = trip["wh_per_km"]
+    if trip and go and go.get("_p"):
+        trip["regen_kwh"] = round(float(go.get("e_regen") or 0.0), 2)
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "server_ts": time.time()}
 
