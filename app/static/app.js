@@ -4158,7 +4158,7 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
   // A colour for each speed band, so the panel changes as the car speeds up
   // through town, main road and highway speeds, not only past 110.
   const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 120 ? "#fb923c" : x > 100 ? "#facc15"
-    : x > 80 ? "#a3e635" : x > 60 ? "#34d399" : x > 30 ? "#22d3ee" : "#38bdf8");
+    : x > 80 ? "#a3e635" : x > 60 ? "#34d399" : x > 30 ? "#22d3ee" : "#60a5fa");
   const X0 = 30, X1 = 230, N = 40, step = (X1 - X0) / N, BY = 186, BH = 15;
   const xOf = (x) => X0 + Math.max(0, Math.min(max, x)) / max * (X1 - X0);
   let segs = "";
@@ -4217,7 +4217,7 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
       filter="url(#${uid}-glow)"/>
     <polygon points="34,15 226,15 245,34 245,206 226,225 34,225 15,206 15,34" fill="none" stroke="rgba(34,211,238,.25)" stroke-width="1"/>
     <path d="M8 44V30L30 8h26M204 8h26l22 22v14M252 196v14l-22 22h-26M56 232H30L8 210v-14" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
-    <path d="M70 15h120M70 225h120" stroke="${frame}" stroke-width="2.4" opacity=".8"/>
+    <path d="M70 15h120M70 225h120" stroke="${frame}" stroke-width="3.4" stroke-linecap="square" filter="url(#${uid}-glow)"/>
     ${edge}
     ${gears}${wings}
     <text x="130" y="${num.length >= 3 ? 140 : 150}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
@@ -4878,6 +4878,7 @@ function renderGlance(d) {
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
           <div class="gl-power-sub">used ${n(usedPct, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
+      const odoNow = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
       return page(
         `<div class="gl-trip">
           <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(tripWhen(t.start_time).split(" ").pop())}</em></div>
@@ -4887,6 +4888,8 @@ function renderGlance(d) {
             ${tile("speed", "Avg", n(t.avg_speed_kmh), "km/h")}
             ${tile("whkm", "Use", n(tw), "Wh/km", twTone)}
           </div>
+          <div class="gl-odo"><i><svg viewBox="0 0 24 24" aria-hidden="true">${ico.odo}</svg></i><span>Odometer</span>
+            <strong>${odoNow != null ? n(odoNow, 1) : "—"}<small>km</small></strong></div>
         </div>`,
         glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
         `${powerBar}
@@ -5087,7 +5090,7 @@ window.addEventListener("resize", () => {
     if (el && glanceVisible()) glFit(el);
   }, 150);
 });
-const GL_FIT = ".gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-box-v, .gl-foot .gl-chip";
+const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-box-v, .gl-foot .gl-chip";
 function glFit(root) {
   root.querySelectorAll(GL_FIT).forEach((e) => {
     e.style.fontSize = "";

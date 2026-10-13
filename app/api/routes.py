@@ -15123,6 +15123,7 @@ def _live_snapshot(car: dict, ts: float) -> dict:
 
 
 _LIVE_LOCK = threading.Lock()
+_LIVE_ARRIVED: dict[str, float] = {}   # vin -> wall time of the last fast-lane post
 
 
 def _live_latest_vin() -> str | None:
@@ -15289,6 +15290,21 @@ def telemetry_live_push(payload: dict = Body(...)):
     records = payload.get("records")
     if not isinstance(records, list):
         raise HTTPException(400, "Expected {'records': [...]}.")
+    # One log line when the fast lane falls quiet for a while and resumes —
+    # enough to tell, after a stall on the Live page, whether the car's
+    # records stopped coming (lag ~0, a long gap: the car or the relay) or
+    # arrived late (a long lag: the relay or this server).
+    now = time.time()
+    for r in records[:1]:
+        if isinstance(r, dict) and r.get("vin"):
+            prev = _LIVE_ARRIVED.get(r["vin"])
+            _LIVE_ARRIVED[r["vin"]] = now
+            if prev is not None and now - prev >= 8:
+                ts = _telemetry_ts(r.get("createdAt") or r.get("created_at"))
+                keys = sorted({e.get("key") for e in r.get("data") or [] if isinstance(e, dict)})
+                print(f"[live] quiet {now - prev:.0f}s then {len(records)} record(s); "
+                      f"lag {now - ts:.1f}s; keys {','.join(k for k in keys if k)[:120]}"
+                      if ts else f"[live] quiet {now - prev:.0f}s", flush=True)
     for r in records[:50]:
         if not isinstance(r, dict) or not isinstance(r.get("data"), list):
             continue

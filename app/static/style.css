@@ -1953,10 +1953,11 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
    for the whole drive, and the blinking lights, chasing strips and pulses
    were redrawing the page sixty times a second — measured at nine-tenths of
    its work, against the 1 s figures it is there to show. They hold still
-   (lit) instead; the scan line stays, as it moves on the GPU alone. */
+   (lit) instead, and the scan line is hidden. */
 .gl-eco .gl-frame .led, .gl-eco .gl-frame .led2, .gl-eco .gl-frame .strip,
 .gl-eco .gl-tab-live .gl-tab-face::after, .gl-eco .gl-trip-h .rec, .gl-eco .gl-pod::before,
 .gl-eco .gl-live.on b, .gl-eco .cl-dot.drive { animation: none; }
+.gl-eco .gl-body::after { display: none; }
 .gl-eco .gl-live.on b { box-shadow: 0 0 6px rgba(34, 211, 238, .8); }
 
 /* Header as a HUD strip: chamfered page badge, a lit rule underneath. */
@@ -2273,6 +2274,15 @@ header::after {
 main > .card { max-width: 100%; }
 /* Live page, parked: the odometer tile spans the row; the dot is still. */
 .gl-rt.wide { grid-column: 1 / -1; }
+/* One slim line under the trip tiles while driving: icon, label, reading. */
+.gl-odo { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 5px 10px;
+  border-radius: 8px; background: #0a1017; border: 1px solid #1d2a38; white-space: nowrap;
+  min-width: 0; overflow: hidden; font-size: clamp(8px, 2.3vh, 10px); }
+.gl-odo i { display: grid; place-items: center; width: 18px; height: 18px; }
+.gl-odo i svg { width: 14px; height: 14px; fill: none; stroke: #22d3ee; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gl-odo span { font-size: 1em; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.gl-odo strong { margin-left: auto; font: 700 1.75em ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff; }
+.gl-odo strong small { font-size: .6em; color: var(--muted); margin-left: 3px; font-family: inherit; }
 .gl-trip-h .rec.idle { background: var(--muted); box-shadow: none; animation: none; }
 .gl-rt span { letter-spacing: .05em; }
 
@@ -2440,6 +2450,8 @@ main > .card { max-width: 100%; }
 /* A little taller than compact: the trip panels grow to about 80% of the
    column height and share it between the tiles. */
 .gl-side > .gl-trip { flex: 1 1 auto; max-height: 75%; margin-block: auto; }
+/* Room for the odometer line under the tiles while driving. */
+.gl-side > .gl-trip:has(.gl-odo) { max-height: 86%; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
 .gl-side > .gl-trip .gl-rt strong { font-size: clamp(18px, 5.4vh, 26px); }
 @media (orientation: landscape) and (max-width: 740px) {
