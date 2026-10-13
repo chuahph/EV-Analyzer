@@ -15094,7 +15094,7 @@ def telemetry_set_charge_end(
 # (pack voltage and current, for instant power) are kept here only and never
 # written anywhere. One worker process serves the app (run.py), so one dict is
 # the whole picture; after a restart it refills from the car's next record.
-LIVE_ONLY_FIELDS = frozenset({"PackVoltage", "PackCurrent"})
+LIVE_ONLY_FIELDS = frozenset({"PackVoltage", "PackCurrent", "BrakePedal"})
 _LIVE_MEM: dict[str, dict] = {}
 # A drive the live page tracks ends once the car has sat in Park this long:
 # the car's own "Current Drive" runs on through a wait in P until it powers
@@ -15155,6 +15155,11 @@ def _live_clean(key: str, value):
         return x if math.isfinite(x) else None
     if key in _LIVE_TEXT_KEYS:
         return value if isinstance(value, str) else None
+    if key == "BrakePedal":
+        # On or off; some firmware sends it as text.
+        if isinstance(value, bool):
+            return value
+        return {"true": True, "false": False}.get(str(value).strip().lower())
     if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
@@ -15356,6 +15361,9 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         "range_km": snap.get("range_km"), "out_temp": snap.get("out_temp"),
         "climate_on": snap.get("climate_on"), "charging": snap.get("charging"),
         "power_kw": power,
+        # The brake pedal, where the car streams it (the relay's level-3
+        # field set): wakes the page's dimmed screen.
+        "brake": car.get("BrakePedal") if isinstance(car.get("BrakePedal"), bool) else None,
     }
     go = car.get("_go")
     stop = car.get("_stop")

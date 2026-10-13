@@ -256,6 +256,10 @@ kill -0 $PROXY_PID 2>/dev/null || die "the proxy exited on startup (see $LOG)"
 # never reach the database. They change constantly only while driving or
 # charging; a parked car sends next to none.
 #
+# BrakePedal, on or off, is for the live page too: pressing the brake wakes
+# its dimmed screen. Like the pack readings it goes to the app's memory only,
+# and it is sent only when it changes, so it costs a record per press.
+#
 # ChargePortDoorOpen and DriverSeatBelt are cheaper evidence of the same
 # question: somebody opened the port, or somebody got in and buckled up. All
 # of these change only when something happens, so they cost almost no stream.
@@ -295,8 +299,9 @@ if [ "${TELEMETRY_V3:-0}" = "1" ]; then
       \"ChargePortDoorOpen\":         {\"interval_seconds\": 60},
       \"DriverSeatBelt\":             {\"interval_seconds\": 30},
       \"PackVoltage\":                {\"interval_seconds\": 1},
-      \"PackCurrent\":                {\"interval_seconds\": 1}"
-  say "Level 3: four windows, paired-key count, charge port door, driver seat belt, pack power (live page)"
+      \"PackCurrent\":                {\"interval_seconds\": 1},
+      \"BrakePedal\":                 {\"interval_seconds\": 1}"
+  say "Level 3: four windows, paired-key count, charge port door, driver seat belt, pack power and brake pedal (live page)"
 fi
 
 # Belt and braces behind the level file, because the level file is local state

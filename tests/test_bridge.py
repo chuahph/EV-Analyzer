@@ -134,6 +134,9 @@ def test_live_only_fields_never_reach_the_database_batch():
     assert [e["key"] for e in bridge._for_db(mixed)["data"]] == ["VehicleSpeed"]
     assert bridge._for_db(plain) is plain
     assert bridge._keys(mixed) & bridge.LIVE_FIELDS == {"VehicleSpeed", "PackCurrent"}
+    brake = {"vin": "V", "data": [{"key": "BrakePedal", "value": {"booleanValue": True}}]}
+    assert bridge._for_db(brake) is None          # live page only
+    assert bridge._keys(brake) & bridge.LIVE_FIELDS == {"BrakePedal"}
 
 
 def _rec(t, **fields):

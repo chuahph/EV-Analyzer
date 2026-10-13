@@ -218,9 +218,9 @@ def parse(frames: list) -> dict | None:
 # thread with a queue of one, so a slow app can never hold up the batches.
 LIVE_PUSH = os.environ.get("LIVE_PUSH", "1") != "0"
 LIVE_FIELDS = {"VehicleSpeed", "Gear", "Odometer", "EnergyRemaining", "BatteryLevel",
-               "Soc", "PackVoltage", "PackCurrent", "RatedRange"}
+               "Soc", "PackVoltage", "PackCurrent", "RatedRange", "BrakePedal"}
 # Shown on the live page and nowhere else: kept out of the database batches.
-LIVE_ONLY_FIELDS = {"PackVoltage", "PackCurrent"}
+LIVE_ONLY_FIELDS = {"PackVoltage", "PackCurrent", "BrakePedal"}
 
 
 def _live_worker(box: dict) -> None:

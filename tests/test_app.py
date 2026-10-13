@@ -12837,3 +12837,23 @@ def test_sentry_history_is_topped_up_not_reread(seeded):
     assert len(again._ts) == n0 + 1
     assert again._ts[-1] == newest + timedelta(minutes=5)
     assert len(fetched) == 1 and "battery_readings.ts >" in fetched[0].replace("  ", " ")
+
+
+def test_live_reports_the_brake_pedal():
+    """The brake pedal, streamed at level 3, reaches the live payload as a
+    boolean (it wakes the page's dimmed screen); text forms are read and
+    anything else is ignored rather than kept."""
+    from app.api import routes
+
+    routes._LIVE_MEM.clear()
+    try:
+        routes._live_mem_fold("VBRAKE", "2026-10-13T10:00:00Z",
+                              {"Gear": "ShiftStateD", "VehicleSpeed": 30.0, "BrakePedal": True})
+        assert routes._live_payload("VBRAKE", None)["now"]["brake"] is True
+        routes._live_mem_fold("VBRAKE", "2026-10-13T10:00:01Z", {"BrakePedal": "false"})
+        assert routes._live_payload("VBRAKE", None)["now"]["brake"] is False
+        routes._live_mem_fold("VBRAKE", "2026-10-13T10:00:02Z", {"BrakePedal": 7})
+        assert routes._live_payload("VBRAKE", None)["now"]["brake"] is False
+        assert "BrakePedal" in routes.LIVE_ONLY_FIELDS
+    finally:
+        routes._LIVE_MEM.clear()
