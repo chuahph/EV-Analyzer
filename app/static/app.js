@@ -4814,9 +4814,11 @@ function renderGlance(d) {
         range: '<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.2"/>',
         odo: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M11 10v4M15 10v4"/>',
       };
-      const tile = (k, label, value, unit, tone = "", cls = "") => `<div class="gl-rt ${tone} ${cls}">
+      // The unit is the tile's label (km, min, Wh/km), so the number alone
+      // fills the width and can be drawn much larger.
+      const tile = (k, label, value, tone = "", cls = "") => `<div class="gl-rt ${tone} ${cls}">
           <i><svg viewBox="0 0 24 24" aria-hidden="true">${ico[k]}</svg></i>
-          <span>${h(label)}</span><strong>${value}<small>${h(unit)}</small></strong></div>`;
+          <span>${h(label)}</span><strong>${value}</strong></div>`;
       const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
       if (!t) {
         // Parked: the car now on the left, the last drive on the right, in the
@@ -4836,19 +4838,19 @@ function renderGlance(d) {
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec idle"></b>Car now<em>${!L ? "connecting…" : nw.age_sec != null ? `${nw.age_sec < 90 ? nw.age_sec + "s" : Math.round(nw.age_sec / 60) + " min"} ago` : ""}</em></div>
             <div class="gl-rts">
-              ${tile("batt", "Batt", pctShown != null ? n(pctShown, 1) : "—", "%", pctShown != null && pctShown < 20 ? "warn" : "good")}
-              ${tile("range", "Range", rangeShown != null ? n(rangeShown) : "—", "km")}
-              ${tile("odo", "Odometer", odo != null ? fmt(odo) : "—", "km", "", "wide")}
+              ${tile("batt", "Batt %", pctShown != null ? n(pctShown, 1) : "—", pctShown != null && pctShown < 20 ? "warn" : "good")}
+              ${tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—")}
+              ${tile("odo", "Odometer km", odo != null ? fmt(odo) : "—", "", "wide")}
             </div>
           </div>`,
           glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
           lt ? `<div class="gl-trip">
             <div class="gl-trip-h">Last trip<em>${lt.id != null ? "#" + lt.id + " · " : ""}${h(tripWhen(lt.start_time).split(" ").pop())}</em></div>
             <div class="gl-rts">
-              ${tile("dist", "Dist", n(lt.distance_km, 1), "km")}
-              ${tile("time", "Time", n(lt.duration_min), "min")}
-              ${tile("speed", "Avg", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—", "km/h")}
-              ${tile("whkm", "Use", n(lt.wh_per_km), "Wh/km", ltTone)}
+              ${tile("dist", "km", n(lt.distance_km, 1))}
+              ${tile("time", "min", n(lt.duration_min))}
+              ${tile("speed", "Avg km/h", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—")}
+              ${tile("whkm", "Wh/km", n(lt.wh_per_km), ltTone)}
             </div>
           </div>` : "",
           foot);
@@ -4885,13 +4887,13 @@ function renderGlance(d) {
         `<div class="gl-trip">
           <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(tripWhen(t.start_time).split(" ").pop())}</em></div>
           <div class="gl-rts">
-            ${tile("dist", "Dist", n(t.distance_km, 1), "km")}
-            ${tile("time", "Time", n(t.duration_min), "min")}
-            ${tile("speed", "Avg", n(t.avg_speed_kmh), "km/h")}
-            ${tile("whkm", "Use", n(tw), "Wh/km", twTone)}
+            ${tile("dist", "km", n(t.distance_km, 1))}
+            ${tile("time", "min", n(t.duration_min))}
+            ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
+            ${tile("whkm", "Wh/km", n(tw), twTone)}
           </div>
-          <div class="gl-odo"><i><svg viewBox="0 0 24 24" aria-hidden="true">${ico.odo}</svg></i><span>Odometer</span>
-            <strong>${odoNow != null ? n(odoNow, 1) : "—"}<small>km</small></strong></div>
+          <div class="gl-odo"><i><svg viewBox="0 0 24 24" aria-hidden="true">${ico.odo}</svg></i><span>Odometer km</span>
+            <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
         </div>`,
         glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
         `${powerBar}
