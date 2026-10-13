@@ -2591,8 +2591,8 @@ main > .card { max-width: 100%; }
 .gl-rated i { font-style: normal; }
 @media (orientation: landscape) and (max-width: 740px) { .gl-rated { margin-left: 5px; margin-right: 6px; } }
 /* Live bottom line: always one row. */
-.glance .gl-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
-.glance .gl-foot > * { flex: 0 0 auto; }
+.gl-eco .glance .gl-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.gl-eco .glance .gl-foot > * { flex: 0 0 auto; }
 .glance .gl-live { font-size: 11px; letter-spacing: .08em; }
 @media (orientation: landscape) and (max-width: 740px) { .glance .gl-live { font-size: 10px; letter-spacing: .04em; } }
 .gl-dimchip { letter-spacing: .06em; color: #cfe8ff; }
@@ -2600,3 +2600,7 @@ main > .card { max-width: 100%; }
    the bottom line keeps its temperature and climate. */
 .gl-head .gl-stalechip { margin-left: auto; font-size: 12px; }
 .gl-stale .gl-head .gl-swap { margin-left: 10px; }
+@media (orientation: landscape) and (max-width: 740px) {
+  /* Narrow phones: the drive time gives way to the signal chip. */
+  .gl-stale .gl-head .gl-sub { display: none; }
+}

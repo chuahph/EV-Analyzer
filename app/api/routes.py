@@ -1284,7 +1284,7 @@ def _parked_readings(session: Session, vehicle_id: int):
     old = _PARKED_READINGS_ROWS.get(vehicle_id)
     fresh = old is None or now - old[0] >= _PARKED_READINGS_FULL_SEC
     q = select(BatteryReading.ts, BatteryReading.sentry_state,
-               BatteryReading.sentry_mode).where(
+               BatteryReading.sentry_mode, BatteryReading.id).where(
         BatteryReading.vehicle_id == vehicle_id,
         BatteryReading.ts >= since,
         # A reading that knows nothing about Sentry answers nothing:
@@ -1294,20 +1294,23 @@ def _parked_readings(session: Session, vehicle_id: int):
         # older one has only the flag.
         or_(BatteryReading.sentry_state.is_not(None),
             BatteryReading.sentry_mode.is_not(None)))
+    # Topped up by row id, not time: telemetry batches arrive late (the car
+    # holds its readings while its signal is weak) and are stored with the
+    # car's own times, so a new row can be older than the newest one held.
     if fresh:
         rows = [tuple(r) for r in session.execute(q.order_by(BatteryReading.ts)).all()]
         full_at = now
     else:
         full_at, kept = old
-        last = kept[-1][0] if kept else None
-        if last is not None:
-            q = q.where(BatteryReading.ts > last)
-        rows = [r for r in kept if r[0] >= since] + [
-            tuple(r) for r in session.execute(q.order_by(BatteryReading.ts)).all()]
+        top = max((r[3] for r in kept), default=None)
+        if top is not None:
+            q = q.where(BatteryReading.id > top)
+        rows = sorted([r for r in kept if r[0] >= since] + [
+            tuple(r) for r in session.execute(q).all()], key=lambda r: r[0])
     _PARKED_READINGS_ROWS[vehicle_id] = (full_at, rows)
     index = driving_analysis.SentryIndex.from_sorted(
         (ts, driving_analysis.sentry_armed(state, flag))
-        for ts, state, flag in rows)
+        for ts, state, flag, _id in rows)
     _PARKED_READINGS_CACHE[vehicle_id] = (now, index)
     return index
 
@@ -15363,8 +15366,19 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         "power_kw": power,
         # The brake pedal, where the car streams it (the relay's level-3
         # field set): wakes the page's dimmed screen.
-        "brake": car.get("BrakePedal") if isinstance(car.get("BrakePedal"), bool) else None,
+        # A pressed reading counts for 2 minutes at most: the car sends the
+        # pedal only when it changes, and a missed release must not hold the
+        # page's screen bright for the rest of the drive.
+        "brake": (car.get("BrakePedal") if isinstance(car.get("BrakePedal"), bool)
+                  and (car.get("BrakePedal") is False
+                       or time.time() - float((car.get("_kt") or {}).get("BrakePedal") or 0.0) < 120)
+                  else None),
     }
+    # Rounded to what the page shows: this goes to the phone every second.
+    for k, nd in (("speed_kmh", 1), ("odo_km", 3), ("energy_kwh", 3), ("range_km", 1),
+                  ("battery_level", 1), ("soc", 1), ("ts", 1)):
+        if isinstance(now.get(k), float):
+            now[k] = round(now[k], nd)
     go = car.get("_go")
     stop = car.get("_stop")
     # A car that powered down in Park sends nothing more, so the drive is
@@ -15388,7 +15402,7 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     if trip and go and go.get("_p"):
         trip["regen_kwh"] = round(float(go.get("e_regen") or 0.0), 2)
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
-            "server_ts": time.time()}
+            "server_ts": round(time.time(), 1)}
 
 
 @router.get("/live")

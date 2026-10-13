@@ -12836,7 +12836,17 @@ def test_sentry_history_is_topped_up_not_reread(seeded):
         sa_event.remove(engine, "after_cursor_execute", count)
     assert len(again._ts) == n0 + 1
     assert again._ts[-1] == newest + timedelta(minutes=5)
-    assert len(fetched) == 1 and "battery_readings.ts >" in fetched[0].replace("  ", " ")
+    assert len(fetched) == 1 and "battery_readings.id >" in fetched[0].replace("  ", " ")
+
+    # A reading stored late with an earlier time than the newest one held
+    # (a telemetry burst after a weak signal) is still picked up, in order.
+    late = newest + timedelta(minutes=2)
+    seeded.add(BatteryReading(vehicle_id=vid, ts=late, soc=50.0, range_km=250.0, sentry_mode=True))
+    seeded.commit()
+    routes._PARKED_READINGS_CACHE.clear()
+    third = routes._parked_readings(seeded, vid)
+    assert len(third._ts) == n0 + 2
+    assert late in third._ts and third._ts == sorted(third._ts)
 
 
 def test_live_reports_the_brake_pedal():
@@ -12845,15 +12855,26 @@ def test_live_reports_the_brake_pedal():
     anything else is ignored rather than kept."""
     from app.api import routes
 
+    import time as _t
+    from datetime import datetime, timezone
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
     routes._LIVE_MEM.clear()
     try:
-        routes._live_mem_fold("VBRAKE", "2026-10-13T10:00:00Z",
+        routes._live_mem_fold("VBRAKE", at(-3),
                               {"Gear": "ShiftStateD", "VehicleSpeed": 30.0, "BrakePedal": True})
         assert routes._live_payload("VBRAKE", None)["now"]["brake"] is True
-        routes._live_mem_fold("VBRAKE", "2026-10-13T10:00:01Z", {"BrakePedal": "false"})
+        routes._live_mem_fold("VBRAKE", at(-2), {"BrakePedal": "false"})
         assert routes._live_payload("VBRAKE", None)["now"]["brake"] is False
-        routes._live_mem_fold("VBRAKE", "2026-10-13T10:00:02Z", {"BrakePedal": 7})
+        routes._live_mem_fold("VBRAKE", at(-1), {"BrakePedal": 7})
         assert routes._live_payload("VBRAKE", None)["now"]["brake"] is False
+        # A press whose release never arrived stops counting after 2 minutes.
+        routes._live_mem_fold("VBRAKE", at(-200), {"BrakePedal": True})   # older: ignored
+        routes._LIVE_MEM["VBRAKE"]["BrakePedal"] = True
+        routes._LIVE_MEM["VBRAKE"]["_kt"]["BrakePedal"] = _t.time() - 200
+        assert routes._live_payload("VBRAKE", None)["now"]["brake"] is None
         assert "BrakePedal" in routes.LIVE_ONLY_FIELDS
     finally:
         routes._LIVE_MEM.clear()

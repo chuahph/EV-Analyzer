@@ -4699,8 +4699,9 @@ window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
 function glLiveApply(L) {
   const nw = L.now || {};
   const p = glLiveState.prev;
-  // Pack power, when the car streams voltage and current: the power this
-  // second, discharge positive (the server learns the car's sign).
+  // Power and Wh/km from the energy reading over 20 s or more: the fallback
+  // when the car does not stream pack voltage and current (then power_kw,
+  // below, replaces it every second).
   if (L.driving && p && nw.ts && nw.ts - p.ts >= 20 && nw.energy_kwh != null && p.energy_kwh != null) {
     const dkwh = p.energy_kwh - nw.energy_kwh, dkm = (nw.odo_km || 0) - (p.odo_km || 0);
     const hours = (nw.ts - p.ts) / 3600;
@@ -4779,7 +4780,11 @@ function glLiveApply(L) {
 const GL_STALE_S = 5;
 setInterval(() => {
   const L = glLiveState.data, nw = L && L.now;
-  const live = glanceTab === "live" && glanceVisible() && L && L.driving && nw && nw.age_sec != null;
+  if (document.hidden) return;
+  // Not while stopped: a car standing still with nothing changing sends
+  // nothing, which is not a weak signal.
+  const live = glanceTab === "live" && glanceVisible() && L && L.driving && nw && nw.age_sec != null
+    && !(nw.speed_kmh === 0 || nw.brake === true);
   const age = live ? nw.age_sec + (Date.now() - (glLiveState.recvAt || Date.now())) / 1000 : 0;
   const stale = !!live && age > GL_STALE_S;
   if (stale !== document.body.classList.contains("gl-stale")) {
