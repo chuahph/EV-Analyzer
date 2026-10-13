@@ -4647,6 +4647,7 @@ function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !doc
 // switches it to "always bright" for the rest of that visit — for a phone on
 // a cable in the car; reopening the app goes back to auto-dim.
 const GL_DIM_MS = 15000;
+const GL_BRAKE_KMH_S = 10;   // about 0.28 g: firmer than the strongest regen
 let glDimTimer = null;
 const glDim = { off: false };
 function glDimAllowed() { return !glDim.off; }
@@ -4723,12 +4724,15 @@ function glLiveApply(L) {
     if (v != null) h.push({ t: now, v });
     const old = h.length ? h[0].v : null;
     glLiveState.acc = v == null || old == null ? 0 : v - old > 2 ? 1 : v - old < -2 ? -1 : 0;
-    // Braking wakes a dimmed screen: speed falling 3 km/h or more within a
-    // second (firmer than lifting off), coming to a stop, or a gear change.
-    const lv = glLiveState.lastV, ls = glLiveState.lastShift;
-    if ((v != null && lv != null && (lv - v >= 3 || (v === 0 && lv > 0)))
-        || (nw.shift && ls && nw.shift !== ls)) glDimArm();
-    glLiveState.lastV = v;
+    // Braking wakes a dimmed screen. Lifting off in one-pedal driving slows
+    // the car by up to about 0.2-0.25 g (7-9 km/h each second), so only a
+    // faster drop counts as the brake pedal: GL_BRAKE_KMH_S, timed by the
+    // car's own record times. Coming to a stop or changing gear wakes it too.
+    const lv = glLiveState.lastV, lt = glLiveState.lastT, ls = glLiveState.lastShift;
+    const dt = nw.ts && lt ? nw.ts - lt : 0;
+    const braking = v != null && lv != null && dt >= 0.5 && dt <= 2.5 && (lv - v) / dt >= GL_BRAKE_KMH_S;
+    if (braking || (v === 0 && lv > 0) || (nw.shift && ls && nw.shift !== ls)) glDimArm();
+    if (v != null && nw.ts) { glLiveState.lastV = v; glLiveState.lastT = nw.ts; }
     if (nw.shift) glLiveState.lastShift = nw.shift;
   }
   glLiveState.data = L;
