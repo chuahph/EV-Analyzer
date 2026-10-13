@@ -4642,19 +4642,34 @@ function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !doc
 // but the key readings (speed, gear, the trip figures, power, battery) fade
 // to about a third, as a watch's always-on face does. On an OLED iPhone a
 // dimmer pixel draws less power. A tap brings it all back for another spell.
+//
+// Not while the phone is charging (where the browser can tell: Chrome on
+// Android can, Safari on an iPhone cannot), and not when switched off with
+// the chip at the bottom of the page — for a phone on a cable in the car.
 const GL_DIM_MS = 15000;
 let glDimTimer = null;
+const glDim = { off: (() => { try { return localStorage.getItem("glDimOff") === "1"; } catch (_) { return false; } })(), charging: false };
+function glDimAllowed() { return !glDim.off && !glDim.charging; }
 function glDimArm() {
   clearTimeout(glDimTimer);
+  glDimTimer = null;
   document.body.classList.remove("gl-dim");
-  glDimTimer = setTimeout(() => { if (glWakeWanted()) document.body.classList.add("gl-dim"); }, GL_DIM_MS);
+  if (!glDimAllowed()) return;
+  glDimTimer = setTimeout(() => { if (glWakeWanted() && glDimAllowed()) document.body.classList.add("gl-dim"); }, GL_DIM_MS);
+}
+if (navigator.getBattery) {
+  navigator.getBattery().then((b) => {
+    const upd = () => { glDim.charging = !!b.charging; glDimArm(); if (lastData && glanceTab === "live") glLiveDraw(); };
+    b.addEventListener("chargingchange", upd);
+    upd();
+  }).catch(() => { /* not offered here */ });
 }
 async function glWakeSync() {
   const want = glWakeWanted();
   // While the Live page holds the screen on, the decorative loops stop (see
   // .gl-eco in style.css): measured, they were nine-tenths of the page's work.
   document.body.classList.toggle("gl-eco", want);
-  if (!want) { clearTimeout(glDimTimer); glDimTimer = null; document.body.classList.remove("gl-dim"); }
+  if (!want || !glDimAllowed()) { clearTimeout(glDimTimer); glDimTimer = null; document.body.classList.remove("gl-dim"); }
   else if (!glDimTimer && !document.body.classList.contains("gl-dim")) glDimArm();
   if (glWakeIOS) glWakeVideo(want);
   if (want && !glWake.lock && glWake.supported) {
@@ -4715,6 +4730,13 @@ function glLiveApply(L) {
     if (v != null) h.push({ t: now, v });
     const old = h.length ? h[0].v : null;
     glLiveState.acc = v == null || old == null ? 0 : v - old > 2 ? 1 : v - old < -2 ? -1 : 0;
+    // Braking wakes a dimmed screen: speed falling 3 km/h or more within a
+    // second (firmer than lifting off), coming to a stop, or a gear change.
+    const lv = glLiveState.lastV, ls = glLiveState.lastShift;
+    if ((v != null && lv != null && (lv - v >= 3 || (v === 0 && lv > 0)))
+        || (nw.shift && ls && nw.shift !== ls)) glDimArm();
+    glLiveState.lastV = v;
+    if (nw.shift) glLiveState.lastShift = nw.shift;
   }
   glLiveState.data = L;
   // Kept on the phone so the next time it is turned sideways the page opens
@@ -4864,6 +4886,7 @@ function renderGlance(d) {
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
         ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip">screen kept on</span>'
           : '<span class="gl-chip tone-warn">tap to keep screen on</span>'}
+        <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.charging ? "charging · no dim" : glDim.off ? "auto-dim off" : "auto-dim on"}</button>
         ${nw.out_temp != null ? `<span class="gl-chip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
@@ -5194,6 +5217,13 @@ document.addEventListener("click", (e) => {
     glSave("glanceTab", glanceTab);
     if (lastData) renderGlance(lastData);
     if (glanceTab === "live") glLivePoll(); else glWakeSync();
+    return;
+  }
+  if (e.target.closest("[data-gl-dim]")) {
+    glDim.off = !glDim.off;
+    glSave("glDimOff", glDim.off ? "1" : "0");
+    glDimArm();
+    if (lastData) renderGlance(lastData);
     return;
   }
   if (e.target.closest("[data-gl-swap]")) {
