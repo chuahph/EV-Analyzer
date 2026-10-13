@@ -1948,6 +1948,16 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 }
 @keyframes gl-scan { from { transform: translateY(-40px); } to { transform: translateY(420px); } }
 @media (prefers-reduced-motion: reduce) { .gl-body::after { display: none; } }
+.gl-body::after { will-change: transform; }
+/* Live page on screen (body.gl-eco, set in glWakeSync): the screen is held on
+   for the whole drive, and the blinking lights, chasing strips and pulses
+   were redrawing the page sixty times a second — measured at nine-tenths of
+   its work, against the 1 s figures it is there to show. They hold still
+   (lit) instead; the scan line stays, as it moves on the GPU alone. */
+.gl-eco .gl-frame .led, .gl-eco .gl-frame .led2, .gl-eco .gl-frame .strip,
+.gl-eco .gl-tab-live .gl-tab-face::after, .gl-eco .gl-trip-h .rec, .gl-eco .gl-pod::before,
+.gl-eco .gl-live.on b, .gl-eco .cl-dot.drive { animation: none; }
+.gl-eco .gl-live.on b { box-shadow: 0 0 6px rgba(34, 211, 238, .8); }
 
 /* Header as a HUD strip: chamfered page badge, a lit rule underneath. */
 .gl-head { position: relative; padding-bottom: 6px; }

@@ -4589,6 +4589,9 @@ function glWakeVideo(on) {
 function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !document.hidden; }
 async function glWakeSync() {
   const want = glWakeWanted();
+  // While the Live page holds the screen on, the decorative loops stop (see
+  // .gl-eco in style.css): measured, they were nine-tenths of the page's work.
+  document.body.classList.toggle("gl-eco", want);
   if (glWakeIOS) glWakeVideo(want);
   if (want && !glWake.lock && glWake.supported) {
     try {
