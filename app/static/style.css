@@ -2562,3 +2562,9 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-trip, .gl-dim .gl-rt, .gl-dim .gl-odo, .gl-dim .gl-mini, .gl-dim .gl-power, .gl-dim .gl-battbar,
 .gl-dim .gl-trace { border-color: #12181f; box-shadow: none; }
 .gl-dimchip { font-family: inherit; line-height: inherit; cursor: pointer; border: 0; }
+
+/* Readings running late (body.gl-stale, see GL_STALE_S): the speed greys and
+   the chip shows; hidden otherwise. */
+.gl-stalechip { display: none; }
+.gl-stale .gl-stalechip { display: inline-flex; }
+.gl-stale .gl-speedo .gl-spd { fill: #6f7f94; filter: none; }

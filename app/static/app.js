@@ -4222,7 +4222,7 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
     <path d="M70 15h120M70 225h120" stroke="${frame}" stroke-width="3.4" stroke-linecap="square" filter="url(#${uid}-glow)"/>
     ${edge}
     ${gears}${wings}
-    <text x="130" y="${num.length >= 3 ? 140 : 150}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
+    <text class="gl-spd" x="130" y="${num.length >= 3 ? 140 : 150}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"
       filter="url(#${uid}-glow)" style="font-variant-numeric:tabular-nums">${num}</text>
     <text x="130" y="166" text-anchor="middle" font-size="10" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H</text>
     <g filter="url(#${uid}-glow)">${segs}</g>${markTick}${pointer}${labels}
@@ -4749,6 +4749,7 @@ function glLiveApply(L) {
     if (nw.shift) glLiveState.lastShift = nw.shift;
   }
   glLiveState.data = L;
+  glLiveState.recvAt = Date.now();
   // Kept on the phone so the next time it is turned sideways the page opens
   // on the last reading, not on an empty frame waiting for the stream.
   if (Date.now() - (glLiveState.saved || 0) > 5000) {
@@ -4769,6 +4770,25 @@ function glLiveApply(L) {
   } else if (!L.driving) glLiveState.hist = [];
   glLiveDraw();
 }
+
+// Readings running late. The car holds its readings while its mobile signal
+// is weak and sends them in a burst when it reconnects (seen: 30-90 s late),
+// so a quiet stream mid-drive means the screen is behind, not that nothing
+// changed. Checked every second between frames: past GL_STALE_S the speed
+// greys and a chip says so, until readings catch up.
+const GL_STALE_S = 5;
+setInterval(() => {
+  const L = glLiveState.data, nw = L && L.now;
+  const live = glanceTab === "live" && glanceVisible() && L && L.driving && nw && nw.age_sec != null;
+  const age = live ? nw.age_sec + (Date.now() - (glLiveState.recvAt || Date.now())) / 1000 : 0;
+  document.body.classList.toggle("gl-stale", !!live && age > GL_STALE_S);
+  // The "updated Ns ago" line keeps counting between frames too.
+  if (live && age < 120) {
+    const el = document.querySelector(".glance .gl-live");
+    const txt = el && el.lastChild;
+    if (txt && txt.nodeType === 3) txt.textContent = `live · updated ${Math.round(age)}s ago`;
+  }
+}, 1000);
 
 // Frames can arrive several times a second; one redraw serves them all, at
 // most about eight a second, so a busy stream does not cost the phone layout
@@ -4894,6 +4914,7 @@ function renderGlance(d) {
         : t ? (fresh ? `live · updated ${nw.age_sec}s ago` : `drive open · last heard ${Math.round(nw.age_sec / 60)} min ago`)
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
+        <span class="gl-chip tone-warn gl-stalechip">car signal weak · catching up</span>
         ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip">screen kept on</span>'
           : '<span class="gl-chip tone-warn">tap to keep screen on</span>'}
         <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "always bright" : "auto-dim"}</button>
