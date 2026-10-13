@@ -4730,7 +4730,10 @@ function glLiveApply(L) {
     // car's own record times. Coming to a stop or changing gear wakes it too.
     const lv = glLiveState.lastV, lt = glLiveState.lastT, ls = glLiveState.lastShift;
     const dt = nw.ts && lt ? nw.ts - lt : 0;
-    const braking = v != null && lv != null && dt >= 0.5 && dt <= 2.5 && (lv - v) / dt >= GL_BRAKE_KMH_S;
+    // Only while the pedal is unknown: once the car streams BrakePedal (the
+    // relay's level-3 set), the pedal alone decides.
+    const braking = nw.brake == null && v != null && lv != null && dt >= 0.5 && dt <= 2.5
+      && (lv - v) / dt >= GL_BRAKE_KMH_S;
     // The pedal itself, when the car streams it, is the surest sign of all.
     const pedal = nw.brake === true && glLiveState.lastBrake !== true;
     glLiveState.lastBrake = nw.brake;
