@@ -4918,7 +4918,6 @@ function renderGlance(d) {
         : t ? (fresh ? `live · updated ${nw.age_sec}s ago` : `drive open · last heard ${Math.round(nw.age_sec / 60)} min ago`)
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
-        <span class="gl-chip tone-warn gl-stalechip">Car signal weak · Catching up</span>
         <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "ALWAYS BRIGHT" : "AUTO-DIM"}</button>
         ${nw.out_temp != null ? `<span class="gl-chip gl-opt">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip gl-opt">climate on</span>' : ""}
@@ -5202,6 +5201,7 @@ function renderGlance(d) {
       <span class="gl-sub">${h(glanceTab === "live"
         ? (glLiveState.data && glLiveState.data.driving ? `drive since ${tripWhen(glLiveState.data.trip.start_time)}` : "right now")
         : (d.window_label || `${d.window_days}-day window`))}</span>
+      ${glanceTab === "live" ? '<span class="gl-chip tone-warn gl-stalechip">Car signal weak · Catching up</span>' : ""}
       <button type="button" class="gl-swap" data-gl-swap title="Move the tabs to the other side"
         aria-label="Move the tabs to the other side"><svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>

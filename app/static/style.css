@@ -2581,7 +2581,7 @@ main > .card { max-width: 100%; }
 .gl-mini strong small { margin-left: 2px; }
 @media (orientation: landscape) and (max-width: 740px) {
   /* Room for the late-readings chip on one line. */
-  .gl-stale .gl-opt { display: none; }
+
 }
 /* At this size the figures fill the boxes: the notes give way. */
 .gl-mini > div em { display: none; }
@@ -2596,3 +2596,7 @@ main > .card { max-width: 100%; }
 .glance .gl-live { font-size: 11px; letter-spacing: .08em; }
 @media (orientation: landscape) and (max-width: 740px) { .glance .gl-live { font-size: 10px; letter-spacing: .04em; } }
 .gl-dimchip { letter-spacing: .06em; color: #cfe8ff; }
+/* The late-readings chip sits in the title bar, beside the drive time, so
+   the bottom line keeps its temperature and climate. */
+.gl-head .gl-stalechip { margin-left: auto; font-size: 12px; }
+.gl-stale .gl-head .gl-swap { margin-left: 10px; }
