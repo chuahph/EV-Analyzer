@@ -2453,12 +2453,14 @@ main > .card { max-width: 100%; }
 /* Room for the odometer line under the tiles while driving. */
 .gl-side > .gl-trip:has(.gl-odo) { max-height: 86%; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
-.gl-side > .gl-trip .gl-rt strong { font-size: clamp(26px, 8.6vh, 40px); line-height: 1; }
+.gl-side > .gl-trip .gl-rt strong { font-size: clamp(23px, 7.6vh, 35px); line-height: 1; }
 @media (orientation: landscape) and (max-width: 740px) {
-  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(20px, 6.8vh, 28px); }
-  /* Narrow tiles: the label (the unit) needs the room more than the icon. */
-  .gl-side > .gl-trip .gl-rt i { display: none; }
-  .gl-side > .gl-trip .gl-rt span { letter-spacing: .02em; }
+  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(18px, 6vh, 25px); }
+  /* Narrow tiles: a smaller icon, so the label (the unit) still fits. */
+  .gl-side > .gl-trip .gl-rt { column-gap: 3px; padding-left: 6px; padding-right: 6px; }
+  .gl-side > .gl-trip .gl-rt i { width: 14px; height: 14px; }
+  .gl-side > .gl-trip .gl-rt i svg { width: 11px; height: 11px; }
+  .gl-side > .gl-trip .gl-rt span { letter-spacing: 0; font-size: 8.5px; }
   /* Narrow phones: the odometer icon says what the reading is. */
   .gl-odo span { display: none; }
   .gl-odo { padding: 4px 8px; }
