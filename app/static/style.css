@@ -2581,7 +2581,7 @@ main > .card { max-width: 100%; }
 .gl-mini strong small { margin-left: 2px; }
 @media (orientation: landscape) and (max-width: 740px) {
   /* Room for the late-readings chip on one line. */
-  .gl-stale .gl-tempchip, .gl-stale .gl-keptchip { display: none; }
+  .gl-stale .gl-opt { display: none; }
 }
 /* At this size the figures fill the boxes: the notes give way. */
 .gl-mini > div em { display: none; }
@@ -2590,3 +2590,8 @@ main > .card { max-width: 100%; }
 .gl-rated { font-style: normal; margin-left: 8px; text-transform: none; letter-spacing: 0; font-size: .85em; color: #9fb0c3; }
 .gl-rated i { font-style: normal; }
 @media (orientation: landscape) and (max-width: 740px) { .gl-rated { margin-left: 5px; margin-right: 6px; } }
+/* Live bottom line: always one row. */
+.glance .gl-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.glance .gl-foot > * { flex: 0 0 auto; }
+.glance .gl-live { font-size: 11px; letter-spacing: .08em; }
+@media (orientation: landscape) and (max-width: 740px) { .glance .gl-live { font-size: 10px; letter-spacing: .04em; } }

@@ -4781,7 +4781,11 @@ setInterval(() => {
   const L = glLiveState.data, nw = L && L.now;
   const live = glanceTab === "live" && glanceVisible() && L && L.driving && nw && nw.age_sec != null;
   const age = live ? nw.age_sec + (Date.now() - (glLiveState.recvAt || Date.now())) / 1000 : 0;
-  document.body.classList.toggle("gl-stale", !!live && age > GL_STALE_S);
+  const stale = !!live && age > GL_STALE_S;
+  if (stale !== document.body.classList.contains("gl-stale")) {
+    document.body.classList.toggle("gl-stale", stale);
+    glFootFit(document);
+  }
   // The "updated Ns ago" line keeps counting between frames too.
   if (live && age < 120) {
     const el = document.querySelector(".glance .gl-live");
@@ -4915,12 +4919,10 @@ function renderGlance(d) {
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
         <span class="gl-chip tone-warn gl-stalechip">car signal weak · catching up</span>
-        ${(glWakeIOS ? glWake.videoOn : glWake.lock) ? '<span class="gl-chip gl-keptchip">screen kept on</span>'
-          : '<span class="gl-chip tone-warn">tap to keep screen on</span>'}
         <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "always bright" : "auto-dim"}</button>
-        ${nw.out_temp != null ? `<span class="gl-chip gl-tempchip">${n(nw.out_temp, 0)}°C outside</span>` : ""}
-        ${nw.climate_on ? '<span class="gl-chip">climate on</span>' : ""}
-        ${t && t.eta ? `<span class="gl-chip">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
+        ${nw.out_temp != null ? `<span class="gl-chip gl-opt">${n(nw.out_temp, 0)}°C outside</span>` : ""}
+        ${nw.climate_on ? '<span class="gl-chip gl-opt">climate on</span>' : ""}
+        ${t && t.eta ? `<span class="gl-chip gl-opt">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
       const ico = {
         dist: '<path d="M4 18 10 6l4 8 2-4 4 8"/>',
         time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
@@ -5227,6 +5229,15 @@ const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, 
 // done before any size is set, so the page lays out once per redraw instead
 // of once per adjusted element: text width scales with font size, so one
 // reading gives the size that fits. Run every second on the Live page.
+// The bottom line stays one row: optional chips (temperature, climate, ETA)
+// step aside from the end until the rest fits.
+function glFootFit(root) {
+  const f = (root || document).querySelector(".glance .gl-foot");
+  if (!f) return;
+  const opt = [...f.querySelectorAll(".gl-opt")];
+  opt.forEach((e) => { e.style.display = ""; });
+  for (let i = opt.length - 1; i >= 0 && f.scrollWidth > f.clientWidth + 1; i--) opt[i].style.display = "none";
+}
 function glFit(root) {
   const els = [...root.querySelectorAll(GL_FIT)];
   for (const e of els) if (e.style.fontSize) e.style.fontSize = "";
@@ -5239,6 +5250,7 @@ function glFit(root) {
     }
   }
   for (const [e, fs] of fix) e.style.fontSize = fs.toFixed(1) + "px";
+  glFootFit(root);
 }
 
 document.addEventListener("click", (e) => {
