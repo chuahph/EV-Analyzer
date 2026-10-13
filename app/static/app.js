@@ -4155,7 +4155,10 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
   const uid = `gls${++glDialSeq}`;
   const has = value != null && Number.isFinite(+value);
   const v = has ? +value : 0;
-  const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 110 ? "#f59e0b" : "#22d3ee");
+  // A colour for each speed band, so the panel changes as the car speeds up
+  // through town, main road and highway speeds, not only past 110.
+  const colourAt = (x) => (x > 140 ? "#ff6b70" : x > 120 ? "#fb923c" : x > 100 ? "#facc15"
+    : x > 80 ? "#a3e635" : x > 60 ? "#34d399" : x > 30 ? "#22d3ee" : "#38bdf8");
   const X0 = 30, X1 = 230, N = 40, step = (X1 - X0) / N, BY = 186, BH = 15;
   const xOf = (x) => X0 + Math.max(0, Math.min(max, x)) / max * (X1 - X0);
   let segs = "";
@@ -4192,9 +4195,9 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
     return `<text x="${gx}" y="40" text-anchor="middle" font-size="12" font-weight="${on ? 800 : 600}" fill="${on ? "#22d3ee" : "#3b4757"}"${on ? ` filter="url(#${uid}-glow)"` : ""}>${g}</text>
       ${on ? `<rect x="${gx - 7}" y="29" width="15" height="15" rx="2" fill="none" stroke="#22d3ee" stroke-width="1" opacity=".85"/>` : ""}`;
   }).join("");
-  // The edge answers to speed: the outline takes the speed's colour, a column
-  // of small bars on each side fills from the bottom, and the dashes along the
-  // top edge flow forward while accelerating and back while slowing.
+  // The edge answers to speed: the outline and the rails along the top and
+  // bottom take the speed's colour, and a column of small bars on each side
+  // fills from the bottom.
   const frame = has && v > 0.5 ? colourAt(v) : "#22d3ee";
   const EB = 14, ebLit = has ? Math.ceil(Math.min(max, v) / max * EB) : 0;
   let edge = "";
@@ -4203,7 +4206,7 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
     edge += `<rect x="9.5" y="${y - 8}" width="4" height="8" rx="1" fill="${col}"${on ? ` filter="url(#${uid}-glow)"` : ""}/>
       <rect x="246.5" y="${y - 8}" width="4" height="8" rx="1" fill="${col}"${on ? ` filter="url(#${uid}-glow)"` : ""}/>`;
   }
-  return `<svg class="gl-dial gl-speedo${acc > 0 ? " acc-up" : acc < 0 ? " acc-down" : ""}" viewBox="0 0 260 240" role="img" aria-label="${h(label)} ${h(num)} km/h">
+  return `<svg class="gl-dial gl-speedo" viewBox="0 0 260 240" role="img" aria-label="${h(label)} ${h(num)} km/h">
     <defs>
       <linearGradient id="${uid}-bg" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#14202f"/><stop offset=".6" stop-color="#0b121b"/><stop offset="1" stop-color="#070b11"/></linearGradient>
@@ -4214,7 +4217,7 @@ function glSpeedo({ value, max = 160, mark = null, gear = null, acc = 0, label =
       filter="url(#${uid}-glow)"/>
     <polygon points="34,15 226,15 245,34 245,206 226,225 34,225 15,206 15,34" fill="none" stroke="rgba(34,211,238,.25)" stroke-width="1"/>
     <path d="M8 44V30L30 8h26M204 8h26l22 22v14M252 196v14l-22 22h-26M56 232H30L8 210v-14" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
-    <path class="gl-flow" d="M70 15h120M70 225h120" stroke="${frame}" stroke-width="2.4" opacity=".8" stroke-dasharray="14 6"/>
+    <path d="M70 15h120M70 225h120" stroke="${frame}" stroke-width="2.4" opacity=".8"/>
     ${edge}
     ${gears}${wings}
     <text x="130" y="${num.length >= 3 ? 140 : 150}" text-anchor="middle" font-size="${size}" font-weight="800" fill="#f4fbff"

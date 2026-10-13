@@ -2374,11 +2374,6 @@ main > .card { max-width: 100%; }
 .gl-rt strong small { font-size: .4em; margin-left: 3px; }
 .gl-rt span { letter-spacing: .02em; font-size: 9px; }
 /* Top-edge dashes of the speed panel flow with acceleration. */
-.gl-speedo .gl-flow { transition: none; }
-.gl-speedo.acc-up .gl-flow { animation: gl-flow .45s linear infinite var(--p450, 0ms); }
-.gl-speedo.acc-down .gl-flow { animation: gl-flow .45s linear infinite reverse var(--p450, 0ms); }
-@keyframes gl-flow { to { stroke-dashoffset: -20; } }
-@media (prefers-reduced-motion: reduce) { .gl-speedo .gl-flow { animation: none !important; } }
 
 /* "Two ways to view" card shown after a car is opened. */
 #orient-hint { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center;
