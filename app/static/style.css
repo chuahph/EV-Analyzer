@@ -2545,3 +2545,19 @@ main > .card { max-width: 100%; }
    one white dash parked on each: without the animation, the dashes alone. */
 .gl-eco .gl-frame .strip { background:
   repeating-linear-gradient(90deg, color-mix(in srgb, var(--tc) 85%, transparent) 0 10px, transparent 10px 15px); }
+
+/* Watch-face dimming on the Live page (body.gl-dim, see glDimArm): the
+   frame, the tabs, labels, borders, bars and the trace fade; the speed, the
+   gear and the figures stay at full brightness. Opacity alone, so the fade
+   is a single composited step, not a repaint every second. */
+.gl-frame, .gl-rail, .gl-head, .gl-foot, .gl-trip-h, .gl-rt i, .gl-rt span, .gl-rt::after,
+.gl-odo i, .gl-odo span, .gl-power-top span, .gl-power-track, .gl-mini span, .gl-mini em,
+.gl-trace, .gl-battbar-top span, .gl-battbar-cell, .gl-power-sub, .gl-speedo > :not(text) { transition: opacity .8s ease; }
+.gl-dim .gl-frame, .gl-dim .gl-rail, .gl-dim .gl-head, .gl-dim .gl-foot { opacity: .3; }
+.gl-dim .gl-trip-h, .gl-dim .gl-rt i, .gl-dim .gl-rt span, .gl-dim .gl-rt::after, .gl-dim .gl-odo i, .gl-dim .gl-odo span,
+.gl-dim .gl-power-top span, .gl-dim .gl-mini span, .gl-dim .gl-mini em, .gl-dim .gl-battbar-top span,
+.gl-dim .gl-power-sub { opacity: .4; }
+.gl-dim .gl-power-track, .gl-dim .gl-battbar-cell, .gl-dim .gl-trace { opacity: .45; }
+.gl-dim .gl-speedo > :not(text) { opacity: .35; }
+.gl-dim .gl-trip, .gl-dim .gl-rt, .gl-dim .gl-odo, .gl-dim .gl-mini, .gl-dim .gl-power, .gl-dim .gl-battbar,
+.gl-dim .gl-trace { border-color: #12181f; box-shadow: none; }

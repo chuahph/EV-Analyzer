@@ -4638,11 +4638,24 @@ function glWakeVideo(on) {
   }
 }
 function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !document.hidden; }
+// Watch-face dimming: after GL_DIM_MS on the Live page with no touch, all
+// but the key readings (speed, gear, the trip figures, power, battery) fade
+// to about a third, as a watch's always-on face does. On an OLED iPhone a
+// dimmer pixel draws less power. A tap brings it all back for another spell.
+const GL_DIM_MS = 15000;
+let glDimTimer = null;
+function glDimArm() {
+  clearTimeout(glDimTimer);
+  document.body.classList.remove("gl-dim");
+  glDimTimer = setTimeout(() => { if (glWakeWanted()) document.body.classList.add("gl-dim"); }, GL_DIM_MS);
+}
 async function glWakeSync() {
   const want = glWakeWanted();
   // While the Live page holds the screen on, the decorative loops stop (see
   // .gl-eco in style.css): measured, they were nine-tenths of the page's work.
   document.body.classList.toggle("gl-eco", want);
+  if (!want) { clearTimeout(glDimTimer); glDimTimer = null; document.body.classList.remove("gl-dim"); }
+  else if (!glDimTimer && !document.body.classList.contains("gl-dim")) glDimArm();
   if (glWakeIOS) glWakeVideo(want);
   if (want && !glWake.lock && glWake.supported) {
     try {
@@ -4657,7 +4670,7 @@ async function glWakeSync() {
 }
 // A tap counts as the gesture iOS wants before it plays media, and lets a
 // refused Wake Lock be asked for again.
-document.addEventListener("pointerdown", () => { if (glWakeWanted()) { glWake.failed = false; glWakeSync(); } }, { passive: true });
+document.addEventListener("pointerdown", () => { if (glWakeWanted()) { glWake.failed = false; glDimArm(); glWakeSync(); } }, { passive: true });
 document.addEventListener("visibilitychange", () => { glWakeSync(); });
 window.addEventListener("orientationchange", () => setTimeout(glWakeSync, 400));
 // Turned sideways: connect the stream (and fetch once) now rather than on the
