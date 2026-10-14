@@ -2606,3 +2606,14 @@ main > .card { max-width: 100%; }
   /* Narrow phones: the drive time gives way to the signal chip. */
   .gl-stale .gl-head .gl-sub { display: none; }
 }
+/* Short screens (iPhone in landscape with browser bars, or a phone in a
+   mount where the system bars take height): the right column and the trip
+   panel use the full height, so the trace keeps room to be read. */
+@media (orientation: landscape) and (max-height: 360px) {
+  .gl-3 > .gl-side:has(> .gl-power) { height: 96%; gap: 4px; }
+  .gl-side > .gl-trip:has(.gl-odo) { max-height: 96%; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-trace { min-height: 44px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-trace svg { min-height: 22px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-minis { margin-top: 4px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-power-sub { display: none; }
+}

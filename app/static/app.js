@@ -5226,7 +5226,7 @@ window.addEventListener("resize", () => {
     if (el && glanceVisible()) glFit(el);
   }, 150);
 });
-const GL_FIT = ".gl-rt strong, .gl-odo, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini > div, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
+const GL_FIT = ".gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini > div, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
 // Shrink each figure or label that overflows its box. All the measuring is
 // done before any size is set, so the page lays out once per redraw instead
 // of once per adjusted element: text width scales with font size, so one
@@ -5252,6 +5252,18 @@ function glFit(root) {
     }
   }
   for (const [e, fs] of fix) e.style.fontSize = fs.toFixed(1) + "px";
+  // The odometer line: the reading must show whole. Its label steps aside
+  // first, then the figure shrinks if it still does not fit.
+  for (const o of root.querySelectorAll(".gl-odo")) {
+    const lab = o.querySelector("span"), fig = o.querySelector("strong");
+    if (lab) lab.style.display = "";
+    if (fig) fig.style.fontSize = "";
+    if (o.scrollWidth > o.clientWidth + 1 && lab) lab.style.display = "none";
+    if (fig && o.scrollWidth > o.clientWidth + 1) {
+      const fs = parseFloat(getComputedStyle(fig).fontSize);
+      fig.style.fontSize = Math.max(9, fs * o.clientWidth / o.scrollWidth * 0.95).toFixed(1) + "px";
+    }
+  }
   glFootFit(root);
 }
 
