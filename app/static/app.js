@@ -782,6 +782,7 @@ function wireTripEditButtons(root) {
 }
 
 function wireTripDiagButtons(root) {
+  loadLiveViews();
   root.querySelectorAll(".trip-diag[data-trip-idx]").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -1674,6 +1675,29 @@ let lastRenderedCharges = [];
 // every kWh figure (so a wrong one moves every trip at once), and the build
 // stamp says which deployed version produced the numbers — without it there's
 // no telling whether a reading predates a fix.
+// The Live page's time on screen (from /api/live/views), fetched once for
+// the trip list and read synchronously when a trip is copied, so the copy
+// keeps the tap's permission to write the clipboard.
+let liveViews = null;
+function loadLiveViews() {
+  fetch("/api/live/views", { credentials: "same-origin" })
+    .then((r) => (r.ok ? r.json() : []))
+    .then((v) => { liveViews = Array.isArray(v) ? v : []; })
+    .catch(() => {});
+}
+function liveViewMin(t) {
+  if (!liveViews || !t || !t.start_time || !t.end_time) return null;
+  const a = new Date(t.start_time).getTime() / 1000, b = new Date(t.end_time).getTime() / 1000 + 60;
+  if (!(b > a)) return null;
+  const vin = lastData && lastData.vehicle && lastData.vehicle.vin;
+  let sec = 0;
+  for (const [v, s, e] of liveViews) {
+    if (vin && v && v !== vin) continue;
+    sec += Math.max(0, Math.min(b, e) - Math.max(a, s));
+  }
+  return Math.round(sec / 6) / 10;
+}
+
 function tripDiagnostics(t, ctx) {
   // Same origin the dashboard was loaded from, so a copy taken on the custom
   // domain does not hand back a link to onrender.com or the other way round.
@@ -1755,6 +1779,9 @@ function tripDiagnostics(t, ctx) {
       start_gap_sec: t.start_gap_sec, end_gap_sec: t.end_gap_sec,
       tail_trim_sec: t.tail_trim_sec,
       p_wait_min: t.p_wait_min,
+      // Minutes the Live page was on the phone's screen during this trip,
+      // to set against the phone's own battery use for that drive.
+      live_view_min: liveViewMin(t),
       data_quality: t.data_quality, distance_flag: t.distance_flag,
       // The parked gap before this trip: a 0.0 kWh reading over a long park
       // is itself a symptom (drain that moved into the drive).

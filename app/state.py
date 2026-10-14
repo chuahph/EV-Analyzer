@@ -112,6 +112,9 @@ ROAD_CITY_OVERRIDES_KEY = "road_city_overrides"  # JSON list of {id, name,
 ROAD_LEARNED_STOPS_KEY = "road_learned_stops"  # JSON list of [lat, lon,
 # "YYYY-MM-DD"]: where the car came to rest on roads the map calls
 # expressway. roads.learned_signals turns repeats into traffic lights.
+TELEMETRY_LIVE_VIEWS_KEY = "telemetry_live_views"  # JSON [[vin, open_ts, close_ts], ...]:
+# when the Live page was on a screen (its stream connected), so a trip can say
+# how long the page was watched during it. Last LIVE_VIEWS_MAX, 30 days.
 TELEMETRY_TRIPS_KEY = "telemetry_trips"  # JSON list of finished shadow trips.
 # Kept out of the Drive table on purpose — these are unverified, and a wrong
 # row in the real history is a repair job while a wrong row here is a delete.

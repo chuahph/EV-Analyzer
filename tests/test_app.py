@@ -12878,3 +12878,26 @@ def test_live_reports_the_brake_pedal():
         assert "BrakePedal" in routes.LIVE_ONLY_FIELDS
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_live_page_viewing_time_is_recorded():
+    """Each spell of the Live page on screen is kept (vin, open, close) for
+    the trip copy's live_view_min; old spells age out after 30 days."""
+    import time as _t
+
+    from app import state
+    from app.api import routes
+    from app.database import SessionLocal
+
+    with SessionLocal() as s:
+        state.put(s, state.TELEMETRY_LIVE_VIEWS_KEY, "[]")
+    now = _t.time()
+    routes._record_live_view("VVIEW", now - 40 * 86400, now - 40 * 86400 + 600)   # too old later
+    routes._record_live_view("VVIEW", now - 1800, now - 600)
+    with TestClient(app) as client:
+        views = client.get("/api/live/views").json()
+    assert ["VVIEW", round(now - 1800, 1), round(now - 600, 1)] in views
+    routes._record_live_view("VVIEW", now - 300, now - 200)
+    with SessionLocal() as s:
+        kept = json.loads(state.get(s, state.TELEMETRY_LIVE_VIEWS_KEY))
+    assert all(v[2] >= now - 30 * 86400 for v in kept) and len(kept) == 2

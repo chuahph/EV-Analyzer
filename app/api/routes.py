@@ -15418,6 +15418,40 @@ def live_now(
     return _live_payload_safe(vin, capacity_kwh)
 
 
+LIVE_VIEWS_MAX = 400
+
+
+def _record_live_view(vin: str, start: float, end: float) -> None:
+    """Remember one spell of the Live page on screen (see
+    state.TELEMETRY_LIVE_VIEWS_KEY). Never raises: this runs as a stream
+    closes and must not turn a disconnect into an error."""
+    from ..database import SessionLocal
+
+    try:
+        with SessionLocal() as s:
+            try:
+                views = _json_mod.loads(state.get(s, state.TELEMETRY_LIVE_VIEWS_KEY) or "[]") or []
+            except ValueError:
+                views = []
+            cut = time.time() - 30 * 86400
+            views = [v for v in views if isinstance(v, list) and len(v) == 3 and v[2] >= cut]
+            views.append([vin, round(start, 1), round(end, 1)])
+            state.put(s, state.TELEMETRY_LIVE_VIEWS_KEY, _json_mod.dumps(views[-LIVE_VIEWS_MAX:]))
+    except Exception:   # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).exception("recording a live view failed")
+
+
+@router.get("/live/views")
+def live_views(session: Session = Depends(get_session)):
+    """When the Live page was on screen, for the trip list to say how long it
+    was watched during each drive: [[vin, open_ts, close_ts], ...]."""
+    try:
+        return _json_mod.loads(state.get(session, state.TELEMETRY_LIVE_VIEWS_KEY) or "[]") or []
+    except ValueError:
+        return []
+
+
 @router.get("/live/stream")
 async def live_stream(
     request: Request,
@@ -15437,6 +15471,17 @@ async def live_stream(
 
     async def events():
         last_v, last_beat, opened = None, time.monotonic(), time.monotonic()
+        wall_open = time.time()
+        try:
+            async for chunk in _events(last_v, last_beat, opened):
+                yield chunk
+        finally:
+            # One small write per viewing, after it ends: never per frame.
+            target = vin or _live_latest_vin()
+            if target and time.time() - wall_open >= 10:
+                await asyncio.to_thread(_record_live_view, target, wall_open, time.time())
+
+    async def _events(last_v, last_beat, opened):
         while time.monotonic() - opened < 3600:
             if await request.is_disconnected():
                 return
