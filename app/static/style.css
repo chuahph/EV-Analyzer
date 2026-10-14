@@ -2462,7 +2462,7 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip .gl-rt i svg { width: 11px; height: 11px; }
   .gl-side > .gl-trip .gl-rt span { letter-spacing: 0; font-size: 8.5px; }
   /* Narrow phones: the odometer icon says what the reading is. */
-  .gl-odo span { display: none; }
+  .gl-odo span { font-size: 8.5px; letter-spacing: .02em; }
   .gl-odo { padding: 4px 8px; }
 }
 
@@ -2617,3 +2617,8 @@ main > .card { max-width: 100%; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-minis { margin-top: 4px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-power-sub { display: none; }
 }
+/* Left tiles' labels as bright as the right column's (EST. RANGE, REGEN),
+   dimmed or not; the odometer line opens with its label. */
+.gl-rt span, .gl-odo span { color: #9fb0c3; }
+.gl-dim .gl-rt i { opacity: .75; }
+.gl-odo span { flex: 0 0 auto; font-size: 9.5px; letter-spacing: .06em; }

@@ -5050,7 +5050,7 @@ function renderGlance(d) {
             ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
             ${tile("whkm", "Wh/km", n(tw), twTone)}
           </div>
-          <div class="gl-odo"><i><svg viewBox="0 0 24 24" aria-hidden="true">${ico.odo}</svg></i><span>Odometer km</span>
+          <div class="gl-odo"><span>Odo km</span>
             <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
         </div>`,
         glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
@@ -5285,7 +5285,6 @@ function glFit(root) {
     const lab = o.querySelector("span"), fig = o.querySelector("strong");
     if (lab) lab.style.display = "";
     if (fig) fig.style.fontSize = "";
-    if (o.scrollWidth > o.clientWidth + 1 && lab) lab.style.display = "none";
     if (fig && o.scrollWidth > o.clientWidth + 1) {
       const fs = parseFloat(getComputedStyle(fig).fontSize);
       fig.style.fontSize = Math.max(9, fs * o.clientWidth / o.scrollWidth * 0.95).toFixed(1) + "px";
