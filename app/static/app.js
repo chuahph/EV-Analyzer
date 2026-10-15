@@ -5023,7 +5023,7 @@ function renderGlance(d) {
             <b style="left:${zero.toFixed(1)}%"></b></div>
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           <div class="gl-minis">
-            <div class="gl-mini"><span>Est. range</span>
+            <div class="gl-mini"><span data-short="Range">Est. range</span>
               <div><strong>${rangeHere != null ? n(rangeHere) : "—"}<small>km</small></strong>
               <em>${nw.range_km != null ? `rated ${n(nw.range_km)}` : ""}</em></div></div>
             <div class="gl-mini regen"><span>Regen</span>
@@ -5279,6 +5279,22 @@ function glFit(root) {
     }
   }
   for (const [e, fs] of fix) e.style.fontSize = fs.toFixed(1) + "px";
+  // A box title that does not fit takes its short form (Est. range: Range).
+  for (const e of root.querySelectorAll("[data-short]")) {
+    if (!e.dataset.long) e.dataset.long = e.textContent;
+    e.textContent = e.dataset.long;
+    const rg = document.createRange(); rg.selectNodeContents(e);
+    if (rg.getBoundingClientRect().width > e.clientWidth - 0.5) e.textContent = e.dataset.short;
+  }
+  // A tile label that still runs past its tile: the tile's icon gives way.
+  for (const t of root.querySelectorAll(".gl-rt")) {
+    const ic = t.querySelector("i"), lab = t.querySelector("span");
+    if (!ic || !lab) continue;
+    ic.style.display = "";
+    const rg = document.createRange(); rg.selectNodeContents(lab);
+    const edge = t.getBoundingClientRect().right - parseFloat(getComputedStyle(t).paddingRight || 0);
+    if (rg.getBoundingClientRect().right > edge + 0.5) ic.style.display = "none";
+  }
   // The odometer line: the reading must show whole. Its label steps aside
   // first, then the figure shrinks if it still does not fit.
   for (const o of root.querySelectorAll(".gl-odo")) {

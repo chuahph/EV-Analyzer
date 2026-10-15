@@ -2622,3 +2622,10 @@ main > .card { max-width: 100%; }
 .gl-rt span, .gl-odo span { color: #9fb0c3; }
 .gl-dim .gl-rt i { opacity: .75; }
 .gl-odo span { flex: 0 0 auto; font-size: 9.5px; letter-spacing: .06em; }
+/* The narrowest phones (iPhone SE 1st gen, 568 px wide): the tile icons give
+   way so every label reads whole, and Est. range shortens to Range. */
+@media (orientation: landscape) and (max-width: 600px) {
+  .gl-side > .gl-trip .gl-rt i { display: none; }
+  .gl-side > .gl-trip .gl-rt span { font-size: 8px; letter-spacing: 0; }
+  .gl-mini span { font-size: 8px; letter-spacing: .02em; }
+}
