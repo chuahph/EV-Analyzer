@@ -4550,8 +4550,8 @@ function glEffTrace(hist, rated) {
     pts.push({ t: hist[i].t, w: d > 0.02 ? e * 1000 / d : null });
   }
   const shown = pts.filter((p) => p.w != null);
-  const head = (now) => `<div class="gl-trace-h"><span>Wh/km<i class="gl-wide-only"> · last 3 min</i></span>
-      <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${n(now)}</strong> now · ` : ""}rated ${n(R)}</span></div>`;
+  const head = (now) => `<div class="gl-trace-h"><span>Wh/km<i data-opt="1"> · last 3 min</i></span>
+      <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${n(now)}</strong><i data-opt="2"> now</i> · ` : ""}<i data-opt="3">rated </i>${n(R)}</span></div>`;
   if (shown.length < 2) {
     return `<div class="gl-trace">${head(null)}<div class="gl-trace-wait">building the trace…</div></div>`;
   }
@@ -5036,7 +5036,7 @@ function renderGlance(d) {
       const packKwh = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
       const usedPct = Math.max(+t.soc_used || 0, packKwh && t.energy_kwh > 0 ? t.energy_kwh / packKwh * 100 : 0);
       const battBar = `<div class="gl-battbar">
-          <div class="gl-battbar-top"><span>Battery${nw.range_km != null ? `<em class="gl-rated">rated ${n(nw.range_km)}<i class="gl-wide-only"> km</i></em>` : ""}</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
+          <div class="gl-battbar-top"><span>Battery${nw.range_km != null ? `<em class="gl-rated" data-opt="2">rated ${n(nw.range_km)}<i data-opt="1"> km</i></em>` : ""}</span><strong>${pct == null ? "—" : n(pct, 1)}<small>%</small></strong></div>
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
           <div class="gl-power-sub">used ${n(usedPct, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
@@ -5253,7 +5253,7 @@ window.addEventListener("resize", () => {
     if (el && glanceVisible()) glFit(el);
   }, 150);
 });
-const GL_FIT = ".gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-top, .gl-battbar-top, .gl-power-sub, .gl-mini > div, .gl-trace-h, .gl-box-v, .gl-foot .gl-chip";
+const GL_FIT = ".gl-rt strong, .gl-rt span, .gl-trip-h, .gl-power-sub, .gl-mini > div, .gl-box-v, .gl-foot .gl-chip";
 // Shrink each figure or label that overflows its box. All the measuring is
 // done before any size is set, so the page lays out once per redraw instead
 // of once per adjusted element: text width scales with font size, so one
@@ -5267,6 +5267,40 @@ function glFootFit(root) {
   opt.forEach((e) => { e.style.display = ""; });
   for (let i = opt.length - 1; i >= 0 && f.scrollWidth > f.clientWidth + 1; i--) opt[i].style.display = "none";
 }
+function glFitRow(row) {
+  const opts = [...row.querySelectorAll("[data-opt]")].sort((a, b) => +a.dataset.opt - +b.dataset.opt);
+  const texts = [...row.querySelectorAll("span, strong, em, small, i")];
+  opts.forEach((e) => { e.style.display = ""; });
+  texts.forEach((e) => { e.style.fontSize = ""; });
+  const cs = getComputedStyle(row);
+  const room = () => row.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const need = () => {
+    // Children laid out side by side: their widths plus the gaps between.
+    const kids = [...row.children].filter((k) => getComputedStyle(k).display !== "none");
+    if (!kids.length) return 0;
+    const l = Math.min(...kids.map((k) => k.getBoundingClientRect().left));
+    let w = 0;
+    for (const k of kids) {
+      const rg = document.createRange(); rg.selectNodeContents(k);
+      w += rg.getBoundingClientRect().width;
+    }
+    const gap = parseFloat(cs.columnGap) || 0;
+    return w + gap * (kids.length - 1) + 4;
+  };
+  for (const o of opts) {
+    if (need() <= room()) break;
+    o.style.display = "none";
+  }
+  const over = need() / room();
+  if (over > 1) {
+    for (const e of texts) {
+      if (e.closest("[data-opt]") && e.closest("[data-opt]").style.display === "none") continue;
+      const fs = parseFloat(getComputedStyle(e).fontSize);
+      e.style.fontSize = Math.max(6, fs / over * 0.97).toFixed(1) + "px";
+    }
+  }
+}
+
 function glFit(root) {
   const els = [...root.querySelectorAll(GL_FIT)];
   for (const e of els) if (e.style.fontSize) e.style.fontSize = "";
@@ -5301,17 +5335,12 @@ function glFit(root) {
       lab.style.fontSize = Math.max(6.5, fs * (w - over) / w * 0.97).toFixed(1) + "px";
     }
   }
-  // The odometer line: the reading must show whole. Its label steps aside
-  // first, then the figure shrinks if it still does not fit.
-  for (const o of root.querySelectorAll(".gl-odo")) {
-    const lab = o.querySelector("span"), fig = o.querySelector("strong");
-    if (lab) lab.style.display = "";
-    if (fig) fig.style.fontSize = "";
-    if (fig && o.scrollWidth > o.clientWidth + 1) {
-      const fs = parseFloat(getComputedStyle(fig).fontSize);
-      fig.style.fontSize = Math.max(9, fs * o.clientWidth / o.scrollWidth * 0.95).toFixed(1) + "px";
-    }
-  }
+  // Heading rows (the odometer line, the trace and battery headings, the
+  // power line): measured as laid out. Too wide for the box, the optional
+  // words go first ([data-opt], lowest number first), then the row's text
+  // shrinks just enough. Measured on the text itself, so it holds on any
+  // screen and inside any safe-area inset.
+  for (const row of root.querySelectorAll(".gl-odo, .gl-trace-h, .gl-battbar-top, .gl-power-top")) glFitRow(row);
   glFootFit(root);
 }
 

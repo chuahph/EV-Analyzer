@@ -2629,3 +2629,36 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip .gl-rt span { font-size: 8px; letter-spacing: 0; }
   .gl-mini span { font-size: 8px; letter-spacing: .02em; }
 }
+/* Side columns never outgrow the space they are given (short screens:
+   Safari's bars, older small phones). The stacked boxes share the column's
+   height, up to their usual 76 px each, instead of a fixed 76 px that ran
+   up over the title bar below about 330 px of height; panels shrink their
+   gaps and rows the same way. */
+.gl-3 > .gl-side { max-height: 100%; }
+.gl-side > .gl-stack { flex: 1 1 auto; min-height: 0; max-height: 100%; }
+.gl-stack > .gl-box { flex: 1 1 0; min-height: 0; max-height: 76px; }
+.gl-side > .gl-panel, .gl-side > .gl-segs { min-height: 0; }
+@media (orientation: landscape) and (max-height: 340px) {
+  .gl-stack { gap: 5px; }
+  .gl-stack > .gl-box { padding-top: 3px; padding-bottom: 3px; gap: 1px; }
+  .gl-stack > .gl-box .gl-box-v { font-size: clamp(14px, 6.4vh, 22px); }
+  .gl-stack > .gl-box .gl-box-l { font-size: 9px; }
+  .gl-segs { gap: 4px; padding-top: 6px; padding-bottom: 6px; }
+  .gl-side > .gl-panel { gap: 3px; padding-top: 6px; padding-bottom: 6px; }
+  .gl-3 > .gl-side { gap: 5px; padding: 2px 0; }
+}
+@media (orientation: landscape) and (max-height: 290px) {
+  .gl-stack > .gl-box .gl-box-l { font-size: 8px; }
+  .gl-stack > .gl-box .gl-box-v { font-size: 14px; }
+  .gl-segs { gap: 2px; padding-top: 4px; padding-bottom: 4px; font-size: 10px; }
+  .gl-side > .gl-panel { gap: 2px; padding-top: 4px; padding-bottom: 4px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-battbar { padding-top: 3px; padding-bottom: 3px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-battbar-cell { height: 9px; margin-top: 2px; }
+}
+@media (orientation: landscape) and (max-height: 290px) {
+  .gl-3 > .gl-side:has(> .gl-power) .gl-trace { min-height: 30px; padding-top: 3px; padding-bottom: 3px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-trace svg { min-height: 14px; margin-top: 1px; }
+  .gl-3 > .gl-side:has(> .gl-power) > .gl-power { padding-top: 3px; padding-bottom: 3px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-minis { margin-top: 3px; }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-power-track { height: 8px; margin: 3px 0 1px; }
+}
