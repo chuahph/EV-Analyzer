@@ -5294,6 +5294,12 @@ function glFit(root) {
     const rg = document.createRange(); rg.selectNodeContents(lab);
     const edge = t.getBoundingClientRect().right - parseFloat(getComputedStyle(t).paddingRight || 0);
     if (rg.getBoundingClientRect().right > edge + 0.5) ic.style.display = "none";
+    // Still past the edge with the icon gone: the label shrinks to fit.
+    const over = rg.getBoundingClientRect().right - edge;
+    if (over > 0.5) {
+      const fs = parseFloat(getComputedStyle(lab).fontSize), w = rg.getBoundingClientRect().width;
+      lab.style.fontSize = Math.max(6.5, fs * (w - over) / w * 0.97).toFixed(1) + "px";
+    }
   }
   // The odometer line: the reading must show whole. Its label steps aside
   // first, then the figure shrinks if it still does not fit.
