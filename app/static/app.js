@@ -5325,9 +5325,18 @@ function glFit(root) {
     const ic = t.querySelector("i"), lab = t.querySelector("span");
     if (!ic || !lab) continue;
     ic.style.display = "";
+    lab.style.fontSize = "";
     const rg = document.createRange(); rg.selectNodeContents(lab);
     const edge = t.getBoundingClientRect().right - parseFloat(getComputedStyle(t).paddingRight || 0);
-    if (rg.getBoundingClientRect().right > edge + 0.5) ic.style.display = "none";
+    // A label a little too wide shrinks (to 85% at most) and keeps its icon;
+    // only a label still too wide then loses the icon.
+    let past = rg.getBoundingClientRect().right - edge;
+    if (past > 0.5) {
+      const fs0 = parseFloat(getComputedStyle(lab).fontSize), w0 = rg.getBoundingClientRect().width;
+      const fit = fs0 * (w0 - past) / w0 * 0.98;
+      if (fit >= fs0 * 0.85) lab.style.fontSize = fit.toFixed(1) + "px";
+      else ic.style.display = "none";
+    }
     // Still past the edge with the icon gone: the label shrinks to fit.
     const over = rg.getBoundingClientRect().right - edge;
     if (over > 0.5) {
