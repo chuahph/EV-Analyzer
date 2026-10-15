@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "context-bar": {
+      "source": { "source": "github", "repo": "chuahph/context-bar" }
+    }
+  },
+  "enabledPlugins": {
+    "context-bar@context-bar": true
+  }
+}
