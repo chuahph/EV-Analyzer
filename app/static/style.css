@@ -2662,3 +2662,7 @@ main > .card { max-width: 100%; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-minis { margin-top: 3px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-power-track { height: 8px; margin: 3px 0 1px; }
 }
+/* Trip tiles: a little less right padding, so a label like AVG KM/H keeps
+   its icon on a Pro-size phone. */
+.gl-side > .gl-trip .gl-rt { padding-right: 7px; column-gap: 5px; }
+.gl-side > .gl-trip .gl-rt span { letter-spacing: .03em; }

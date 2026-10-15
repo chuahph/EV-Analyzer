@@ -6251,10 +6251,11 @@ def test_a_corrected_row_can_be_put_back_the_way_polling_had_it():
             # Promotion now runs on telemetry ingest as well as on the sync
             # tick, so any earlier test that posted a batch has left rows of
             # its own in this shared database. Cleared first, or this measures
-            # them instead of its own.
+            # them instead of its own - corrected rows included: one left by
+            # an earlier test within the last 7 days was counted as restored
+            # here, so this failed or passed by the time of day it ran.
             for stray in sess.scalars(
-                    select(Drive).where(Drive.source == "telemetry",
-                                        Drive.polled_km.is_(None))).all():
+                    select(Drive).where(Drive.source == "telemetry")).all():
                 sess.delete(stray)
             sess.commit()
             vehicle = Vehicle(vin="UNDO00000000001", name="Test", model="Model 3")
