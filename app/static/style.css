@@ -2666,3 +2666,19 @@ main > .card { max-width: 100%; }
    its icon on a Pro-size phone. */
 .gl-side > .gl-trip .gl-rt { padding-right: 7px; column-gap: 5px; }
 .gl-side > .gl-trip .gl-rt span { letter-spacing: .03em; }
+
+/* Deeper dim (body.gl-dim): the frame and the furniture to about a fifth,
+   the key numbers and their labels to about three quarters, so a glance
+   still reads and the OLED screen gives out far less light. These come
+   last, over the earlier dim rules. */
+.gl-dim .gl-frame, .gl-dim .gl-rail, .gl-dim .gl-head, .gl-dim .gl-foot { opacity: .16; }
+.gl-dim .gl-trip-h, .gl-dim .gl-rt i, .gl-dim .gl-rt::after, .gl-dim .gl-odo i,
+.gl-dim .gl-mini em, .gl-dim .gl-power-sub { opacity: .26; }
+.gl-dim .gl-power-track, .gl-dim .gl-battbar-cell, .gl-dim .gl-trace { opacity: .3; }
+.gl-dim .gl-speedo > :not(text) { opacity: .22; }
+.gl-dim .gl-rt strong, .gl-dim .gl-odo strong, .gl-dim .gl-mini strong,
+.gl-dim .gl-power-top strong, .gl-dim .gl-battbar-top strong,
+.gl-dim .gl-speedo text { opacity: .8; }
+.gl-dim .gl-rt span, .gl-dim .gl-odo span, .gl-dim .gl-mini span,
+.gl-dim .gl-power-top span, .gl-dim .gl-battbar-top span { opacity: .72; }
+.gl-dim .gl-rt i { opacity: .55; }

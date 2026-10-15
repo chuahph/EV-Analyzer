@@ -4695,16 +4695,26 @@ function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !doc
 // switches it to "always bright" for the rest of that visit — for a phone on
 // a cable in the car; reopening the app goes back to auto-dim.
 const GL_DIM_MS = 15000;
+const GL_DIM_EVENT_MS = 8000;
 const GL_BRAKE_KMH_S = 10;   // about 0.28 g: firmer than the strongest regen
 let glDimTimer = null;
 const glDim = { off: false };
 function glDimAllowed() { return !glDim.off; }
-function glDimArm() {
+// The wake lasts GL_DIM_MS after a tap and GL_DIM_EVENT_MS after the car does
+// something (brake, stop, gear change): in stop-go traffic those come every
+// few seconds, and 15 s each left the screen bright most of the drive. A
+// shorter wake never cuts short a longer one still running.
+let glDimDeadline = 0;
+function glDimArm(ms = GL_DIM_MS) {
+  const due = Date.now() + ms;
+  const dim = document.body.classList.contains("gl-dim");
+  if (!dim && glDimTimer && due < glDimDeadline) return;
   clearTimeout(glDimTimer);
   glDimTimer = null;
   document.body.classList.remove("gl-dim");
   if (!glDimAllowed()) return;
-  glDimTimer = setTimeout(() => { if (glWakeWanted() && glDimAllowed()) document.body.classList.add("gl-dim"); }, GL_DIM_MS);
+  glDimDeadline = due;
+  glDimTimer = setTimeout(() => { if (glWakeWanted() && glDimAllowed()) document.body.classList.add("gl-dim"); }, ms);
 }
 async function glWakeSync() {
   const want = glWakeWanted();
@@ -4790,7 +4800,7 @@ function glLiveApply(L) {
     // server after 2 minutes, so the next press is still seen).
     const pedal = nw.brake === true && glLiveState.lastBrake !== true;
     glLiveState.lastBrake = nw.brake;
-    if (pedal || braking || (v === 0 && lv > 0) || (nw.shift && ls && nw.shift !== ls)) glDimArm();
+    if (pedal || braking || (v === 0 && lv > 0) || (nw.shift && ls && nw.shift !== ls)) glDimArm(GL_DIM_EVENT_MS);
     if (v != null && nw.ts) { glLiveState.lastV = v; glLiveState.lastT = nw.ts; }
     if (nw.shift) glLiveState.lastShift = nw.shift;
   }
