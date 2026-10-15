@@ -1680,15 +1680,21 @@ let lastRenderedCharges = [];
 // keeps the tap's permission to write the clipboard.
 let liveViews = null;
 function loadLiveViews() {
-  fetch("/api/live/views", { credentials: "same-origin" })
+  fetch("/api/live/views?days=3", { credentials: "same-origin" })
     .then((r) => (r.ok ? r.json() : []))
     .then((v) => { liveViews = Array.isArray(v) ? v : []; })
     .catch(() => {});
 }
+// Kept fresh while the dashboard is on screen: a spell that has just ended
+// (or is still running) is on the server's list, and a copy reads this one.
+setInterval(() => { if (!document.hidden && liveViews) loadLiveViews(); }, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && liveViews) loadLiveViews(); });
 function liveViewMin(t) {
   if (!liveViews || !t || !t.start_time || !t.end_time) return null;
   const a = new Date(t.start_time).getTime() / 1000, b = new Date(t.end_time).getTime() / 1000 + 60;
   if (!(b > a)) return null;
+  // The list covers 3 days: older trips are unknown, not zero.
+  if (a < Date.now() / 1000 - 3 * 86400) return null;
   const vin = lastData && lastData.vehicle && lastData.vehicle.vin;
   let sec = 0;
   for (const [v, s, e] of liveViews) {
@@ -4880,7 +4886,7 @@ async function glLivePoll() {
     || Date.now() - Math.max(glLiveState.esLast || 0, glLiveState.esOpened || 0) > 20000;
   if (quiet) {
     try {
-      const r = await fetch("/api/live?" + q, { credentials: "same-origin" });
+      const r = await fetch("/api/live?view=1&" + q, { credentials: "same-origin" });
       if (r.ok) glLiveApply(await r.json());
     } catch (_) { /* offline: try again shortly */ }
   }

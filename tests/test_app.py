@@ -12883,7 +12883,10 @@ def test_live_reports_the_brake_pedal():
 
 def test_live_page_viewing_time_is_recorded():
     """Each spell of the Live page on screen is kept (vin, open, close) for
-    the trip copy's live_view_min; old spells age out after 30 days."""
+    the trip copy's live_view_min: over the stream, or over the polling the
+    page falls back to when the stream goes quiet (the case that was missed:
+    a weak signal leaves the page asking once a second). Spells join across
+    short gaps; the running one is reported; old ones age out."""
     import time as _t
 
     from app import state
@@ -12892,16 +12895,42 @@ def test_live_page_viewing_time_is_recorded():
 
     with SessionLocal() as s:
         state.put(s, state.TELEMETRY_LIVE_VIEWS_KEY, "[]")
+    routes._LIVE_SPELLS.clear()
     now = _t.time()
-    routes._record_live_view("VVIEW", now - 40 * 86400, now - 40 * 86400 + 600)   # too old later
+    # Saved spells: one too old for the 30-day window, one inside it.
+    routes._record_live_view("VVIEW", now - 40 * 86400, now - 40 * 86400 + 600)
     routes._record_live_view("VVIEW", now - 1800, now - 600)
-    with TestClient(app) as client:
-        views = client.get("/api/live/views").json()
-    assert ["VVIEW", round(now - 1800, 1), round(now - 600, 1)] in views
-    routes._record_live_view("VVIEW", now - 300, now - 200)
     with SessionLocal() as s:
         kept = json.loads(state.get(s, state.TELEMETRY_LIVE_VIEWS_KEY))
-    assert all(v[2] >= now - 30 * 86400 for v in kept) and len(kept) == 2
+    assert len(kept) == 1 and kept[0][0] == "VVIEW"
+
+    # Polling: requests marked view=1 make a spell; the garage's do not.
+    with TestClient(app) as client:
+        client.get("/api/live?vin=VPOLL")                 # the garage line: not counted
+        assert not routes._LIVE_SPELLS
+        for _ in range(3):
+            client.get("/api/live?view=1&vin=VPOLL")
+        assert "VPOLL" in routes._LIVE_SPELLS
+        # Back-dated so it has lasted 5 minutes and then gone quiet.
+        routes._LIVE_SPELLS["VPOLL"] = [now - 600, now - 300]
+        views = client.get("/api/live/views").json()      # flushes the quiet spell
+    assert ["VPOLL", round(now - 600, 1), round(now - 300, 1)] in views
+    assert "VPOLL" not in routes._LIVE_SPELLS
+
+    # A short gap does not split a spell; a long one does.
+    routes._LIVE_SPELLS["VGAP"] = [now - 100, now - 15]
+    assert routes._live_touch("VGAP") is None             # 15 s gap: same spell
+    assert routes._LIVE_SPELLS["VGAP"][0] == now - 100
+    routes._LIVE_SPELLS["VGAP"] = [now - 400, now - 300]
+    closed = routes._live_touch("VGAP")                   # 300 s gap: a new spell
+    assert closed == (now - 400, now - 300)
+    # The spell still running is reported, not lost until it ends.
+    routes._LIVE_SPELLS["VGAP"] = [now - 120, now - 2]
+    with TestClient(app) as client:
+        running = client.get("/api/live/views").json()
+    assert any(v[0] == "VGAP" for v in running)
+    routes._LIVE_SPELLS.clear()
+
 
 
 def test_live_wh_per_km_keeps_counting_energy_once_stopped():
