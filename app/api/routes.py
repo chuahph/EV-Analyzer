@@ -15394,7 +15394,13 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         go = {**go, "energy_kwh": base}
         snap = {**snap, "energy_kwh": base - max(e_now, 0.0)}
     trip = sync_mod.live_trip(go, snap, cap, get_settings().drive_min_km) if go else None
-    if trip and go and go.get("_od") and go.get("odo_km") is not None:
+    # Held at the last odometer tick only while moving. Once stopped the car's
+    # own Current Drive keeps counting the energy spent standing (a wait in P
+    # at 29 C is ~1.5 kW): its Wh/km rose from 183.6 to 226.8 over 11 minutes
+    # parked. Held, this read 144 against the car's 170.1 at the end of a
+    # morning drive, so a stopped car now uses the energy used so far.
+    moving_now = float(snap.get("speed_kmh") or 0.0) > 0.5
+    if trip and go and moving_now and go.get("_od") and go.get("odo_km") is not None:
         dist = go["_od"][0] - float(go["odo_km"])
         if dist >= max(get_settings().drive_min_km, 0.1) and go["_od"][1] > 0:
             trip["wh_per_km"] = round(go["_od"][1] * 1000.0 / dist)
