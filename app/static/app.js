@@ -1689,6 +1689,18 @@ function loadLiveViews() {
 // (or is still running) is on the server's list, and a copy reads this one.
 setInterval(() => { if (!document.hidden && liveViews) loadLiveViews(); }, 60000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && liveViews) loadLiveViews(); });
+function liveViewPollPct(t) {
+  if (!liveViews || !t || !t.start_time || !t.end_time) return null;
+  const a = new Date(t.start_time).getTime() / 1000, b = new Date(t.end_time).getTime() / 1000 + 60;
+  const vin = lastData && lastData.vehicle && lastData.vehicle.vin;
+  let all = 0, poll = 0;
+  for (const [v, s, e, ns, np] of liveViews) {
+    if ((vin && v && v !== vin) || !(ns + np > 0)) continue;
+    const o = Math.max(0, Math.min(b, e) - Math.max(a, s));
+    all += o; poll += o * np / (ns + np);
+  }
+  return all > 0 ? Math.round(100 * poll / all) : null;
+}
 function liveViewMin(t) {
   if (!liveViews || !t || !t.start_time || !t.end_time) return null;
   const a = new Date(t.start_time).getTime() / 1000, b = new Date(t.end_time).getTime() / 1000 + 60;
@@ -1788,6 +1800,9 @@ function tripDiagnostics(t, ctx) {
       // Minutes the Live page was on the phone's screen during this trip,
       // to set against the phone's own battery use for that drive.
       live_view_min: liveViewMin(t),
+      // Share of that time the page was fed by polling instead of the stream:
+      // high means the phone's stream does not hold and it asks every second.
+      live_view_polling_pct: liveViewPollPct(t),
       data_quality: t.data_quality, distance_flag: t.distance_flag,
       // The parked gap before this trip: a 0.0 kWh reading over a long park
       // is itself a symptom (drain that moved into the drive).

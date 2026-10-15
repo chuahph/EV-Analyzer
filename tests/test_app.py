@@ -12912,20 +12912,20 @@ def test_live_page_viewing_time_is_recorded():
             client.get("/api/live?view=1&vin=VPOLL")
         assert "VPOLL" in routes._LIVE_SPELLS
         # Back-dated so it has lasted 5 minutes and then gone quiet.
-        routes._LIVE_SPELLS["VPOLL"] = [now - 600, now - 300]
+        routes._LIVE_SPELLS["VPOLL"] = [now - 600, now - 300, 0, 300]
         views = client.get("/api/live/views").json()      # flushes the quiet spell
-    assert ["VPOLL", round(now - 600, 1), round(now - 300, 1)] in views
+    assert ["VPOLL", round(now - 600, 1), round(now - 300, 1), 0, 300] in views   # all polled
     assert "VPOLL" not in routes._LIVE_SPELLS
 
     # A short gap does not split a spell; a long one does.
-    routes._LIVE_SPELLS["VGAP"] = [now - 100, now - 15]
+    routes._LIVE_SPELLS["VGAP"] = [now - 100, now - 15, 80, 0]
     assert routes._live_touch("VGAP") is None             # 15 s gap: same spell
     assert routes._LIVE_SPELLS["VGAP"][0] == now - 100
-    routes._LIVE_SPELLS["VGAP"] = [now - 400, now - 300]
+    routes._LIVE_SPELLS["VGAP"] = [now - 400, now - 300, 90, 5]
     closed = routes._live_touch("VGAP")                   # 300 s gap: a new spell
-    assert closed == (now - 400, now - 300)
+    assert closed == (now - 400, now - 300, 90, 5)
     # The spell still running is reported, not lost until it ends.
-    routes._LIVE_SPELLS["VGAP"] = [now - 120, now - 2]
+    routes._LIVE_SPELLS["VGAP"] = [now - 120, now - 2, 100, 10]
     with TestClient(app) as client:
         running = client.get("/api/live/views").json()
     assert any(v[0] == "VGAP" for v in running)
