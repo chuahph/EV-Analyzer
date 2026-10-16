@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import html
+
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -107,7 +109,10 @@ def send_telegram(title: str, body: str) -> bool:
     try:
         resp = httpx.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat, "text": f"{title}\n{body}"},
+            # Bold title, blank line, then the detail: one run-together block
+            # of text was hard to scan on a locked-phone preview.
+            json={"chat_id": chat, "parse_mode": "HTML",
+                  "text": f"<b>{html.escape(title)}</b>\n\n{html.escape(body)}"},
             timeout=10.0,
         )
         return resp.status_code < 300

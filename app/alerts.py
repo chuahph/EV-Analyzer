@@ -146,9 +146,9 @@ def _standby_alert(gap, cost, when, cause) -> dict[str, str]:
         # End timestamp -> one alert per distinct parked event.
         "signature": str(gap.get("end", "")),
         "title": "Unusual standby drain while parked",
-        "body": f"Lost {gap['pct']:.1f}% ({gap['kwh']:.1f} kWh{cost}) parked over "
-                f"{gap.get('hours', 0):.0f} h with no charging{when}.{cause} "
-                "Turn off Sentry Mode when parked somewhere safe to cut it.",
+        "body": f"Lost {gap['pct']:.1f}% ({gap['kwh']:.1f} kWh{cost}) over "
+                f"{gap.get('hours', 0):.0f} h parked{when}.{cause} "
+                "Turn off Sentry Mode when parked somewhere safe.",
     }
 
 
