@@ -29,6 +29,11 @@ FAST_DEGRADATION_PCT_PER_YEAR = 3.0
 # (Sentry left on, cabin-overheat cooling in the heat, ...), not routine drain.
 STANDBY_GAP_KWH = 1.5
 STANDBY_GAP_PCT = 2.0
+# A parked-drain event older than this is history, not news: the scan covers
+# 30 days and always returns the worst gap in them, so without a limit the
+# same weeks-old event was delivered again each cooldown (29 days later, on
+# 16 Oct, for a 16 Sep gap), reading as if it had just happened.
+STANDBY_ALERT_MAX_AGE_DAYS = 3
 # Don't re-send a still-true alert more often than this.
 COOLDOWN_DAYS = 7
 
@@ -60,11 +65,17 @@ def evaluate(
             if delta_pct >= EFFICIENCY_DROP_PCT:
                 out.append({
                     "key": "efficiency_drop",
-                    "signature": f"{round(delta_pct)}",
+                    # In steps of ten points, not the rounded figure: the window
+                    # moves every day, so 16% then 17% then 13% were three
+                    # "new" alerts on three days running. A real worsening
+                    # (the next ten points) still gets through; the same
+                    # standing condition waits out the cooldown.
+                    "signature": f"{int(delta_pct // 10) * 10}",
                     "title": "Efficiency is slipping",
                     "body": f"Your Wh/km is up {delta_pct:.0f}% vs the period before "
-                            f"({prev_wh:.0f} → {now_wh:.0f}). Colder weather, more "
-                            "highway or heavier traffic are the usual causes.",
+                            f"({prev_wh:.0f} → {now_wh:.0f}). Heavier traffic, more "
+                            "highway, hot-weather A/C or cold weather are the "
+                            "usual causes.",
                 })
 
     # 2. Degradation projected to run faster than typical.
@@ -110,25 +121,35 @@ def evaluate(
         # happened. Said explicitly, with how long ago, so a resend of a
         # five-day-old gap does not look like a fresh one.
         when = ""
+        stale = False
         try:
             end_dt = datetime.fromisoformat(gap.get("end", ""))
             age_days = (now - end_dt).days
+            stale = age_days > STANDBY_ALERT_MAX_AGE_DAYS
             when = (f" on {end_dt.strftime('%d %b')}"
                     + (f", {age_days} day{'s' if age_days != 1 else ''} ago"
                        if age_days >= 1 else ""))
         except (TypeError, ValueError):
             pass
-        out.append({
-            "key": "standby_drain",
-            # End timestamp -> one alert per distinct parked event.
-            "signature": str(gap.get("end", "")),
-            "title": "Unusual standby drain while parked",
-            "body": f"Lost {gap['pct']:.1f}% ({gap['kwh']:.1f} kWh{cost}) parked over "
-                    f"{gap.get('hours', 0):.0f} h with no charging{when}.{cause} "
-                    "Turn off Sentry Mode when parked somewhere safe to cut it.",
-        })
+        if not stale:
+            out.append(_standby_alert(gap, cost, when, cause))
 
     return out
+
+
+def _standby_alert(gap, cost, when, cause) -> dict[str, str]:
+    """The standby-drain candidate. ``once``: each parked event is told once,
+    never re-sent after the cooldown."""
+    return {
+        "once": "1",
+        "key": "standby_drain",
+        # End timestamp -> one alert per distinct parked event.
+        "signature": str(gap.get("end", "")),
+        "title": "Unusual standby drain while parked",
+        "body": f"Lost {gap['pct']:.1f}% ({gap['kwh']:.1f} kWh{cost}) parked over "
+                f"{gap.get('hours', 0):.0f} h with no charging{when}.{cause} "
+                "Turn off Sentry Mode when parked somewhere safe to cut it.",
+    }
 
 
 def _key(alert_key: str) -> str:
@@ -164,8 +185,8 @@ def dispatch(
                 within_cooldown = age_days < cooldown_days
             except ValueError:
                 within_cooldown = False
-        if same_sig and within_cooldown:
-            continue  # already told them this, recently
+        if same_sig and (within_cooldown or (a.get("once") and prev.get("sent"))):
+            continue  # already told them this (an event alert: for good)
         notify(a["title"], a["body"], a["key"])
         state.put(session, _key(a["key"]),
                   json.dumps({"sig": a["signature"], "sent": now.isoformat(timespec="seconds")}))

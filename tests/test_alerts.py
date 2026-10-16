@@ -72,13 +72,13 @@ def test_standby_alert_says_how_old_a_resent_gap_is():
     to say it was from days earlier, read against the car's own "since last
     charge" screen (a different window entirely) as if it disagreed with it.
     """
-    old_gap = {"kwh": 2.9, "pct": 4.3, "hours": 4, "end": "2026-07-19T10:00:00",
+    old_gap = {"kwh": 2.9, "pct": 4.3, "hours": 4, "end": "2026-07-22T10:00:00",
               "inducer": "Sentry Mode & climate (maybe)", "cost": 2.64}
     a = next(a for a in alerts.evaluate(
         now=NOW, efficiency=None, prev_efficiency=None, battery=None,
         service_rows=None, standby_longest=old_gap, currency="RM")
         if a["key"] == "standby_drain")
-    assert "19 Jul, 4 days ago" in a["body"]
+    assert "22 Jul, 1 day ago" in a["body"]
     # An unparsable end timestamp costs the date, not the whole alert.
     undated = dict(old_gap, end="not-a-date")
     b = next(a for a in alerts.evaluate(
@@ -86,6 +86,31 @@ def test_standby_alert_says_how_old_a_resent_gap_is():
         service_rows=None, standby_longest=undated, currency="RM")
         if a["key"] == "standby_drain")
     assert "Lost 4.3%" in b["body"] and "ago" not in b["body"]
+
+
+def test_standby_alert_ignores_weeks_old_gap():
+    """The 30-day scan's worst gap (16 Sep) was re-sent on 16 Oct as if new."""
+    old = {"kwh": 2.9, "pct": 4.3, "hours": 4, "end": "2026-06-24T10:00:00"}
+    assert not any(a["key"] == "standby_drain" for a in alerts.evaluate(
+        now=NOW, efficiency=None, prev_efficiency=None, battery=None,
+        service_rows=None, standby_longest=old))
+
+
+def test_standby_event_is_sent_once_even_after_cooldown(session):
+    fired = []
+    cand = [{"key": "standby_drain", "signature": "e1", "once": "1",
+             "title": "T", "body": "B"}]
+    n = lambda t, b, tag: fired.append(tag)
+    assert alerts.dispatch(session, cand, n, now=NOW) == ["standby_drain"]
+    assert alerts.dispatch(session, cand, n, now=NOW + timedelta(days=30)) == []
+
+
+def test_efficiency_signature_is_stable_within_ten_points():
+    sig = lambda wh: next(a for a in alerts.evaluate(
+        now=NOW, efficiency=_eff(wh), prev_efficiency=_eff(150), battery=None,
+        service_rows=None, standby_longest=None) if a["key"] == "efficiency_drop")["signature"]
+    assert sig(174) == sig(177) == "10"  # 16% and 18%
+    assert sig(190) == "20"
 
 
 def test_dispatch_dedups_within_cooldown_and_resends_on_change(session):
