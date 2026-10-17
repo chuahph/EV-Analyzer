@@ -4855,12 +4855,16 @@ setInterval(() => {
 }, 1000);
 
 // Frames can arrive several times a second; one redraw serves them all, at
-// most about eight a second, so a busy stream does not cost the phone layout
+// most about five a second (one while dimmed), so a busy stream does not cost the phone layout
 // work for every record.
 let glDrawTimer = null, glDrawLast = 0;
 function glLiveDraw() {
   if (glDrawTimer) return;
-  const wait = Math.max(0, 200 - (Date.now() - glDrawLast));
+  // Dimmed, the screen is only a glance: one redraw a second is plenty and
+  // saves the phone most of the layout work (an event wakes it, so this
+  // never delays a brake or a gear change).
+  const gap = document.body.classList.contains("gl-dim") ? 1000 : 200;
+  const wait = Math.max(0, gap - (Date.now() - glDrawLast));
   glDrawTimer = setTimeout(() => {
     glDrawTimer = null;
     glDrawLast = Date.now();

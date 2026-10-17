@@ -1746,8 +1746,11 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
 .gl-vbar { position: relative; width: 100%; border-radius: 6px 6px 2px 2px; opacity: .92; min-height: 2px; }
 .gl-vbar span { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -3px);
   font-size: 10.5px; font-weight: 700; color: var(--text); white-space: nowrap; }
+/* Six bars on a phone leave each column about 20px, narrower than "#3220"
+   (about 29px): the label was ellipsised to "#3…". It borrows the 6% gap
+   either side instead, so the trip number reads whole. */
 .gl-vlab { flex: 0 0 18px; font-size: 10px; line-height: 18px; color: var(--muted); text-align: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  white-space: nowrap; margin: 0 -6px; }
 /* The reference line, in a layer the exact size of the bar area (inside the
    top padding, above the 18px label row), so its % lines up with the bars'. */
 .gl-vover { position: absolute; left: 4px; right: 4px; top: 18px; bottom: 18px; pointer-events: none; z-index: 1; }
@@ -2682,3 +2685,23 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-rt span, .gl-dim .gl-odo span, .gl-dim .gl-mini span,
 .gl-dim .gl-power-top span, .gl-dim .gl-battbar-top span { opacity: .72; }
 .gl-dim .gl-rt i { opacity: .55; }
+
+/* Short phones (iPhone SE 1st gen, 320/268 px tall): the efficiency rows and
+   the Drive page's side boxes ran past their panel by a few pixels. */
+@media (orientation: landscape) and (max-height: 340px) {
+  .gl-hbars { gap: 9px; padding-top: 2px; padding-bottom: 2px; }
+  .gl-hrow { row-gap: 2px; }
+  .gl-hrow strong { font-size: 13px; }
+}
+@media (orientation: landscape) and (max-height: 290px) {
+  .gl-hbars { gap: 5px; }
+  .gl-hrow strong { font-size: 12px; }
+  .gl-hnote { font-size: 9px; }
+  .gl-side > .gl-box, .gl-side > .gl-panel > .gl-box { padding-top: 2px; padding-bottom: 2px; }
+}
+@media (orientation: landscape) and (max-height: 290px) {
+  .gl-seg { gap: 2px 4px; }
+  .gl-seg b { height: 6px; }
+  .gl-seg strong { font-size: 11.5px; }
+  .gl-seg i { gap: 2px; }
+}

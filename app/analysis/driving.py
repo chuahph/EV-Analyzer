@@ -3693,6 +3693,35 @@ def trip_factors(d: Any, cuts: dict[str, float] | None = None) -> dict[str, str]
     return {"road": road, "traffic": traffic, "env": env}
 
 
+# A trip within this much of a steadiness cut is borderline: whether it is
+# "slow" or "heavy" traffic rests on a hair, yet the two levels expect very
+# different Wh/km (138 vs 199 measured). Trip 3217 sat at 0.293 against the
+# 0.28 cut, was judged against 138, and came out "45% worse" next to two
+# near-identical trips judged against 199. Within the margin the expectation
+# is blended between the two levels instead of switching at the line.
+TRAFFIC_BLEND_MARGIN = 0.04
+
+
+def traffic_edge(d: Any, cuts: dict[str, float] | None = None) -> tuple[str, str, float] | None:
+    """(lower level, upper level, weight on the upper one) for a city trip
+    near a steadiness cut, else None. Highway and waiting-decided trips have
+    no such edge: their traffic does not come from the steadiness ratio."""
+    f = trip_factors(d, cuts)
+    if f is None or f["road"] != "city":
+        return None
+    c = resolved_cuts(cuts)
+    dur = float(d.duration_min)
+    if float(getattr(d, "idle_min", 0.0) or 0.0) / dur >= c["heavy_idle_share_max"]:
+        return None
+    ratio = (float(d.distance_km) / (dur / 60.0)) / float(d.max_speed_kmh)
+    for cut, lo, hi in ((c["slow_ratio_min"], "heavy", "slow"),
+                        (c["constant_ratio_min"], "slow", "flowing")):
+        if abs(ratio - cut) < TRAFFIC_BLEND_MARGIN:
+            t = (ratio - (cut - TRAFFIC_BLEND_MARGIN)) / (2 * TRAFFIC_BLEND_MARGIN)
+            return lo, hi, min(1.0, max(0.0, t))
+    return None
+
+
 def _invert(m: list[list[float]]) -> list[list[float]] | None:
     """Gauss-Jordan inverse, or None when singular. No numpy here by design."""
     n = len(m)
@@ -3862,6 +3891,13 @@ def trip_efficiency(d: Any, mode: str | None, model: dict[str, Any] | None,
         if all(f[k] in present for k in f):
             x = [1.0] + [1.0 if f[k] == lv else 0.0 for k, lv in fitted["cols"]]
             expected = math.exp(sum(bi * xi for bi, xi in zip(fitted["b"], x)))
+            edge = traffic_edge(d, fitted["cuts"])
+            if edge and edge[0] in present and edge[1] in present:
+                def at(level: str) -> float:
+                    g = dict(f, traffic=level)
+                    xg = [1.0] + [1.0 if g[k] == lv else 0.0 for k, lv in fitted["cols"]]
+                    return sum(bi * xi for bi, xi in zip(fitted["b"], xg))
+                expected = math.exp((1.0 - edge[2]) * at(edge[0]) + edge[2] * at(edge[1]))
             actual = float(d.wh_per_km)
             ratio = actual / expected
             s = model["style"]
@@ -3873,7 +3909,9 @@ def trip_efficiency(d: Any, mode: str | None, model: dict[str, Any] | None,
                 "expected_wh_per_km": round(expected, 1),
                 "vs_expected_pct": round(pct, 1),
                 "why": (f"{actual:.0f} Wh/km against {expected:.0f} expected for "
-                        f"{f['road']} · {f['traffic']} traffic · {f['env']} — "
+                        f"{f['road']} · {f['traffic']} traffic"
+                        f"{' (borderline, blended)' if edge and edge[0] in present and edge[1] in present else ''}"
+                        f" · {f['env']} — "
                         f"{abs(pct):.0f}% {'better' if pct < 0 else 'worse'} "
                         f"than those conditions predict"),
             }

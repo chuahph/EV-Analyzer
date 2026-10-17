@@ -4576,3 +4576,37 @@ def test_the_park_after_a_charge_cannot_count_negative():
     assert acc["excluded"]["hours"] == 0.0
     assert acc["parked"]["hours"] == pytest.approx(
         (8 + 160) / 60.0, abs=0.05)
+
+
+def test_borderline_traffic_blends_its_expectation_instead_of_switching():
+    """Trip 3217 sat at steadiness 0.293 against the 0.28 cut, was judged
+    against the slow-traffic figure (138), and read 45% "inefficient" beside
+    two near-identical trips judged against heavy (199)."""
+    from app.analysis.driving import range_model, trip_efficiency, traffic_edge
+
+    class D:
+        def __init__(self, km, mins, mx, wh, temp=28.0):
+            self.distance_km = km; self.duration_min = mins
+            self.max_speed_kmh = mx; self.idle_min = 0.0
+            self.idle_tracked = True; self.energy_estimated = False
+            self.outside_temp_c = temp
+            self.energy_used_kwh = wh * km / 1000.0
+            self.wh_per_km = wh
+
+    trips = []
+    for i in range(4):
+        trips.append(D(30, 30, 90, 120 + i))      # flowing
+        trips.append(D(20, 40, 70, 140 + i))      # slow  (0.29... 30/70=.43)
+        trips.append(D(10, 40, 70, 200 + i))      # heavy (15/70=.21)
+        trips.append(D(20, 40, 64, 140 + i * 2))  # slow
+    m = range_model(trips, capacity_kwh=68.3)
+    assert m["available"], m
+    border = D(7.7, 27, 58, 200)                  # avg 17.1 / 58 = 0.295
+    assert traffic_edge(border) is not None
+    blended = trip_efficiency(border, None, m, {})["expected_wh_per_km"]
+    slow = trip_efficiency(D(20, 40, 64, 200), None, m, {})["expected_wh_per_km"]
+    heavy = trip_efficiency(D(10, 40, 70, 200), None, m, {})["expected_wh_per_km"]
+    assert slow < blended < heavy
+    # Clear of the margin nothing changes.
+    assert traffic_edge(D(10, 40, 70, 200)) is None
+    assert traffic_edge(D(20, 40, 64, 200)) is None
