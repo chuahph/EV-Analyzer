@@ -3714,12 +3714,15 @@ def traffic_edge(d: Any, cuts: dict[str, float] | None = None) -> tuple[str, str
     if float(getattr(d, "idle_min", 0.0) or 0.0) / dur >= c["heavy_idle_share_max"]:
         return None
     ratio = (float(d.distance_km) / (dur / 60.0)) / float(d.max_speed_kmh)
-    for cut, lo, hi in ((c["slow_ratio_min"], "heavy", "slow"),
-                        (c["constant_ratio_min"], "slow", "flowing")):
-        if abs(ratio - cut) < TRAFFIC_BLEND_MARGIN:
-            t = (ratio - (cut - TRAFFIC_BLEND_MARGIN)) / (2 * TRAFFIC_BLEND_MARGIN)
-            return lo, hi, min(1.0, max(0.0, t))
-    return None
+    # The nearest cut decides (the cuts are configurable and could sit closer
+    # together than the margins).
+    cut, lo, hi = min(((c["slow_ratio_min"], "heavy", "slow"),
+                       (c["constant_ratio_min"], "slow", "flowing")),
+                      key=lambda e: abs(ratio - e[0]))
+    if abs(ratio - cut) >= TRAFFIC_BLEND_MARGIN:
+        return None
+    t = (ratio - (cut - TRAFFIC_BLEND_MARGIN)) / (2 * TRAFFIC_BLEND_MARGIN)
+    return lo, hi, min(1.0, max(0.0, t))
 
 
 def _invert(m: list[list[float]]) -> list[list[float]] | None:
@@ -3892,7 +3895,9 @@ def trip_efficiency(d: Any, mode: str | None, model: dict[str, Any] | None,
             x = [1.0] + [1.0 if f[k] == lv else 0.0 for k, lv in fitted["cols"]]
             expected = math.exp(sum(bi * xi for bi, xi in zip(fitted["b"], x)))
             edge = traffic_edge(d, fitted["cuts"])
-            if edge and edge[0] in present and edge[1] in present:
+            if edge and not (edge[0] in present and edge[1] in present):
+                edge = None
+            if edge:
                 def at(level: str) -> float:
                     g = dict(f, traffic=level)
                     xg = [1.0] + [1.0 if g[k] == lv else 0.0 for k, lv in fitted["cols"]]
@@ -3910,7 +3915,7 @@ def trip_efficiency(d: Any, mode: str | None, model: dict[str, Any] | None,
                 "vs_expected_pct": round(pct, 1),
                 "why": (f"{actual:.0f} Wh/km against {expected:.0f} expected for "
                         f"{f['road']} · {f['traffic']} traffic"
-                        f"{' (borderline, blended)' if edge and edge[0] in present and edge[1] in present else ''}"
+                        f"{' (borderline, blended)' if edge else ''}"
                         f" · {f['env']} — "
                         f"{abs(pct):.0f}% {'better' if pct < 0 else 'worse'} "
                         f"than those conditions predict"),

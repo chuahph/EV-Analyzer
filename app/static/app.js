@@ -4858,12 +4858,18 @@ setInterval(() => {
 // most about five a second (one while dimmed), so a busy stream does not cost the phone layout
 // work for every record.
 let glDrawTimer = null, glDrawLast = 0;
+let glDrawGap = 0;
 function glLiveDraw() {
-  if (glDrawTimer) return;
   // Dimmed, the screen is only a glance: one redraw a second is plenty and
-  // saves the phone most of the layout work (an event wakes it, so this
-  // never delays a brake or a gear change).
+  // saves the phone most of the layout work. A frame that wakes it (brake,
+  // gear change) arrives while a one-second timer may be pending: that timer
+  // is replaced by a short one, so the wake is never a second late.
   const gap = document.body.classList.contains("gl-dim") ? 1000 : 200;
+  if (glDrawTimer) {
+    if (gap >= glDrawGap) return;
+    clearTimeout(glDrawTimer);
+  }
+  glDrawGap = gap;
   const wait = Math.max(0, gap - (Date.now() - glDrawLast));
   glDrawTimer = setTimeout(() => {
     glDrawTimer = null;
@@ -5162,7 +5168,7 @@ function renderGlance(d) {
       const cnt = (b) => all.filter((t) => t.efficiency_band === b).length;
       return page(
         panel(rated ? `Recent · Wh/km · - - rated ${n(rated)}` : "Recent · Wh/km", rec.length ? glVBars(rec.map((t) => ({
-          label: t.id != null ? `#${t.id}` : tripWhen(t.start_time).slice(0, 6),
+          label: t.id != null ? (t.id > 9999 ? `${t.id}` : `#${t.id}`) : tripWhen(t.start_time).slice(0, 6),
           value: t.wh_per_km, colour: bandColour(t.efficiency_band) })), { mark: rated }) : none("No trips")),
         glDonut([
           { v: cnt("efficient"), colour: "var(--green)", label: "efficient", text: cnt("efficient") },

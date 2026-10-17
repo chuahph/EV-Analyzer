@@ -7001,10 +7001,13 @@ def monthly_report(days: int = Query(30, ge=1, le=365), session: Session = Depen
 
 
 def _standby_longest(session: Session, vehicle: Vehicle, drives, charges,
-                     capacity_kwh: float, price_fn) -> dict | None:
+                     capacity_kwh: float, price_fn,
+                     since: datetime | None = None) -> dict | None:
     """The single biggest recent parked-drain event, for the standby alert:
     the charge-free gap that lost the most kWh, with its %/kWh/hours, the
-    likely inducer, and a cost. None when there's no material parked drain."""
+    likely inducer, and a cost. None when there's no material parked drain.
+    ``since`` limits it to gaps that ended after that moment — applied BEFORE
+    the biggest is picked, so an old large gap cannot hide a fresh one."""
     vd = driving_analysis.vampire_drain(
         drives, charges, capacity_kwh,
         rate_history=_full_history(session, vehicle.id),
@@ -7012,6 +7015,8 @@ def _standby_longest(session: Session, vehicle: Vehicle, drives, charges,
         readings=_parked_readings(session, vehicle.id),
         frozen=_frozen_rates(session))
     gaps = vd.get("gap_list") or []
+    if since is not None:
+        gaps = [g for g in gaps if (g.get("end") or "") >= since.isoformat(timespec="seconds")]
     if not gaps:
         return None
     top = max(gaps, key=lambda g: g.get("kwh", 0.0))
@@ -7074,8 +7079,9 @@ def alerts_check(days: int = Query(30, ge=7, le=90),
     candidates = alerts.evaluate(
         now=now, efficiency=efficiency, prev_efficiency=prev_efficiency,
         battery=battery, service_rows=service_rows,
-        standby_longest=_standby_longest(session, vehicle, drives, charges,
-                                         capacity_kwh, price_fn),
+        standby_longest=_standby_longest(
+            session, vehicle, drives, charges, capacity_kwh, price_fn,
+            since=now - timedelta(days=alerts.STANDBY_ALERT_MAX_AGE_DAYS)),
         currency=settings.currency,
     )
     sent = alerts.dispatch(
@@ -15443,7 +15449,7 @@ LIVE_VIEWS_MAX = 200
 # second, and both count.
 LIVE_SPELL_GAP = 20.0
 LIVE_SPELL_MIN = 10.0
-_LIVE_SPELLS: dict[str, list] = {}     # vin -> [start, last]
+_LIVE_SPELLS: dict[str, list] = {}     # vin -> [start, last, stream_n, poll_n]
 _LIVE_SPELL_LOCK = threading.Lock()
 
 

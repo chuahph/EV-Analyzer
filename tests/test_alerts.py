@@ -135,3 +135,19 @@ def test_dispatch_dedups_within_cooldown_and_resends_on_change(session):
     # Same signature but past the cooldown -> re-sent.
     sent4 = alerts.dispatch(session, worse, notify, now=NOW + timedelta(days=10))
     assert sent4 == ["efficiency_drop"]
+
+
+def test_efficiency_alert_does_not_flap_on_a_bucket_edge(session):
+    """19.8% -> 20.3% -> 19.8% crossed a signature bucket twice in three days."""
+    fired = []
+    n = lambda t, b, tag: fired.append(tag)
+    def cand(pct):
+        return [next(a for a in alerts.evaluate(
+            now=NOW, efficiency=_eff(150 * (1 + pct / 100)), prev_efficiency=_eff(150),
+            battery=None, service_rows=None, standby_longest=None)
+            if a["key"] == "efficiency_drop")]
+    assert alerts.dispatch(session, cand(19.8), n, now=NOW) == ["efficiency_drop"]
+    assert alerts.dispatch(session, cand(20.3), n, now=NOW + timedelta(days=1)) == []
+    assert alerts.dispatch(session, cand(19.8), n, now=NOW + timedelta(days=2)) == []
+    # A full ten points worse than what was last sent does go out.
+    assert alerts.dispatch(session, cand(30.5), n, now=NOW + timedelta(days=3)) == ["efficiency_drop"]

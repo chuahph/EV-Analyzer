@@ -12965,3 +12965,30 @@ def test_live_wh_per_km_keeps_counting_energy_once_stopped():
         assert stopped > moving * 1.05, (moving, stopped)
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_telegram_falls_back_to_plain_text_when_markup_is_refused():
+    from app import notifications
+    from app.config import get_settings
+
+    settings = get_settings()
+    old = settings.telegram_bot_token, settings.telegram_chat_id
+    settings.telegram_bot_token, settings.telegram_chat_id = "123:ABC", "456"
+    sent = []
+
+    class R:
+        def __init__(self, code): self.status_code = code
+
+    def post(url, json=None, timeout=None):
+        sent.append(json)
+        return R(400 if json.get("parse_mode") else 200)
+
+    real = notifications.httpx.post
+    notifications.httpx.post = post
+    try:
+        assert notifications.send_telegram("T <1>", "a & b") is True
+    finally:
+        notifications.httpx.post = real
+        settings.telegram_bot_token, settings.telegram_chat_id = old
+    assert sent[0]["parse_mode"] == "HTML" and "<b>T &lt;1&gt;</b>" in sent[0]["text"]
+    assert "parse_mode" not in sent[1] and sent[1]["text"] == "T <1>\n\na & b"

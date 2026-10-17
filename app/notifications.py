@@ -9,9 +9,8 @@ enabled" itself.
 """
 from __future__ import annotations
 
-from datetime import datetime
-
 import html
+from datetime import datetime
 
 import httpx
 from sqlalchemy import select
@@ -106,15 +105,20 @@ def send_telegram(title: str, body: str) -> bool:
     chat = settings.telegram_chat_id.strip()
     if not token or not chat:
         return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        resp = httpx.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            # Bold title, blank line, then the detail: one run-together block
-            # of text was hard to scan on a locked-phone preview.
-            json={"chat_id": chat, "parse_mode": "HTML",
-                  "text": f"<b>{html.escape(title)}</b>\n\n{html.escape(body)}"},
-            timeout=10.0,
-        )
+        # Bold title, blank line, then the detail: one run-together block of
+        # text was hard to scan on a locked-phone preview.
+        resp = httpx.post(url, json={
+            "chat_id": chat, "parse_mode": "HTML",
+            "text": f"<b>{html.escape(title)}</b>\n\n{html.escape(body)}"[:4000]},
+            timeout=10.0)
+        if resp.status_code == 400:
+            # Telegram could not parse the markup: send it plain rather than
+            # lose the message.
+            resp = httpx.post(url, json={"chat_id": chat,
+                                         "text": f"{title}\n\n{body}"[:4000]},
+                              timeout=10.0)
         return resp.status_code < 300
     except Exception:  # noqa: BLE001 — never block the caller
         return False

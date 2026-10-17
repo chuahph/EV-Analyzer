@@ -2675,7 +2675,7 @@ main > .card { max-width: 100%; }
    still reads and the OLED screen gives out far less light. These come
    last, over the earlier dim rules. */
 .gl-dim .gl-frame, .gl-dim .gl-rail, .gl-dim .gl-head, .gl-dim .gl-foot { opacity: .16; }
-.gl-dim .gl-trip-h, .gl-dim .gl-rt i, .gl-dim .gl-rt::after, .gl-dim .gl-odo i,
+.gl-dim .gl-trip-h, .gl-dim .gl-rt::after, .gl-dim .gl-odo i,
 .gl-dim .gl-mini em, .gl-dim .gl-power-sub { opacity: .26; }
 .gl-dim .gl-power-track, .gl-dim .gl-battbar-cell, .gl-dim .gl-trace { opacity: .3; }
 .gl-dim .gl-speedo > :not(text) { opacity: .22; }

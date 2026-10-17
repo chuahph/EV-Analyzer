@@ -71,6 +71,9 @@ def evaluate(
                     # (the next ten points) still gets through; the same
                     # standing condition waits out the cooldown.
                     "signature": f"{int(delta_pct // 10) * 10}",
+                    # dispatch compares the figure itself, so hovering on a
+                    # bucket edge (19.8, 20.3, 19.8) is not three alerts.
+                    "level": f"{delta_pct:.1f}", "step": "10",
                     "title": "Efficiency is slipping",
                     "body": f"Your Wh/km is up {delta_pct:.0f}% vs the period before "
                             f"({prev_wh:.0f} → {now_wh:.0f}). Heavier traffic, more "
@@ -178,6 +181,13 @@ def dispatch(
             except ValueError:
                 prev = {}
         same_sig = prev.get("sig") == a["signature"]
+        if "level" in a and prev.get("level") is not None:
+            # A figure-tracked alert is "the same" until it is a full step
+            # worse than the one last sent; a bucket change alone is not news.
+            try:
+                same_sig = float(a["level"]) < float(prev["level"]) + float(a.get("step", 10))
+            except (TypeError, ValueError):
+                pass
         within_cooldown = False
         if same_sig and prev.get("sent"):
             try:
@@ -189,6 +199,7 @@ def dispatch(
             continue  # already told them this (an event alert: for good)
         notify(a["title"], a["body"], a["key"])
         state.put(session, _key(a["key"]),
-                  json.dumps({"sig": a["signature"], "sent": now.isoformat(timespec="seconds")}))
+                  json.dumps({"sig": a["signature"], "sent": now.isoformat(timespec="seconds"),
+                              **({"level": a["level"]} if "level" in a else {})}))
         sent.append(a["key"])
     return sent
