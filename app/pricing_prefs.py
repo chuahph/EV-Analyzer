@@ -168,3 +168,17 @@ def resolve_source_and_rate(
         settings.tariff_peak_start_hour, settings.tariff_peak_end_hour,
         settings.tariff_weekend_offpeak,
     )
+
+
+def payable_kwh(energy_added_kwh: float, charge_type: str, settings,
+                billed_kwh: float = 0.0) -> float:
+    """The kWh a session is priced on. A receipt's figure when there is one;
+    otherwise an AC session's energy plus the charger-to-pack loss (the meter
+    bills more than reached the pack); a DC session's as the car reports it.
+    """
+    if billed_kwh and billed_kwh > 0:
+        return float(billed_kwh)
+    kwh = float(energy_added_kwh or 0.0)
+    if (charge_type or "AC") != "DC":
+        kwh *= 1.0 + max(0.0, float(getattr(settings, "ac_charge_loss_pct", 0.0))) / 100.0
+    return kwh

@@ -4996,7 +4996,10 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             charge_type="DC" if fast else "AC",
             max_power_kw=round(float(c.get("peak_kw") or 0.0), 1),
             location=_place(raw_coords, session) if raw_coords else "",
-            cost=round(kwh * rate, 2),
+            cost=round(pricing_prefs.payable_kwh(
+                kwh, "DC" if fast else "AC", settings) * rate, 2),
+            payable_kwh=round(pricing_prefs.payable_kwh(
+                kwh, "DC" if fast else "AC", settings), 3),
             price_source=source,
             # Same rule the polled path uses: a zero rate is a free session,
             # not a paid one that happened to cost nothing. The charging
@@ -6228,12 +6231,14 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
     # session or one given an explicit cost isn't tied to any of the three
     # presets, so the dashboard falls back to guessing from location text.
     price_source = ""
+    payable = 0.0
     if is_free:
         cost = 0.0
     elif cost is None:
         price_source, rate = pricing_prefs.resolve_source_and_rate(
             session, settings, location, charge_type == "DC", start_time)
-        cost = round(energy_added_kwh * rate, 2)
+        payable = pricing_prefs.payable_kwh(energy_added_kwh, charge_type, settings)
+        cost = round(payable * rate, 2)
 
     vehicle = _first_vehicle(session)
     charge = Charge(
@@ -6242,6 +6247,7 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
         start_soc=start_soc, end_soc=end_soc, energy_added_kwh=round(energy_added_kwh, 2),
         charge_type=charge_type, max_power_kw=max_power_kw, location=location,
         cost=cost, outside_temp_c=outside_temp_c, is_free=is_free, price_source=price_source,
+        payable_kwh=round(payable, 3),
     )
     session.add(charge)
     session.commit()
@@ -6276,13 +6282,39 @@ def edit_charge_rate(payload: dict = Body(...), session: Session = Depends(get_s
     charge = session.get(Charge, charge_id)
     if charge is None:
         raise HTTPException(404, "Charge not found.")
-    charge.cost = round(charge.energy_added_kwh * rate, 2)
+    # What the charger billed, when the owner has the receipt; blank keeps
+    # the estimate (the car's figure plus the AC loss).
+    billed = payload.get("billed_kwh")
+    if billed not in (None, ""):
+        try:
+            billed = float(billed)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Invalid 'billed_kwh'.")
+        if not math.isfinite(billed) or billed <= 0:
+            raise HTTPException(400, "'billed_kwh' must be above 0.")
+        pack = charge.energy_added_kwh or 0.0
+        if pack and not 0.60 <= pack / billed <= 1.02:
+            raise HTTPException(
+                422, f"{billed} kWh billed against {pack:.2f} kWh into the pack is "
+                     f"{pack / billed * 100:.0f}% efficient: that receipt is not "
+                     "this session.")
+        charge.billed_kwh = billed
+    elif payload.get("billed_kwh") == "":
+        charge.billed_kwh = 0.0
+    settings = get_settings()
+    pk = pricing_prefs.payable_kwh(charge.energy_added_kwh, charge.charge_type,
+                                   settings, charge.billed_kwh or 0.0)
+    # Only recorded where it differs from the car's figure, so a DC session
+    # without a receipt stays priced on energy_added_kwh as before.
+    charge.payable_kwh = round(pk, 3) if abs(pk - (charge.energy_added_kwh or 0.0)) > 1e-6 else 0.0
+    charge.cost = round(pk * rate, 2)
     charge.is_free = rate == 0
     charge.price_source = source
     session.commit()
     return {
         "id": charge.id, "cost": charge.cost, "is_free": charge.is_free,
         "source": charge.price_source or None,
+        "payable_kwh": round(pk, 3), "billed_kwh": charge.billed_kwh or None,
     }
 
 
@@ -12617,8 +12649,10 @@ def summary(
             # nearby trips the way recent_charges does), but the pinned row
             # shares chargeRowHtml with that list, so it needs the field.
             "location_raw": last_charge.location,
+            "payable_kwh": round(last_charge.payable_kwh or 0.0, 3) or None,
+            "billed_kwh": round(last_charge.billed_kwh or 0.0, 3) or None,
             "rate_per_kwh": (
-                round(last_charge.cost / last_charge.energy_added_kwh, 3)
+                round(last_charge.cost / (last_charge.payable_kwh or last_charge.energy_added_kwh), 3)
                 if last_charge.energy_added_kwh else None
             ),
             "is_free": bool(last_charge.is_free),

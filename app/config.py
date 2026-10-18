@@ -250,6 +250,11 @@ class Settings(BaseSettings):
     sentry_aware_confirm_sec: float = 40.0
 
     # Analysis parameters
+    # Energy lost between the charger and the pack on an AC session (the
+    # onboard charger and cabling): the meter bills this much more than the
+    # car says it added. A receipt measured 7% once; 5% is the starting
+    # default, overridable per charge by entering what the charger billed.
+    ac_charge_loss_pct: float = 5.0
     energy_price_per_kwh: float = 0.90
     # Charging cost by charger type — real bills usually differ far more
     # between AC and DC fast charging than time-of-day does, so these take

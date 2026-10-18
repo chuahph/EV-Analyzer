@@ -511,6 +511,10 @@ class Charge(Base):
     # arrival_tail_km: a real quantity this app cannot measure, from an
     # instrument that can.
     billed_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    # The kWh this session was PRICED on: the receipt's figure when there is
+    # one, else the car's figure plus the AC loss. 0 = priced on
+    # energy_added_kwh (every charge logged before this existed, and DC).
+    payable_kwh: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Which path put these figures here, and what polling had said before
     # telemetry corrected it — the same pair Drive carries, for the same

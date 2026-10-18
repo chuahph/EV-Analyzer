@@ -1137,6 +1137,7 @@ def test_summary_since_charge_window():
                 "id", "start_time", "end_time", "energy_added_kwh", "start_soc",
                 "end_soc", "cost", "charge_type", "location", "location_raw",
                 "rate_per_kwh", "is_free", "used_since_kwh", "source", "battery_kwh_at_end",
+                "payable_kwh",
                 # Diagnostic-only fields, added so this pinned row's own ⧉
                 # button hands back the same shape recent_charges does (see
                 # charging_analysis.analyze's recent_charges).
@@ -3319,7 +3320,7 @@ def test_manual_charge_logs_a_historical_session_additively():
                 assert c.energy_added_kwh == 30.0
                 assert c.duration_min == 420.0
                 # Auto-computed from the configured AC rate (charge_type: "AC" above).
-                assert c.cost == round(30.0 * settings.energy_price_ac_kwh, 2)
+                assert c.cost == round(30.0 * 1.05 * settings.energy_price_ac_kwh, 2)  # +5% AC loss
                 s.delete(c)   # tidy up so this doesn't skew later tests' totals
                 s.commit()
 
@@ -3408,10 +3409,12 @@ def test_edit_charge_rate_recalculates_cost():
                 "id": charge_id, "price_per_kwh": 0.5,
             })
             assert edit.status_code == 200
-            assert edit.json() == {"id": charge_id, "cost": 5.0, "is_free": False, "source": None}
+            # AC: priced on the car's 10 kWh plus the 5% charger loss.
+            assert edit.json() == {"id": charge_id, "cost": 5.25, "is_free": False,
+                                   "source": None, "payable_kwh": 10.5, "billed_kwh": None}
             with SessionLocal() as s:
                 c = s.get(Charge, charge_id)
-                assert c.cost == 5.0
+                assert c.cost == 5.25
                 assert c.is_free is False
 
             # The dashboard's 🏠 quick-rate button passes a source, which
@@ -9475,7 +9478,7 @@ def test_a_promoted_charge_is_priced_by_type_and_time():
             with SessionLocal() as s:
                 row = s.scalars(select(Charge).where(Charge.vehicle_id == vid)).one()
                 assert row.charge_type == "AC"
-                assert row.cost == pytest.approx(12.0)      # 10 kWh x peak
+                assert row.cost == pytest.approx(12.6)      # 10 kWh +5% AC loss x peak
     finally:
         (settings.app_passcode, settings.energy_price_per_kwh,
          settings.energy_price_ac_kwh, settings.energy_price_dc_kwh,
@@ -13027,3 +13030,54 @@ def test_live_drive_closes_after_the_car_goes_silent():
         assert trip is not None and trip["distance_km"] < 2.0, trip  # odometer is in miles: ~1 mi, not the stitched ~4 mi
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_charge_priced_on_billed_kwh_with_ac_loss_default():
+    """The meter bills more than reached the pack. Without a receipt an AC
+    session is priced on the car's kWh plus 5%; with one, on what the charger
+    billed; DC stays on the car's figure; a receipt that cannot be this
+    session is refused."""
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    try:
+        with TestClient(app) as client:
+            from app.database import SessionLocal
+            from app.models import Charge
+
+            def make(kind):
+                return client.post("/api/charges/manual", json={
+                    "start_time": "2025-03-02T20:00:00", "end_time": "2025-03-02T22:00:00",
+                    "energy_added_kwh": 20.0, "charge_type": kind}).json()["id"]
+
+            ac, dc = make("AC"), make("DC")
+            ids = [ac, dc]
+            try:
+                with SessionLocal() as s:
+                    assert s.get(Charge, ac).payable_kwh == 21.0
+                    assert s.get(Charge, dc).payable_kwh == 20.0
+                r = client.post("/api/charges/edit-rate", json={"id": dc, "price_per_kwh": 1.0}).json()
+                assert r["cost"] == 20.0 and r["payable_kwh"] == 20.0
+                # A receipt: 21.6 kWh billed (7% loss) at 0.9.
+                r = client.post("/api/charges/edit-rate", json={
+                    "id": ac, "price_per_kwh": 0.9, "billed_kwh": "21.6"}).json()
+                assert r["payable_kwh"] == 21.6 and r["billed_kwh"] == 21.6
+                assert r["cost"] == round(21.6 * 0.9, 2)
+                # Blank goes back to the estimate.
+                r = client.post("/api/charges/edit-rate", json={
+                    "id": ac, "price_per_kwh": 0.9, "billed_kwh": ""}).json()
+                assert r["payable_kwh"] == 21.0 and r["billed_kwh"] is None
+                # Not this session.
+                assert client.post("/api/charges/edit-rate", json={
+                    "id": ac, "price_per_kwh": 0.9, "billed_kwh": "40"}).status_code == 422
+                assert client.post("/api/charges/edit-rate", json={
+                    "id": ac, "price_per_kwh": 0.9, "billed_kwh": "-1"}).status_code == 400
+            finally:
+                with SessionLocal() as s:
+                    for i in ids:
+                        c = s.get(Charge, i)
+                        if c:
+                            s.delete(c)
+                    s.commit()
+    finally:
+        settings.app_passcode = old

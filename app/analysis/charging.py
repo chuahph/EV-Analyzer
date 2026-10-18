@@ -151,8 +151,14 @@ def analyze(charges: list[Charge], drives: list[Drive] | None = None) -> dict[st
             # The rate actually applied to this session — editable per-session
             # when it doesn't match the configured AC/DC default (a promo
             # rate, a one-off higher public-charger price, etc.).
+            # Over the kWh it was priced on (the AC loss or a receipt makes
+            # that more than the car's figure), so the rate shown is the rate
+            # the charger's tariff actually is.
+            "payable_kwh": round(getattr(c, "payable_kwh", 0.0) or 0.0, 3) or None,
+            "billed_kwh": round(getattr(c, "billed_kwh", 0.0) or 0.0, 3) or None,
             "rate_per_kwh": (
-                round(c.cost / c.energy_added_kwh, 3) if c.energy_added_kwh else None
+                round(c.cost / (getattr(c, "payable_kwh", 0.0) or c.energy_added_kwh), 3)
+                if c.energy_added_kwh else None
             ),
             "location": _place(c),
             # The label actually stored on the row, as opposed to the one

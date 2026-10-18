@@ -196,7 +196,10 @@ def replace_with_import(
         if not c.get("cost") and c.get("energy_added_kwh"):
             source, rate = pricing_prefs.resolve_source_and_rate(
                 session, settings, c.get("location", ""), c.get("charge_type") == "DC", c["start_time"])
-            c["cost"] = round(c["energy_added_kwh"] * rate, 2)
+            pk = pricing_prefs.payable_kwh(
+                c["energy_added_kwh"], c.get("charge_type", "AC"), settings)
+            c["cost"] = round(pk * rate, 2)
+            c["payable_kwh"] = round(pk, 3)
             c["price_source"] = source
         session.add(Charge(vehicle_id=vehicle.id, **c))
 

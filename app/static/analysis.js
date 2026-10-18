@@ -461,8 +461,10 @@
           end_soc: c.end_soc,
           energy_added_kwh: round(c.energy_added_kwh, 2),
           cost: c.cost != null ? round(c.cost, 2) : null,
+          payable_kwh: c.payable_kwh || null,
+          billed_kwh: c.billed_kwh || null,
           rate_per_kwh: c.cost != null && c.energy_added_kwh
-            ? round(c.cost / c.energy_added_kwh, 3) : null,
+            ? round(c.cost / (c.payable_kwh || c.energy_added_kwh), 3) : null,
           location: placeOf(c),
           location_raw: c.location || "",
           is_free: !!c.is_free,
@@ -897,8 +899,10 @@
         cost: lc.cost != null ? round(lc.cost, 2) : null,
         charge_type: lc.charge_type,
         location: lc.location || "",
+        payable_kwh: lc.payable_kwh || null,
+        billed_kwh: lc.billed_kwh || null,
         rate_per_kwh: lc.cost != null && lc.energy_added_kwh
-          ? round(lc.cost / lc.energy_added_kwh, 3) : null,
+          ? round(lc.cost / (lc.payable_kwh || lc.energy_added_kwh), 3) : null,
         is_free: !!lc.is_free,
         used_since_kwh: round(usedSince, 2),
         // What was actually in the pack when this charge finished (end SoC

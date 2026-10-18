@@ -156,7 +156,10 @@ def _process_snapshot(session, vehicle, data, drive_state, charge_state):  # pra
                     energy_added_kwh=round(energy, 2),
                     charge_type="DC" if is_dc else "AC",
                     max_power_kw=charge_state["max_power"],
-                    cost=round(energy * rate, 2),
+                    cost=round(pricing_prefs.payable_kwh(
+                        energy, "DC" if is_dc else "AC", settings) * rate, 2),
+                    payable_kwh=round(pricing_prefs.payable_kwh(
+                        energy, "DC" if is_dc else "AC", settings), 3),
                     outside_temp_c=charge_state["temp"],
                     price_source=source,
                 )

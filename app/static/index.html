@@ -1162,6 +1162,14 @@ export default {
           <span class="field-label">Actual rate (per kWh)</span>
           <input type="number" id="edit-charge-rate" min="0" step="0.01">
         </label>
+        <!-- What the charger billed: more than the car says reached its
+             battery, because the onboard charger loses a few percent. Blank
+             prices the session on the car's figure plus that loss (AC). -->
+        <label class="field" id="edit-charge-billed-row">
+          <span class="field-label">Billed kWh (from the charger's receipt)</span>
+          <input type="number" id="edit-charge-billed" min="0" step="0.01" inputmode="decimal">
+          <span class="field-hint" id="edit-charge-billed-hint"></span>
+        </label>
         <button type="submit" class="btn btn-accent">Save</button>
       </form>
       <span id="edit-charge-status" class="status"></span>

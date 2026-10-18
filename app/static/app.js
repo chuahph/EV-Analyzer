@@ -2257,6 +2257,9 @@ function chargeRowHtml(c, currency, idx) {
     ? ` · ${fmt(c.start_soc)}% → ${fmt(c.end_soc)}%` : "";
   const cost = c.is_free ? "Free" : `${currency} ${fmt(c.cost, 2)}`;
   const rate = !c.is_free && c.rate_per_kwh != null ? ` (${fmt(c.rate_per_kwh, 2)}/kWh)` : "";
+  // The kWh it was priced on, when that differs from what the car added.
+  const billedNote = !c.is_free && c.payable_kwh
+    ? ` · ${c.billed_kwh ? "billed" : "est. billed"} ${fmt(c.payable_kwh, 1)} kWh` : "";
   // In select mode, a checkbox precedes each charge (self-hosted only) and
   // the pricing buttons step aside — same trade as the trip list's own
   // select mode, so a stray tap can't fire a price edit while deleting.
@@ -2294,6 +2297,7 @@ function chargeRowHtml(c, currency, idx) {
       buttons += ` <button class="quick-rate-btn${sel}" data-charge-id="${c.id}" ` +
         `data-loc="${escLoc}" data-kwh="${c.energy_added_kwh}" data-quick-rate="${r}" ` +
         `data-source="${source}" data-is-free="${c.is_free}" data-start-time="${c.start_time}" ` +
+        `data-billed="${c.billed_kwh || ""}" data-payable="${c.payable_kwh || ""}" data-type="${c.charge_type}" ` +
         `title="${title}">${icon}</button>`;
     }
   }
@@ -2307,7 +2311,7 @@ function chargeRowHtml(c, currency, idx) {
   return `<li class="charge${chargeSelectMode && c.id != null ? " selectable" : ""}">` +
     `<span class="charge-main">${check}<span class="charge-loc">${locHtml}${renameBtn}</span>` +
     `<span class="charge-when">${when}</span></span>` +
-    `<span class="charge-figs">${kwh}${soc} · ${cost}${rate}${buttons}${diagBtn}</span></li>`;
+    `<span class="charge-figs">${kwh}${soc} · ${cost}${rate}${billedNote}${buttons}${diagBtn}</span></li>`;
 }
 
 // TNB residential Time-of-Use, all-in per-kWh (energy + network + capacity
@@ -2331,7 +2335,7 @@ function tnbTouRate(startTimeIso) {
   return isPeak ? TNB_TOU_PEAK_RATE : TNB_TOU_OFFPEAK_RATE;
 }
 
-function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime) {
+function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime, billed, payable, type) {
   const form = document.getElementById("edit-charge-form");
   form.dataset.chargeId = chargeId;
   // Which source (public/home/office/other) this edit is attributed to, so
@@ -2351,6 +2355,15 @@ function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime
   touCb.checked = false;
   touRow.classList.toggle("hidden", source !== "home");
   document.getElementById("edit-charge-summary").textContent = `${loc} — ${kwh} kWh`;
+  // Billed kWh: the receipt's figure when told; otherwise a hint of what
+  // the estimate is (AC: the car's figure plus the loss).
+  const billedInput = document.getElementById("edit-charge-billed");
+  billedInput.value = billed ? String(billed) : "";
+  billedInput.placeholder = payable ? String(payable) : "";
+  document.getElementById("edit-charge-billed-row").classList.toggle("hidden", isFree);
+  document.getElementById("edit-charge-billed-hint").textContent = billed
+    ? "From your receipt."
+    : (type === "DC" ? "Blank = the car's figure." : `Blank = estimate${payable ? ` (${payable} kWh)` : ""}: the car's figure plus the AC charging loss.`);
   setStatus(document.getElementById("edit-charge-status"), "", "");
   openModal("edit-charge-modal");
 }
@@ -2369,7 +2382,7 @@ function wireEditRateButtons(root) {
       const isOther = btn.dataset.source === "other";
       openEditChargeModal(btn.dataset.chargeId, btn.dataset.loc, btn.dataset.kwh,
         btn.dataset.quickRate, isOther && btn.dataset.isFree === "true", btn.dataset.source,
-        btn.dataset.startTime);
+        btn.dataset.startTime, btn.dataset.billed, btn.dataset.payable, btn.dataset.type);
     });
   });
 }
@@ -2476,6 +2489,7 @@ function setupEditChargeModal() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: +form.dataset.chargeId, price_per_kwh: rate, source: form.dataset.source || "",
+          billed_kwh: document.getElementById("edit-charge-billed").value.trim(),
         }),
       });
       if (!resp.ok) throw new Error((await resp.json()).detail || "Failed");
