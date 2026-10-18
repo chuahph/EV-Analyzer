@@ -12992,3 +12992,38 @@ def test_telegram_falls_back_to_plain_text_when_markup_is_refused():
         settings.telegram_bot_token, settings.telegram_chat_id = old
     assert sent[0]["parse_mode"] == "HTML" and "<b>T &lt;1&gt;</b>" in sent[0]["text"]
     assert "parse_mode" not in sent[1] and sent[1]["text"] == "T <1>\n\na & b"
+
+
+def test_live_drive_closes_after_the_car_goes_silent():
+    """Trip computer read 22 km / 329 min against the car's 4.5 km / 19 min:
+    the car had powered down with no stop on record, and its next drive was
+    stitched onto the first."""
+    import time as _t
+    from datetime import datetime, timezone
+
+    from app.api import routes
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
+    routes._LIVE_MEM.clear()
+    try:
+        vin = "VGAP"
+        odo = 5000.0
+        for i in range(60):          # a drive, three hours ago, never closed in P
+            odo += 0.05
+            routes._live_mem_fold(vin, at(-10800 + i), {
+                "Gear": "ShiftStateD", "VehicleSpeed": 50.0, "Odometer": odo,
+                "EnergyRemaining": 60.0 - i * 0.01})
+        # Silent now for hours: no drive on the page.
+        assert routes._live_payload(vin, 70.0)["trip"] is None
+        # The car wakes and drives 20 more readings: a fresh drive from here.
+        for i in range(20):
+            odo += 0.05
+            routes._live_mem_fold(vin, at(-60 + i * 3), {
+                "Gear": "ShiftStateD", "VehicleSpeed": 40.0, "Odometer": odo,
+                "EnergyRemaining": 58.0 - i * 0.01})
+        trip = routes._live_payload(vin, 70.0)["trip"]
+        assert trip is not None and trip["distance_km"] < 2.0, trip  # odometer is in miles: ~1 mi, not the stitched ~4 mi
+    finally:
+        routes._LIVE_MEM.clear()

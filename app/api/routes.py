@@ -15208,6 +15208,7 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     car["_v"] = int(car.get("_v") or 0) + 1      # wakes the live streams
     if older:
         return   # a trailing record: fields merged, the drive logic below is for the newest
+    prev_t = float(car.get("_t") or 0.0)
     if ts:
         car["_t"] = ts
         car["_ts"] = created_at
@@ -15224,6 +15225,16 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     speed = float(snap.get("speed_kmh") or 0.0)
     moving = (snap.get("shift") or "P") != "P" or speed > 0.0
     go = car.get("_go")
+    if go is not None and prev_t and stamp - prev_t > LIVE_TRIP_PARK_END_SEC:
+        # The car sent nothing for longer than a wait in Park may last (it
+        # slept or lost its network): that drive ended when the records
+        # stopped. Without this a car that powered down with no closing
+        # reading stitched every later drive of the day onto it: 22 km and
+        # 329 min on the page against the car's own 4.5 km and 19 min.
+        car.pop("_go", None)
+        car.pop("_stop", None)
+        car["_park"] = {k: snap.get(k) for k in _LIVE_KEYS}
+        go = None
     # Pack power, voltage x current, every second. Its sign convention is
     # learned, not assumed: a car standing still can only be drawing from the
     # pack, and at cruising speed it is mostly drawing too, so the sign seen
@@ -15391,6 +15402,10 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     # A car that powered down in Park sends nothing more, so the drive is
     # closed here too once the wait in P has run out on the clock.
     if go and stop and time.time() - float(stop) > LIVE_TRIP_PARK_END_SEC:
+        go = None
+    # Silent for that long with no stop on record: the car powered down mid-
+    # drive state and the page must not keep a drive open for it.
+    if go and time.time() - ts > LIVE_TRIP_PARK_END_SEC:
         go = None
     if go and go.get("e_int") is not None and go.get("_p") and snap.get("energy_kwh") is not None:
         # Energy from the summed pack power: it moves every second, where the
