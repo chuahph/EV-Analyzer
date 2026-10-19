@@ -650,8 +650,9 @@ class PushSubscription(Base):
 
 def default_trip_tag(start_time: datetime, settings) -> str:
     """"work" for a trip that departs on a weekday between the configured
-    hours, "personal" for any other departure."""
-    if start_time.weekday() < 5 and settings.work_tag_start_hour <= start_time.hour < settings.work_tag_end_hour:
+    times (06:00 up to 17:30), "personal" for any other departure."""
+    minute = start_time.hour * 60 + start_time.minute
+    if start_time.weekday() < 5 and settings.work_tag_start_min <= minute < settings.work_tag_end_min:
         return "work"
     return "personal"
 

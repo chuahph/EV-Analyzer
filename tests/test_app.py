@@ -13088,7 +13088,7 @@ def test_charge_priced_on_billed_kwh_with_ac_loss_default():
 
 
 def test_new_trips_are_tagged_work_or_personal_by_departure_time():
-    """Weekday 06:00 up to 17:00 departures are work, everything else is
+    """Weekday 06:00 up to 17:30 departures are work, everything else is
     personal; an explicit tag is kept, and tapping the tag still changes it."""
     from datetime import datetime as dt
 
@@ -13098,8 +13098,9 @@ def test_new_trips_are_tagged_work_or_personal_by_departure_time():
     settings = get_settings()
     cases = [
         (dt(2026, 10, 19, 6, 0), "work"),       # Monday, 06:00 sharp
-        (dt(2026, 10, 19, 16, 59), "work"),
-        (dt(2026, 10, 19, 17, 0), "personal"),  # end hour is exclusive
+        (dt(2026, 10, 19, 17, 0), "work"),
+        (dt(2026, 10, 19, 17, 29), "work"),
+        (dt(2026, 10, 19, 17, 30), "personal"),  # the end is exclusive
         (dt(2026, 10, 19, 5, 59), "personal"),
         (dt(2026, 10, 23, 8, 30), "work"),      # Friday
         (dt(2026, 10, 24, 8, 30), "personal"),  # Saturday
