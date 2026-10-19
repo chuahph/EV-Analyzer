@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -646,3 +646,21 @@ class PushSubscription(Base):
     p256dh: Mapped[str] = mapped_column(String(255))
     auth: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+def default_trip_tag(start_time: datetime, settings) -> str:
+    """"work" for a trip that departs on a weekday between the configured
+    hours, "personal" for any other departure."""
+    if start_time.weekday() < 5 and settings.work_tag_start_hour <= start_time.hour < settings.work_tag_end_hour:
+        return "work"
+    return "personal"
+
+
+@event.listens_for(Drive, "before_insert")
+def _tag_new_trip(mapper, connection, target: Drive) -> None:
+    """Every new trip starts tagged from when it departed, wherever it was
+    created (live stream, polling, manual, import). An explicit tag, such as
+    one copied onto a split trip, is kept."""
+    if not target.tag and target.start_time is not None:
+        from .config import get_settings
+        target.tag = default_trip_tag(target.start_time, get_settings())

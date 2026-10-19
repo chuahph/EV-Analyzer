@@ -255,6 +255,11 @@ class Settings(BaseSettings):
     # car says it added. A receipt measured 7% once; 5% is the starting
     # default, overridable per charge by entering what the charger billed.
     ac_charge_loss_pct: float = 5.0
+    # A new trip is tagged "work" when it departs on a weekday from this hour
+    # up to (not including) the end hour, local time, and "personal"
+    # otherwise. Tapping the tag still changes it.
+    work_tag_start_hour: int = 6
+    work_tag_end_hour: int = 17
     energy_price_per_kwh: float = 0.90
     # Charging cost by charger type — real bills usually differ far more
     # between AC and DC fast charging than time-of-day does, so these take

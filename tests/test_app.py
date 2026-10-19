@@ -2805,6 +2805,10 @@ def test_reset_tags_clears_every_trip_tag_and_respects_gate():
     settings.app_passcode = "secret123"
     try:
         with TestClient(app) as client:  # startup seeds demo data
+            # New trips are tagged by departure time, so start from none.
+            with SessionLocal() as s:
+                s.query(Drive).update({Drive.tag: ""})
+                s.commit()
             with SessionLocal() as s:
                 rows = s.query(Drive).order_by(Drive.id).limit(3).all()
                 ids = [d.id for d in rows]
@@ -13081,3 +13085,43 @@ def test_charge_priced_on_billed_kwh_with_ac_loss_default():
                     s.commit()
     finally:
         settings.app_passcode = old
+
+
+def test_new_trips_are_tagged_work_or_personal_by_departure_time():
+    """Weekday 06:00 up to 17:00 departures are work, everything else is
+    personal; an explicit tag is kept, and tapping the tag still changes it."""
+    from datetime import datetime as dt
+
+    from app.database import SessionLocal
+    from app.models import Drive, Vehicle, default_trip_tag
+
+    settings = get_settings()
+    cases = [
+        (dt(2026, 10, 19, 6, 0), "work"),       # Monday, 06:00 sharp
+        (dt(2026, 10, 19, 16, 59), "work"),
+        (dt(2026, 10, 19, 17, 0), "personal"),  # end hour is exclusive
+        (dt(2026, 10, 19, 5, 59), "personal"),
+        (dt(2026, 10, 23, 8, 30), "work"),      # Friday
+        (dt(2026, 10, 24, 8, 30), "personal"),  # Saturday
+        (dt(2026, 10, 25, 14, 0), "personal"),  # Sunday
+    ]
+    for when, tag in cases:
+        assert default_trip_tag(when, settings) == tag, when
+
+    with TestClient(app):
+        with SessionLocal() as s:
+            v = s.query(Vehicle).first()
+            made = []
+            for when, explicit in ((dt(2026, 10, 19, 9, 0), ""), (dt(2026, 10, 19, 9, 5), "personal"),
+                                   (dt(2026, 10, 24, 9, 0), "")):
+                d = Drive(vehicle_id=v.id, start_time=when, end_time=when, distance_km=1.0,
+                          duration_min=1.0, energy_used_kwh=0.1, tag=explicit)
+                s.add(d)
+                made.append(d)
+            s.commit()
+            try:
+                assert [d.tag for d in made] == ["work", "personal", "personal"]
+            finally:
+                for d in made:
+                    s.delete(d)
+                s.commit()
