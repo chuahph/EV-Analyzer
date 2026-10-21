@@ -2839,7 +2839,7 @@ def test_reset_tags_clears_every_trip_tag_and_respects_gate():
 def test_auto_tag_overwrites_every_trip_from_current_places():
     """Auto-tag sets every trip's Work/Personal tag by matching its
     coordinates against the Office/Home Place right now: Office -> work,
-    Home -> personal, neither -> untagged. Places are the single source of
+    Home -> personal, neither -> personal (an Office is defined here). Places are the single source of
     truth, so this overwrites a manually-set tag that disagrees (including
     resetting one to untagged when the trip matches neither place) — but
     leaves a trip alone (not counted as "changed") when its tag already
@@ -2891,6 +2891,10 @@ def test_auto_tag_overwrites_every_trip_from_current_places():
                 s.add_all([office_untagged, office_already_work, office_wrongly_personal,
                           home_trip, neither_but_tagged])
                 s.commit()
+                # New trips are tagged on arrival; these two start untagged.
+                office_untagged.tag = ""
+                home_trip.tag = ""
+                s.commit()
                 ids = {
                     "office_untagged": office_untagged.id, "office_already_work": office_already_work.id,
                     "office_wrongly_personal": office_wrongly_personal.id, "home": home_trip.id,
@@ -2913,7 +2917,7 @@ def test_auto_tag_overwrites_every_trip_from_current_places():
                 assert s.get(Drive, ids["office_already_work"]).tag == "work"
                 assert s.get(Drive, ids["office_wrongly_personal"]).tag == "work"   # overwritten
                 assert s.get(Drive, ids["home"]).tag == "personal"
-                assert s.get(Drive, ids["neither_but_tagged"]).tag == ""            # reset
+                assert s.get(Drive, ids["neither_but_tagged"]).tag == "personal"    # not the office
 
             # Nothing left to change the second time.
             assert client.post("/api/data/auto-tag").json()["changed"] == 0
@@ -13125,4 +13129,48 @@ def test_new_trips_are_tagged_work_or_personal_by_departure_time():
             finally:
                 for d in made:
                     s.delete(d)
+                s.commit()
+
+
+def test_trip_tag_follows_the_office_place_when_one_is_defined():
+    """To or from the Office is work and everything else personal, whatever
+    the clock says; with no Office defined the clock rule applies."""
+    from datetime import datetime as dt
+
+    from app.database import SessionLocal
+    from app.models import Drive, Place, Vehicle
+
+    with TestClient(app):
+        with SessionLocal() as s:
+            v = s.query(Vehicle).first()
+            held = s.query(Place).all()
+            snapshot = [(p.name, p.lat, p.lon, p.radius_km, p.created_at) for p in held]
+            s.query(Place).delete()
+            s.commit()
+
+            def trip(when, a, b):
+                d = Drive(vehicle_id=v.id, start_time=when, end_time=when, distance_km=1.0,
+                          duration_min=1.0, energy_used_kwh=0.1, start_coords=a, end_coords=b)
+                s.add(d); s.commit()
+                tag = d.tag
+                s.delete(d); s.commit()
+                return tag
+
+            office, home, elsewhere = "5.3300, 100.3000", "5.3400, 100.3100", "5.4000, 100.4000"
+            sat, mon9 = dt(2026, 10, 24, 10, 0), dt(2026, 10, 19, 9, 0)
+            # No Office defined: the clock decides.
+            assert trip(sat, office, home) == "personal"
+            assert trip(mon9, home, elsewhere) == "work"
+            try:
+                s.add(Place(name="My Office", lat=5.33, lon=100.30, radius_km=0.2,
+                            created_at=dt(2026, 1, 1)))
+                s.commit()
+                assert trip(sat, home, office) == "work"          # to the office, at a weekend
+                assert trip(sat, office, home) == "work"          # from it
+                assert trip(mon9, home, elsewhere) == "personal"  # weekday morning, not the office
+                assert trip(mon9, "", "") == "work"               # no coordinates: the clock
+            finally:
+                s.query(Place).delete()
+                for n, la, lo, r, c in snapshot:
+                    s.add(Place(name=n, lat=la, lon=lo, radius_km=r, created_at=c))
                 s.commit()

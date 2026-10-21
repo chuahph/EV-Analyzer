@@ -2963,7 +2963,10 @@ def auto_tag(session: Session = Depends(get_session)):
         }
         is_office = any(has_word("office", n) for n in names)
         is_home = any(has_word("home", n) for n in names)
-        new_tag = "work" if is_office else "personal" if is_home else ""
+        # With an Office defined, to or from it is work and every other trip
+        # personal, the same rule new trips get; without one, only a trip
+        # touching Home is tagged.
+        new_tag = "work" if is_office else "personal" if (is_home or office_place) else ""
         if new_tag != d.tag:
             d.tag = new_tag
             changed += 1

@@ -648,9 +648,25 @@ class PushSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
 
-def default_trip_tag(start_time: datetime, settings) -> str:
-    """"work" for a trip that departs on a weekday between the configured
-    times (06:00 up to 17:30), "personal" for any other departure."""
+def default_trip_tag(start_time: datetime, settings, start_coords: str = "",
+                     end_coords: str = "", offices: list | None = None) -> str:
+    """The tag a new trip starts with.
+
+    When an Office place is defined (a Place whose name has the word
+    "office"), a trip to or from it is "work" and every other trip is
+    "personal", whatever the clock said. With no Office defined, it falls
+    back to the clock: "work" for a weekday departure between the configured
+    times (06:00 up to 17:30), "personal" otherwise. A trip with no
+    coordinates yet is judged by the clock too.
+    """
+    if offices and (start_coords or end_coords):
+        from .analysis import haversine_km
+        for coords in (start_coords, end_coords):
+            for _id, lat, lon, radius in offices:
+                d = haversine_km(coords, f"{lat}, {lon}") if coords else None
+                if d is not None and d <= radius:
+                    return "work"
+        return "personal"
     minute = start_time.hour * 60 + start_time.minute
     if start_time.weekday() < 5 and settings.work_tag_start_min <= minute < settings.work_tag_end_min:
         return "work"
@@ -659,9 +675,19 @@ def default_trip_tag(start_time: datetime, settings) -> str:
 
 @event.listens_for(Drive, "before_insert")
 def _tag_new_trip(mapper, connection, target: Drive) -> None:
-    """Every new trip starts tagged from when it departed, wherever it was
-    created (live stream, polling, manual, import). An explicit tag, such as
-    one copied onto a split trip, is kept."""
-    if not target.tag and target.start_time is not None:
-        from .config import get_settings
-        target.tag = default_trip_tag(target.start_time, get_settings())
+    """Every new trip starts tagged, wherever it was created (live stream,
+    polling, manual, import). An explicit tag, such as one copied onto a
+    split trip, is kept."""
+    if target.tag or target.start_time is None:
+        return
+    import re
+
+    from sqlalchemy import select
+
+    from .config import get_settings
+    rows = connection.execute(
+        select(Place.id, Place.lat, Place.lon, Place.radius_km, Place.name)).all()
+    offices = [(i, la, lo, r) for i, la, lo, r, n in rows
+               if re.search(r"\boffice\b", (n or "").lower())]
+    target.tag = default_trip_tag(target.start_time, get_settings(),
+                                  target.start_coords or "", target.end_coords or "", offices)
