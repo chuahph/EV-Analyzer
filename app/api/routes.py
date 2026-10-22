@@ -15226,6 +15226,13 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
 
 def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     ts = _telemetry_ts(created_at)
+    if ts > time.time() + 1800.0:
+        # A stamp from the future (over half an hour ahead) (a relay or car with a wrong clock). Kept as
+        # written it would out-rank every true record after it, per field and
+        # for the drive logic alike: the page would hold the old gear and
+        # speed while its age read "0s ago" for as long as the clock lasted.
+        ts = time.time()
+        created_at = ts
     car = _LIVE_MEM.setdefault(vin, {})
     # Each field keeps the time of the record it came from, so an older record
     # (the bridge's stored batches trail the fast lane by seconds) still fills in
