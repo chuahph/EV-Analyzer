@@ -15217,11 +15217,23 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
         return
     fields = {k: _live_clean(k, v) for k, v in fields.items() if isinstance(k, str)}
     with _LIVE_LOCK:
+        before = _LIVE_MEM.get(vin) or {}
+        g0, o0 = before.get("Gear"), "_go" in before
         try:
             _live_mem_fold_locked(vin, created_at, fields)
         except Exception:   # noqa: BLE001 - a bad record must never break the ingest it rides on
             import logging
             logging.getLogger(__name__).exception("live memory fold failed")
+        after = _LIVE_MEM.get(vin) or {}
+        g1, o1 = after.get("Gear"), "_go" in after
+        if g0 != g1 or o0 != o1:
+            # Only on a change of gear or of the drive being open: a line or
+            # two per journey, so a Live page that disagrees with the car can
+            # be traced from the logs afterwards.
+            t = float(after.get("_t") or 0.0)
+            print(f"[live] {vin[-6:]} gear {g0}->{g1} speed {after.get('VehicleSpeed')} "
+                  f"drive {'open' if o1 else 'closed'} record_age {time.time() - t:.0f}s "
+                  f"keys {','.join(sorted(fields))[:80]}", flush=True)
 
 
 def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
