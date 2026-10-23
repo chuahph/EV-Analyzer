@@ -2773,3 +2773,56 @@ main > .card { max-width: 100%; }
   .gl-mini strong { font-size: clamp(11px, min(4.2vh, 2.3vw), 16px); }
   .gl-mini strong small { margin-left: 1px; font-size: .5em; }
 }
+
+/* ---- More designs: Night, Dial, Range, Mix ------------------------------- */
+/* Night: only the speed, soft, on true black. */
+.gl-night { justify-content: space-between; align-items: stretch; }
+.gl-night-top { display: flex; justify-content: space-between; font: 700 clamp(14px, 4.6vh, 22px) ui-monospace, Menlo, monospace; color: #566478; }
+.gl-night-speed { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center;
+  font: 800 min(52vh, 30vw) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; opacity: .92; }
+.gl-night-row { display: flex; justify-content: center; gap: clamp(16px, 6vw, 48px); font: 650 clamp(14px, 4.6vh, 22px) ui-monospace, Menlo, monospace; color: #6f7f94; }
+/* Dial: analogue speedometer between two vertical bars. */
+.gl-dialpage { flex-direction: row; align-items: stretch; gap: 10px; }
+.gl-dialbox { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.gl-dialbox svg { height: 100%; width: auto; max-width: 100%; }
+.gl-pbar { flex: 0 0 clamp(64px, 15vw, 120px); min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; padding: 6px 6px 8px; }
+.gl-pbar span { font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-pbar > div { flex: 1 1 auto; min-height: 0; width: 34%; background: #0b121b; border-radius: 8px; border: 1px solid #1d2a38;
+  display: flex; align-items: flex-end; overflow: hidden; position: relative; }
+.gl-pbar > div i { display: block; width: 100%; border-radius: 6px; }
+.gl-pbar.mid > div::after { content: ""; position: absolute; left: 0; right: 0; bottom: 28%; border-top: 1px dashed #cfe8ff88; }
+.gl-pbar strong { font: 800 clamp(16px, 5.4vh, 26px) ui-monospace, Menlo, monospace; color: #e8fbff; white-space: nowrap; }
+.gl-pbar strong small { font-size: .5em; color: var(--muted); margin-left: 2px; }
+/* Range: the battery, big, with four figures. */
+.gl-rangepage { flex-direction: row; align-items: stretch; gap: 10px; }
+.gl-rng-side { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.gl-rng-side .gl-big { flex: 1 1 0; }
+.gl-rng-side .gl-big strong small { font-size: .45em; color: var(--muted); margin-left: 2px; }
+.gl-rng-mid { flex: 0 1 38%; min-width: 0; display: flex; align-items: center; justify-content: center; }
+.gl-rng-mid svg { height: 100%; width: auto; max-width: 100%; }
+/* Mix: speed, power, trace, trip. */
+.gl-mixpage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+.gl-mix-speed { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0;
+  font: 800 min(26vh, 15vw) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px currentColor;
+  background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; }
+.gl-mix-speed small { font: 650 clamp(10px, 3vh, 14px) system-ui, sans-serif; letter-spacing: .14em; color: #7e93ab; text-shadow: none; margin-top: 2px; }
+.gl-mix-pw { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 0;
+  background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; padding: 8px 12px; }
+.gl-mix-kw { display: flex; justify-content: space-between; align-items: baseline; }
+.gl-mix-kw span, .gl-mix-batt span { font: 600 clamp(10px, 2.9vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-mix-kw strong { font: 800 clamp(20px, 7vh, 34px) ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-mix-kw.regen strong { color: var(--green); }
+.gl-mix-kw strong small, .gl-mix-batt em { font-size: .45em; color: var(--muted); margin-left: 3px; font-style: normal; font-family: system-ui, sans-serif; }
+.gl-mix-batt { display: flex; justify-content: space-between; align-items: baseline; }
+.gl-mix-batt strong { font: 800 clamp(16px, 5.4vh, 26px) ui-monospace, Menlo, monospace; color: var(--green); }
+.gl-mix-trace { min-height: 0; display: flex; grid-column: 1; }
+.gl-mix-trace .gl-trace { flex: 1 1 auto; }
+.gl-mix-trip { grid-column: 2; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; align-items: stretch; }
+.gl-mix-trip .gl-hud-stat strong { font-size: clamp(16px, min(5.4vh, 3.4vw), 26px); }
+.gl-dim .gl-night-speed, .gl-dim .gl-mix-speed { opacity: .8; }
+.gl-dim .gl-pbar, .gl-dim .gl-mix-pw { border-color: #12181f; }
+.gl-dim .gl-dialbox svg { opacity: .55; }
+.gl-dim .gl-rng-mid { opacity: .6; }
+.gl-dim .gl-mix-trace { opacity: .35; }
+.gl-mix-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; }

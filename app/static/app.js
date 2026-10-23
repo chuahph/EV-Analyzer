@@ -4956,7 +4956,7 @@ function glAutoLive(d) {
 // the others show the same readings differently, each for a different glance:
 // a huge speed, the energy flow, or the trip in big figures. Swipe left or
 // right on the Live page, or tap the dots.
-const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip"];
+const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix"];
 let glLiveSkin = 0;
 function glSkinSet(i) {
   glLiveSkin = (i + GL_SKINS.length) % GL_SKINS.length;
@@ -5015,6 +5015,68 @@ function glAltSkin(skin, c) {
       <div class="gl-en-bot"><span>Battery <strong>${pct != null ? n(pct, 1) : "—"}%</strong></span>
         <span>Est. range <strong>${c.rangeHere != null ? n(c.rangeHere) : "—"} km</strong></span>
         <span>Speed <strong style="color:${col}">${num} km/h</strong></span></div>
+    </div>`;
+  }
+  if (skin === 4) {
+    // Night: nothing but the speed, soft and large, on black.
+    const soft = spd != null && spd > 100 ? col : "#c9d6e6";
+    return `<div class="gl-page gl-alt gl-night">
+      <div class="gl-night-top"><b>${nw.shift || "P"}</b><span>${pct != null ? n(pct, 0) + "%" : ""}</span></div>
+      <div class="gl-night-speed" style="color:${soft}">${num}</div>
+      <div class="gl-night-row"><span>${dist != null ? n(dist, 1) : "—"} km</span><span>${mins != null ? n(mins) : "—"} min</span><span>${whk != null ? n(whk) : "—"} Wh/km</span></div>
+    </div>`;
+  }
+  if (skin === 5) {
+    // Dial: an analogue speedometer between a power bar and a battery bar.
+    const MAXV = 160, A0 = 150, SW = 240, cx = 100, cy = 100;
+    const v = spd != null ? Math.max(0, Math.min(MAXV, spd)) : 0;
+    const ang = (x) => A0 + x / MAXV * SW;
+    let arcs = "", ticks = "";
+    for (let k = 0; k < 40; k++) {
+      const x0 = k / 40 * MAXV, x1 = (k + 1) / 40 * MAXV, on = spd != null && x0 + 2 <= v;
+      arcs += `<path d="${glArcPath(cx, cy, 78, ang(x0) + 90.6, ang(x1) + 89.4)}" fill="none" stroke="${on ? glSkinColour(x0 + 2) : "#121c28"}" stroke-width="11"/>`;
+    }
+    for (let x = 0; x <= MAXV; x += 20) {
+      const a = ang(x) * Math.PI / 180, tx = cx + 58 * Math.cos(a), ty = cy + 58 * Math.sin(a);
+      ticks += `<text x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" text-anchor="middle" font-size="8" font-weight="600" fill="#6f7f94">${x}</text>`;
+    }
+    const na = ang(v) * Math.PI / 180;
+    const needle = `<line x1="${cx}" y1="${cy}" x2="${(cx + 72 * Math.cos(na)).toFixed(1)}" y2="${(cy + 72 * Math.sin(na)).toFixed(1)}" stroke="#f4fbff" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="6" fill="#0d1219" stroke="#f4fbff" stroke-width="2"/>`;
+    const vbar = (frac, colour, label, text, mid) => `<div class="gl-pbar ${mid ? "mid" : ""}"><span>${label}</span>
+      <div><i style="height:${Math.max(0, Math.min(100, frac * 100)).toFixed(1)}%;background:${colour}"></i></div><strong>${text}</strong></div>`;
+    const pwFrac = kw == null ? 0 : kw >= 0 ? 0.28 + kw / 150 * 0.72 : 0.28 + kw / 60 * 0.28;
+    return `<div class="gl-page gl-alt gl-dialpage">
+      ${vbar(pwFrac, kw != null && kw < 0 ? "var(--green)" : kw > 60 ? "var(--amber)" : "#22d3ee", kw != null && kw < 0 ? "Regen" : "Power", `${kwShown}<small>kW</small>`, true)}
+      <div class="gl-dialbox"><svg viewBox="0 0 200 175" role="img" aria-label="Speed ${num} km/h">${arcs}${ticks}${needle}
+        <text x="100" y="150" text-anchor="middle" font-size="34" font-weight="800" fill="${col}" style="font-variant-numeric:tabular-nums">${num}</text>
+        <text x="100" y="166" text-anchor="middle" font-size="9" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text></svg></div>
+      ${vbar(pct != null ? pct / 100 : 0, pct != null && pct < 20 ? "#ff6b70" : "var(--green)", "Battery", `${pct != null ? n(pct, 0) : "—"}<small>%</small>`)}
+    </div>`;
+  }
+  if (skin === 6) {
+    // Range: the battery, big, and what it will do.
+    const shown = pct ?? 0;
+    return `<div class="gl-page gl-alt gl-rangepage">
+      <div class="gl-rng-side">
+        <div class="gl-big"><span>Est. range km</span><strong>${c.rangeHere != null ? n(c.rangeHere) : range != null ? n(range) : "—"}</strong></div>
+        <div class="gl-big"><span>Rated range km</span><strong>${range != null ? n(range) : "—"}</strong></div>
+      </div>
+      <div class="gl-rng-mid">${glBatteryShape(shown, shown < 20 ? "#ff6b70" : "var(--green)", pct != null ? n(pct, 0) + "%" : "—", "battery now")}</div>
+      <div class="gl-rng-side">
+        <div class="gl-big"><span>Used ${t ? "this drive" : "last trip"}</span><strong>${c.usedPct != null ? n(c.usedPct, 1) : "—"}<small>%</small></strong></div>
+        <div class="gl-big"><span>Energy kWh</span><strong>${t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—"}</strong></div>
+      </div>
+    </div>`;
+  }
+  if (skin === 7) {
+    // Mix: speed, power, the trace and the trip, all at once.
+    return `<div class="gl-page gl-alt gl-mixpage">
+      <div class="gl-mix-speed" style="color:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>
+      <div class="gl-mix-pw"><div class="gl-mix-kw ${kw != null && kw < 0 ? "regen" : ""}"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span><strong>${kwShown}<small>kW</small></strong></div>${bar}
+        <div class="gl-mix-batt"><span>Battery</span><strong>${pct != null ? n(pct, 0) : "—"}%</strong><em>${range != null ? n(range) + " km" : ""}</em></div></div>
+      <div class="gl-mix-trace">${c.trace}</div>
+      <div class="gl-mix-trip">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg", avg != null ? n(avg) : "—")}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}</div>
     </div>`;
   }
   const tile = (label, value, tone = "") => `<div class="gl-big ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
@@ -5108,6 +5170,9 @@ function renderGlance(d) {
           range: nw.range_km ?? null, rated, lt, trace: traceHtml,
           nowWh: inst && inst.whkm != null ? inst.whkm : null,
           rangeHere: nw.energy_kwh != null && twA > 0 ? nw.energy_kwh * 1000 / twA : null, n,
+          usedPct: t ? Math.max(+t.soc_used || 0, lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh && t.energy_kwh > 0
+            ? t.energy_kwh / lastData.vehicle.usable_capacity_kwh * 100 : 0) : null,
+          packKwh: lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh,
         }), foot };
       }
       if (!t) {
