@@ -4956,18 +4956,31 @@ function glAutoLive(d) {
 // the others show the same readings differently, each for a different glance:
 // a huge speed, the energy flow, or the trip in big figures. Swipe left or
 // right on the Live page, or tap the dots.
-const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix"];
+const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack"];
+// Two rows of designs. Left and right swipe through the single-purpose ones;
+// up and down through the combinations, which put several readings together.
+const GL_SINGLE = [0, 1, 4, 5, 6, 3];       // Cockpit, HUD, Night, Dial, Range, Trip
+const GL_COMBO = [7, 8, 2, 9];              // Mix, Round Mix, Energy, Stack
 let glLiveSkin = 0;
-function glSkinSet(i) {
-  glLiveSkin = (i + GL_SKINS.length) % GL_SKINS.length;
+function glSkinSet(id) {
+  glLiveSkin = GL_SKINS[id] ? id : 0;
   try { localStorage.setItem("glLiveSkin", String(glLiveSkin)); } catch (_) { /* private mode */ }
   glDimArm();
   if (typeof lastData !== "undefined" && lastData) renderGlance(lastData);
 }
+// Axis "h" walks the single designs, "v" the combinations. Coming from the
+// other row, a swipe enters this one at its first design.
+function glSkinStep(axis, dir) {
+  const list = axis === "h" ? GL_SINGLE : GL_COMBO;
+  const at = list.indexOf(glLiveSkin);
+  glSkinSet(at < 0 ? list[0] : list[(at + dir + list.length) % list.length]);
+}
 const glSkinColour = (x) => (x > 140 ? "#e040fb" : x > 120 ? "#ff3b3b" : x > 100 ? "#ff8a1f"
   : x > 80 ? "#ffe03a" : x > 60 ? "#2ee86a" : x > 30 ? "#19e3f5" : "#3d7bff");
-const glSkinDots = () => `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_SKINS.map((nm, i) =>
-  `<button type="button" class="${i === glLiveSkin ? "on" : ""}" data-gl-skin="${i}" title="${nm}" aria-label="${nm}"></button>`).join("")}</span>`;
+const glSkinDots = () => {
+  const dot = (id, cls) => `<button type="button" class="${cls}${id === glLiveSkin ? " on" : ""}" data-gl-skin="${id}" title="${GL_SKINS[id]}" aria-label="${GL_SKINS[id]}"></button>`;
+  return `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_SINGLE.map((id) => dot(id, "")).join("")}<i></i>${GL_COMBO.map((id) => dot(id, "cb")).join("")}</span>`;
+};
 
 // c: { t, nw, spd, kw, tw, pct, odo, range, rated, lt, hist, regen, usedPct, h, n }
 function glAltSkin(skin, c) {
@@ -5069,6 +5082,43 @@ function glAltSkin(skin, c) {
       </div>
     </div>`;
   }
+  if (skin === 8) {
+    // Round Mix: a round speed ring with the odometer set into it, the trip
+    // on its left and power and battery on its right.
+    const MAXV = 160, A0 = 135, SW = 270, cx = 100, cy = 100;
+    const v = spd != null ? Math.max(0, Math.min(MAXV, spd)) : 0;
+    const ang = (x) => A0 + x / MAXV * SW;
+    let ring = "";
+    for (let k = 0; k < 48; k++) {
+      const x0 = k / 48 * MAXV, x1 = (k + 1) / 48 * MAXV, on = spd != null && x0 + 1.5 <= v;
+      ring += `<path d="${glArcPath(cx, cy, 86, ang(x0) + 90.5, ang(x1) + 89.5)}" fill="none" stroke="${on ? glSkinColour(x0 + 1.5) : "#121c28"}" stroke-width="10"/>`;
+    }
+    const odoTxt = odo != null ? n(odo, 0) : "—";
+    const round = `<svg viewBox="0 0 200 200" role="img" aria-label="Speed ${num} km/h">${ring}
+      <circle cx="100" cy="100" r="70" fill="#080d13" stroke="#1d2a38"/>
+      <text x="100" y="${num.length >= 3 ? 98 : 102}" text-anchor="middle" font-size="${num.length >= 3 ? 50 : 62}" font-weight="800" fill="${col}"
+        style="font-variant-numeric:tabular-nums">${num}</text>
+      <text x="100" y="118" text-anchor="middle" font-size="9" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text>
+      <rect x="44" y="128" width="112" height="26" rx="5" fill="#05080c" stroke="#2a3645"/>
+      <text x="54" y="145" font-size="8" font-weight="650" letter-spacing="1.5" fill="#6f7f94">ODO</text>
+      <text x="148" y="147" text-anchor="end" font-size="16" font-weight="700" fill="#e8fbff" font-family="ui-monospace,Menlo,monospace">${odoTxt}</text></svg>`;
+    return `<div class="gl-page gl-alt gl-rmix">
+      <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
+      <div class="gl-rmix-mid">${round}</div>
+      <div class="gl-rmix-col">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
+        ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
+    </div>`;
+  }
+  if (skin === 9) {
+    // Stack: three readings on top, the speed, then the trace and the trip.
+    return `<div class="gl-page gl-alt gl-stackpage">
+      <div class="gl-stk-top">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km now", c.nowWh != null ? n(c.nowWh) : "—")}
+        ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}${stat("range km", range != null ? n(range) : "—")}</div>
+      <div class="gl-hud-speed" style="color:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>
+      <div class="gl-stk-bot"><div class="gl-stk-trace">${c.trace}</div>
+        <div class="gl-stk-trip">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}</div></div>
+    </div>`;
+  }
   if (skin === 7) {
     // Mix: speed, power, the trace and the trip, all at once.
     return `<div class="gl-page gl-alt gl-mixpage">
@@ -5092,7 +5142,7 @@ function glAltSkin(skin, c) {
 const glPref = (k, fallback) => { try { return localStorage.getItem(k) || fallback; } catch (_) { return fallback; } };
 const glSave = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } };
 let glanceTab = glPref("glanceTab", "drive");
-glLiveSkin = Math.max(0, Math.min(GL_SKINS.length - 1, +glPref("glLiveSkin", "0") || 0));
+glLiveSkin = GL_SKINS[+glPref("glLiveSkin", "0")] ? +glPref("glLiveSkin", "0") : 0;
 
 function renderGlance(d) {
   const el = document.getElementById("glance");
@@ -6835,23 +6885,26 @@ showHome();
   }, { passive: false });
 })();
 
-// Swipe left or right across the Live page to change its design. A swipe has
-// to be mostly sideways and a good length, and not start at the screen's
-// edge (where the browser's own back gesture lives).
+// Swipe across the Live page to change its design: left or right for the
+// single designs, up or down for the combinations. A swipe has to be mostly
+// along one axis and a good length, and not start at a screen edge (where the
+// browser's own back and home gestures live).
 {
   let sw = null;
   document.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest("#glance");
     const edge = 28;
     sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select")
-      && e.clientX > edge && e.clientX < innerWidth - edge
+      && e.clientX > edge && e.clientX < innerWidth - edge && e.clientY > edge && e.clientY < innerHeight - edge
       ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId } : null;
   }, { passive: true });
   document.addEventListener("pointerup", (e) => {
     if (!sw || e.pointerId !== sw.id) return;
     const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = Date.now() - sw.t;
     sw = null;
-    if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && dt < 900) glSkinSet(glLiveSkin + (dx < 0 ? 1 : -1));
+    if (dt >= 900) return;
+    if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.6) glSkinStep("h", dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) glSkinStep("v", dy < 0 ? 1 : -1);
   }, { passive: true });
   document.addEventListener("pointercancel", () => { sw = null; }, { passive: true });
 }

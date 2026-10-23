@@ -2826,3 +2826,27 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-rng-mid { opacity: .6; }
 .gl-dim .gl-mix-trace { opacity: .35; }
 .gl-mix-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; }
+
+/* Two-axis designs: single ones left/right, combinations up/down. */
+.glance { touch-action: none; }
+.gl-dots i { width: 1px; height: 12px; background: #2a3645; margin: 0 2px; }
+.gl-dots button.cb { border-radius: 2px; }
+.gl-dots button.cb.on { width: 8px; border-radius: 2px; }
+/* Round Mix */
+.gl-rmix { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.gl-rmix-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gl-rmix-col .gl-hud-stat { flex: 1 1 0; display: flex; flex-direction: column; justify-content: center; }
+.gl-rmix-col .gl-hud-stat strong { font-size: clamp(18px, min(7vh, 4.4vw), 34px); }
+.gl-rmix-mid { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.gl-rmix-mid svg { height: 100%; width: auto; max-width: 100%; }
+/* Stack */
+.gl-stackpage { gap: 6px; }
+.gl-stk-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gl-stk-top .gl-hud-stat strong { font-size: clamp(16px, min(5.6vh, 3.6vw), 28px); }
+.gl-stackpage .gl-hud-speed { font-size: min(30vh, 18vw); }
+.gl-stk-bot { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; min-height: 0; height: clamp(54px, 26vh, 120px); }
+.gl-stk-trace { min-height: 0; display: flex; } .gl-stk-trace .gl-trace { flex: 1 1 auto; }
+.gl-stk-trip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.gl-stk-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; padding: 3px 4px; }
+.gl-stk-trip .gl-hud-stat strong { font-size: clamp(15px, min(5vh, 3vw), 24px); }
+.gl-dim .gl-rmix-mid svg { opacity: .6; } .gl-dim .gl-stk-trace { opacity: .35; }
