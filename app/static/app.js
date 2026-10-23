@@ -5010,7 +5010,7 @@ function glAltSkin(skin, c) {
   // The whole page takes the speed's colour: --spd for borders, bars and the
   // speed line along the top, --spdp (0-100) for how long that line is.
   const sp = c.spd != null && c.spd > 0.5 ? c.spd : 0;
-  const spCol = sp ? glSkinColour(sp) : "#22d3ee";
+  const spCol = glSkinColour(sp);
   return `<div class="gl-page gl-altwrap" style="--spd:${spCol};--spdp:${Math.min(100, sp / 160 * 100).toFixed(1)}">${glKeyBar(c)}${glAltPage(skin, c)}</div>`;
 }
 function glKeyFit(root) {
@@ -5029,10 +5029,14 @@ function glGauge3D(spd, col, nw, odo, needle) {
   const MAXV = 160, A0 = 135, SW = 270, cx = 100, cy = 100;
   const v = spd != null ? Math.max(0, Math.min(MAXV, spd)) : 0;
   const ang = (x) => A0 + x / MAXV * SW;
-  let ring = "";
+  // The whole scale always shows its colours, dimly; the part up to the
+  // speed is lit and glows. A stopped car still has a colourful dial.
+  let ring = "", ringLit = "";
   for (let k = 0; k < 48; k++) {
     const x0 = k / 48 * MAXV, x1 = (k + 1) / 48 * MAXV, on = spd != null && x0 + 1.5 <= v;
-    ring += `<path d="${glArcPath(cx, cy, 86, ang(x0) + 90.5, ang(x1) + 89.5)}" fill="none" stroke="${on ? glSkinColour(x0 + 1.5) : "#121c28"}" stroke-width="10"/>`;
+    const seg = `<path d="${glArcPath(cx, cy, 86, ang(x0) + 90.5, ang(x1) + 89.5)}" fill="none" stroke="${glSkinColour(x0 + 1.5)}" stroke-width="10"${on ? "" : ' opacity=".2"'}/>`;
+    ring += seg;
+    if (on) ringLit += seg;
   }
   const uid = `glr${++glDialSeq}`;
   const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
@@ -5085,7 +5089,7 @@ function glGauge3D(spd, col, nw, odo, needle) {
     <circle cx="100" cy="100" r="93" fill="#05080c" stroke="#000" stroke-width="1"/>
     <circle cx="100" cy="100" r="92" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1"/>
     <g opacity=".9">${ring}</g>
-    <g filter="url(#${uid}-glow)" style="mix-blend-mode:screen">${ring.replaceAll('stroke="#121c28"', 'stroke="none"')}</g>
+    <g filter="url(#${uid}-glow)" style="mix-blend-mode:screen">${ringLit}</g>
     ${tip}
     <circle cx="100" cy="100" r="74" fill="url(#${uid}-gr)"/>
     <circle cx="100" cy="100" r="72.5" fill="url(#${uid}-dm)" stroke="#000" stroke-width="1"/>
@@ -5104,6 +5108,13 @@ function glGauge3D(spd, col, nw, odo, needle) {
 }
 
 // c: { t, nw, spd, kw, tw, pct, odo, range, rated, lt, hist, regen, usedPct, h, n }
+// A column of small bars beside a round gauge: lit in the speed's colours up
+// to the speed, dim spectrum above it (so it is never empty).
+function glRail(spd, side) {
+  const N = 14, lit = spd != null && spd > 0.5 ? Math.max(1, Math.ceil(Math.min(160, spd) / 160 * N)) : 0;
+  return `<span class="gl-spdrail ${side}" aria-hidden="true">${Array.from({ length: N }, (_, k) =>
+    `<i class="${k < lit ? "on" : ""}" style="--c:${glSkinColour((k + 0.5) / N * 160)}"></i>`).join("")}</span>`;
+}
 function glAltPage(skin, c) {
   const { t, nw, spd, kw, tw, pct, odo, range, rated, lt } = c, n = c.n;
   const num = spd != null ? String(Math.round(spd)) : "—";
@@ -5190,7 +5201,7 @@ function glAltPage(skin, c) {
       <div class="gl-digi" style="--c:${tone}"><i>${ghost}</i><b>${value}</b><small>${unit}</small></div></div>`;
     return `<div class="gl-page gl-alt gl-dialpage">
       ${led(regen ? "Regen" : "Power", pseg, "88.8", kwShown, "kW", pwTone, "<em>150</em><em>75</em><em>0</em><em>regen</em>")}
-      <div class="gl-dialbox">${glGauge3D(spd, col, nw, null, true)}</div>
+      <div class="gl-dialbox">${glRail(spd, "l")}${glGauge3D(spd, col, nw, null, true)}${glRail(spd, "r")}</div>
       ${led("Battery", bseg, "888", pct != null ? n(pct, 0) : "—", "%", bTone, "<em>100</em><em>75</em><em>50</em><em>25</em><em>0</em>")}
     </div>`;
   }
@@ -5260,7 +5271,7 @@ function glAltPage(skin, c) {
     const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
-      <div class="gl-rmix-mid">${round}</div>
+      <div class="gl-rmix-mid">${glRail(spd, "l")}${round}${glRail(spd, "r")}</div>
       <div class="gl-rmix-col">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
         ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
     </div>`;
