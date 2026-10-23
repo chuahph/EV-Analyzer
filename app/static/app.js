@@ -4987,6 +4987,36 @@ const glSkinDots = () => {
   return `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_SINGLE.map((id) => dot(id, "")).join("")}<i></i>${GL_COMBO.map((id) => dot(id, "cb")).join("")}</span>`;
 };
 
+// Every design opens with the same slim strip of the things worth a glance
+// while driving: the time, the outside temperature, whether the climate is
+// on, and (when a destination is known) the arrival. The least important
+// are dropped first on a narrow screen (see glKeyFit).
+function glKeyBar(c) {
+  const { t, nw } = c;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+  const chips = [
+    `<span class="gl-kb"><em>Time</em><b>${hh}</b></span>`,
+    c.rangeHere != null || c.range != null ? `<span class="gl-kb gl-opt"><em>Range</em><b>${c.n(c.rangeHere != null ? c.rangeHere : c.range)} km</b></span>` : "",
+    nw.out_temp != null ? `<span class="gl-kb gl-opt"><em>Outside</em><b>${c.n(nw.out_temp, 0)}°C</b></span>` : "",
+    t && t.eta ? `<span class="gl-kb gl-opt"><em>ETA ${c.h(t.eta.place)}</em><b>${c.n(t.eta.eta_min)} min</b></span>` : "",
+    nw.climate_on != null ? `<span class="gl-kb gl-opt"><em>Climate</em><b>${nw.climate_on ? "on" : "off"}</b></span>` : "",
+    t && t.regen_kwh != null && c.skin !== 2 ? `<span class="gl-kb gl-opt"><em>Regen</em><b>${c.n(t.regen_kwh, 2)} kWh</b></span>` : "",
+  ];
+  return `<div class="gl-keybar">${chips.join("")}</div>`;
+}
+function glAltSkin(skin, c) {
+  c.skin = skin; c.h = h;
+  return `<div class="gl-page gl-altwrap">${glKeyBar(c)}${glAltPage(skin, c)}</div>`;
+}
+function glKeyFit(root) {
+  const f = (root || document).querySelector(".glance .gl-keybar");
+  if (!f) return;
+  const opt = [...f.querySelectorAll(".gl-opt")];
+  opt.forEach((e) => { e.style.display = ""; });
+  for (let i = opt.length - 1; i >= 0 && f.scrollWidth > f.clientWidth + 1; i--) opt[i].style.display = "none";
+}
+
 // A 3D round gauge: metal bezel, glass dome, glowing speed ring, engraved
 // marks and the speed set into it. `odo` set: a mechanical odometer in the
 // dome; `needle` set: a needle with a shadow instead.
@@ -5070,7 +5100,7 @@ function glGauge3D(spd, col, nw, odo, needle) {
 }
 
 // c: { t, nw, spd, kw, tw, pct, odo, range, rated, lt, hist, regen, usedPct, h, n }
-function glAltSkin(skin, c) {
+function glAltPage(skin, c) {
   const { t, nw, spd, kw, tw, pct, odo, range, rated, lt } = c, n = c.n;
   const num = spd != null ? String(Math.round(spd)) : "—";
   const col = spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff";
@@ -5664,6 +5694,7 @@ function glFit(root) {
   // screen and inside any safe-area inset.
   for (const row of root.querySelectorAll(".gl-odo, .gl-trace-h, .gl-battbar-top, .gl-power-top")) glFitRow(row);
   glFootFit(root);
+  glKeyFit(root);
 }
 
 document.addEventListener("click", (e) => {
