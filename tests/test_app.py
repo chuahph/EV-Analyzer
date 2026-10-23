@@ -13267,3 +13267,36 @@ def test_live_drive_follows_the_stored_trip():
         assert "_go" in routes._LIVE_MEM[vin]
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_power_sign_is_kept_across_a_restart():
+    """After a restart the Live page showed no power until the car next drove
+    above 30 km/h; the learned sign is kept now."""
+    import time as _t
+    from datetime import datetime, timezone
+
+    from app.api import routes
+    from app.database import SessionLocal
+    from app import state
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
+    routes._LIVE_MEM.clear(); routes._LIVE_SIGN_SEEN.clear()
+    vin = "VSIGN00000001"
+    try:
+        for i in range(12):
+            routes._live_mem_fold(vin, at(-30 + i), {"Gear": "ShiftStateD", "VehicleSpeed": 60.0,
+                                                     "PackVoltage": 360.0, "PackCurrent": -40.0})
+        assert routes._LIVE_MEM[vin]["_sign"] < 0 or routes._LIVE_MEM[vin]["_sign"] > 0
+        learned = 1 if routes._LIVE_MEM[vin]["_sign"] > 0 else -1
+        # A restart: memory and the per-process flag are gone; one parked reading arrives.
+        routes._LIVE_MEM.clear(); routes._LIVE_SIGN_SEEN.clear()
+        routes._live_mem_fold(vin, at(0), {"Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+                                           "PackVoltage": 360.0, "PackCurrent": -2.0})
+        assert (1 if routes._LIVE_MEM[vin]["_sign"] > 0 else -1) == learned
+        assert routes._live_payload(vin, 70.0)["now"]["power_kw"] is not None
+    finally:
+        routes._LIVE_MEM.clear(); routes._LIVE_SIGN_SEEN.clear()
+        with SessionLocal() as s:
+            state.put(s, state.TELEMETRY_POWER_SIGN_KEY, "{}"); s.commit()

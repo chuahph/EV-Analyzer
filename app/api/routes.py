@@ -15213,10 +15213,56 @@ def _live_clean(key: str, value):
     return value
 
 
+_LIVE_SIGN_SEEN: dict[str, int] = {}     # vin -> the sign restored or saved this process
+
+
+def _live_sign_restore(vin: str) -> None:
+    """After a restart, take the car's power sign from the store (once per
+    process) so power shows at once; see state.TELEMETRY_POWER_SIGN_KEY."""
+    if vin in _LIVE_SIGN_SEEN:
+        return
+    _LIVE_SIGN_SEEN[vin] = 0
+    try:
+        import json as _j
+
+        from ..database import SessionLocal
+        with SessionLocal() as s:
+            saved = (_j.loads(state.get(s, state.TELEMETRY_POWER_SIGN_KEY) or "{}") or {}).get(vin)
+        if saved in (1, -1):
+            with _LIVE_LOCK:
+                car = _LIVE_MEM.setdefault(vin, {})
+                if not car.get("_sign"):
+                    car["_sign"] = 10 * saved
+            _LIVE_SIGN_SEEN[vin] = saved
+    except Exception:   # noqa: BLE001 - the page just waits to learn it, as before
+        pass
+
+
+def _live_sign_save(vin: str, sign: int) -> None:
+    """Keep a firmly learned sign (a few readings in one direction) so the next
+    restart does not have to learn it again."""
+    if _LIVE_SIGN_SEEN.get(vin) == sign:
+        return
+    _LIVE_SIGN_SEEN[vin] = sign
+    try:
+        import json as _j
+
+        from ..database import SessionLocal
+        with SessionLocal() as s:
+            cur = _j.loads(state.get(s, state.TELEMETRY_POWER_SIGN_KEY) or "{}") or {}
+            if cur.get(vin) != sign:
+                cur[vin] = sign
+                state.put(s, state.TELEMETRY_POWER_SIGN_KEY, _j.dumps(cur))
+                s.commit()
+    except Exception:   # noqa: BLE001
+        pass
+
+
 def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
     if not vin or not fields:
         return
     fields = {k: _live_clean(k, v) for k, v in fields.items() if isinstance(k, str)}
+    _live_sign_restore(vin)
     with _LIVE_LOCK:
         before = _LIVE_MEM.get(vin) or {}
         g0, o0 = before.get("Gear"), "_go" in before
@@ -15226,7 +15272,10 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
             import logging
             logging.getLogger(__name__).exception("live memory fold failed")
         after = _LIVE_MEM.get(vin) or {}
+        learned = int(after.get("_sign") or 0)
         g1, o1 = after.get("Gear"), "_go" in after
+        if abs(learned) >= 8:
+            _live_sign_save(vin, 1 if learned > 0 else -1)
         if g0 != g1 or o0 != o1:
             # Only on a change of gear or of the drive being open: a line or
             # two per journey, so a Live page that disagrees with the car can

@@ -112,6 +112,9 @@ ROAD_CITY_OVERRIDES_KEY = "road_city_overrides"  # JSON list of {id, name,
 ROAD_LEARNED_STOPS_KEY = "road_learned_stops"  # JSON list of [lat, lon,
 # "YYYY-MM-DD"]: where the car came to rest on roads the map calls
 # expressway. roads.learned_signals turns repeats into traffic lights.
+TELEMETRY_POWER_SIGN_KEY = "telemetry_power_sign"  # JSON {vin: 1 or -1}: which sign of PackCurrent
+# is discharge on this car. A property of the car, learned once while driving and kept, so the
+# Live page shows power straight away after a restart instead of waiting for a drive.
 TELEMETRY_LIVE_VIEWS_KEY = "telemetry_live_views"  # JSON [[vin, open_ts, close_ts, stream_n, poll_n], ...] (older entries lack the last two):
 # when the Live page was on a screen (its stream connected), so a trip can say
 # how long the page was watched during it. Last LIVE_VIEWS_MAX, 30 days.

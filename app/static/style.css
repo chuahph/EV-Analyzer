@@ -2919,3 +2919,29 @@ main > .card { max-width: 100%; }
 .gl-rmix-col .gl-hud-stat span { font-size: clamp(9px, 2.5vh, 12px); }
 .gl-dialbox svg { width: 100%; height: 100%; }
 .gl-pbar { flex-basis: clamp(54px, 11vw, 92px); }
+
+/* Colour for the tiles: each takes an accent, glows with it, and has a lit strip along its base. */
+.gl-hud-stat, .gl-big, .gl-en-big { --ac: #22d3ee; position: relative; overflow: hidden;
+  background: radial-gradient(130% 110% at 0% 0%, color-mix(in srgb, var(--ac) 26%, transparent), transparent 64%),
+    linear-gradient(165deg, #1b2736 0%, #0d1520 45%, #070c13 100%);
+  border-color: color-mix(in srgb, var(--ac) 42%, #243244); border-top-color: color-mix(in srgb, var(--ac) 62%, #41566f); }
+.gl-hud-stat::before, .gl-big::before, .gl-en-big::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--ac); box-shadow: 0 0 12px var(--ac); }
+.gl-hud-stat::after, .gl-big::after, .gl-en-big::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: 0; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--ac), transparent); box-shadow: 0 0 14px var(--ac); opacity: .9; }
+.gl-hud-stat span, .gl-big span, .gl-en-big span { color: color-mix(in srgb, var(--ac) 55%, #b9c7d8); }
+.gl-hud-stat strong, .gl-big strong, .gl-en-big strong { text-shadow: 0 1px 0 #000, 0 0 16px color-mix(in srgb, var(--ac) 55%, transparent); }
+.gl-hud-stat:nth-child(1), .gl-big:nth-child(1), .gl-en-big:nth-child(1) { --ac: #22d3ee; }
+.gl-hud-stat:nth-child(2), .gl-big:nth-child(2), .gl-en-big:nth-child(2) { --ac: #a78bfa; }
+.gl-hud-stat:nth-child(3), .gl-big:nth-child(3), .gl-en-big:nth-child(3) { --ac: #60a5fa; }
+.gl-hud-stat:nth-child(4), .gl-big:nth-child(4), .gl-en-big:nth-child(4) { --ac: #f59e0b; }
+.gl-big:nth-child(5) { --ac: #2dd4bf; } .gl-big:nth-child(6) { --ac: #22c55e; }
+/* The right-hand column of Round Mix: power, Wh/km, battery. */
+.gl-rmix-col:last-child .gl-hud-stat:nth-child(1) { --ac: #f59e0b; }
+.gl-rmix-col:last-child .gl-hud-stat:nth-child(2) { --ac: #fb7185; }
+.gl-rmix-col:last-child .gl-hud-stat:nth-child(3) { --ac: #22c55e; }
+.gl-hud-stat.warn strong, .gl-big.warn strong, .gl-en-big.warn strong { color: var(--amber); }
+.gl-hud-stat.good strong, .gl-big.good strong, .gl-en-big.good strong { color: var(--green); }
+.gl-dim .gl-hud-stat::before, .gl-dim .gl-big::before, .gl-dim .gl-en-big::before,
+.gl-dim .gl-hud-stat::after, .gl-dim .gl-big::after, .gl-dim .gl-en-big::after { box-shadow: none; opacity: .45; }
+.gl-dim .gl-hud-stat strong, .gl-dim .gl-big strong, .gl-dim .gl-en-big strong { text-shadow: none; }

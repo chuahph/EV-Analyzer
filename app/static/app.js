@@ -5117,7 +5117,8 @@ function glAltPage(skin, c) {
   const dist = t ? t.distance_km : lt && lt.distance_km;
   const mins = t ? t.duration_min : lt && lt.duration_min;
   const avg = t ? t.avg_speed_kmh : lt && lt.avg_speed_kmh;
-  const whk = t ? tw : lt && lt.wh_per_km;
+  // Just after leaving, before the first kilometre, the trip has no Wh/km yet: the last trip's stands in.
+  const whk = t ? (tw ?? (lt && lt.wh_per_km)) : lt && lt.wh_per_km;
   const sub = t ? "this drive" : lt ? "last trip" : "";
   if (skin === 1) {
     return `<div class="gl-page gl-alt gl-hud">
