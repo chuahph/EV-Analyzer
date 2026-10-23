@@ -6525,7 +6525,10 @@ if (reportBtn) reportBtn.addEventListener("click", () => {
   let startY = null, armed = false;
   window.addEventListener("touchstart", (e) => {
     const modalOpen = document.querySelector(".modal:not(.hidden)");
-    startY = (!modalOpen && window.scrollY <= 0) ? e.touches[0].clientY : null;
+    // Not on the Glance page: a swipe down there changes the Live design, and
+    // it must not pull the whole app into a reload.
+    const inGlance = e.target.closest && e.target.closest("#glance");
+    startY = (!modalOpen && !inGlance && window.scrollY <= 0) ? e.touches[0].clientY : null;
     armed = false;
   }, { passive: true });
   window.addEventListener("touchmove", (e) => {
