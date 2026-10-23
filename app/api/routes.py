@@ -14177,6 +14177,7 @@ def _telemetry_ingest(payload: dict, session: Session):
         state.put(session, state.TELEMETRY_MODES_TAIL_KEY, _json.dumps(tail))
     state.put(session, state.TELEMETRY_LATEST_KEY, _json.dumps(latest))
     state.put(session, state.TELEMETRY_SHADOW_KEY, _json.dumps(shadows))
+    _live_align_to_shadows(shadows)
     trips_written = False
     if trips_box["list"] is not None and "trips" not in unreadable:
         value = _json.dumps(trips_box["list"][-TELEMETRY_TRIPS_MAX:])
@@ -15234,6 +15235,49 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
             print(f"[live] {vin[-6:]} gear {g0}->{g1} speed {after.get('VehicleSpeed')} "
                   f"drive {'open' if o1 else 'closed'} record_age {time.time() - t:.0f}s "
                   f"keys {','.join(sorted(fields))[:80]}", flush=True)
+
+
+def _live_align_to_shadows(shadows: dict) -> None:
+    """Make the Live page's drive follow the stored trip machine.
+
+    The stored trips are built from the same stream by a stricter machine
+    (it opens a journey on real motion and closes it on the car's own end
+    signals), and they are what the car's Current Drive and the trip list
+    agree with. The live page keeps its own simpler drive in memory, and on
+    23 Oct it carried on from an earlier stop (since 11:55: 26 km, 83 min)
+    after the stored trip 3244 had begun at 12:36 (20.8 km, 42 min, the car's
+    own 20.9 km and 41 min). Called after each batch: a live drive older than
+    the stored trip's start is restarted from it, and one that has stopped
+    while the stored machine has no trip open is closed.
+    """
+    if not isinstance(shadows, dict):
+        return
+    with _LIVE_LOCK:
+        for vin, shadow in shadows.items():
+            car = _LIVE_MEM.get(vin)
+            go = car.get("_go") if car else None
+            if go is None or not isinstance(shadow, dict):
+                continue
+            opened = shadow.get("open")
+            if isinstance(opened, dict) and opened.get("ts") is not None:
+                try:
+                    o_ts = float(opened["ts"])
+                    g_ts = float(go.get("ts") or 0.0)
+                except (TypeError, ValueError):
+                    continue
+                if g_ts < o_ts - 120.0:
+                    car["_go"] = {**{k: opened.get(k) for k in _LIVE_KEYS},
+                                  "ts": o_ts, "max_speed": float(go.get("max_speed") or 0.0)}
+                    car.pop("_stop", None)
+                    print(f"[live] {vin[-6:]} drive realigned to the stored trip: "
+                          f"live began {time.time() - g_ts:.0f}s ago, stored trip {time.time() - o_ts:.0f}s ago",
+                          flush=True)
+            elif car.get("_stop") is not None:
+                # No stored trip open and the car is standing in Park: the
+                # journey is over, whatever the live wait timer says.
+                car.pop("_go", None)
+                car.pop("_stop", None)
+                print(f"[live] {vin[-6:]} drive closed: the stored trip has ended", flush=True)
 
 
 def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:

@@ -13223,3 +13223,47 @@ def test_live_debug_view_shows_what_the_answer_is_built_from():
         assert set(j["field_ages_s"]) >= {"Gear", "VehicleSpeed"} and "answer" in j
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_live_drive_follows_the_stored_trip():
+    """Live said 'drive since 11:55, 26 km, 83 min' after the stored trip had
+    begun at 12:36 (the car's own Current Drive: 20.9 km, 41 min)."""
+    import time as _t
+    from datetime import datetime, timezone
+
+    from app.api import routes
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
+    routes._LIVE_MEM.clear()
+    try:
+        vin = "VALIGN0000001"
+        # An earlier drive, 40 minutes ago, never closed on the live side.
+        for i in range(4):   # records spaced under the 15 minute silence limit
+            routes._live_mem_fold(vin, at(-2400 + i * 600), {"Gear": "ShiftStateD", "VehicleSpeed": 40.0,
+                                                             "Odometer": 100.0 + 0.01 * i, "EnergyRemaining": 50.0})
+        for i in range(30):
+            routes._live_mem_fold(vin, at(-60 + i * 2), {"Gear": "ShiftStateD", "VehicleSpeed": 40.0,
+                                                         "Odometer": 101.0 + 0.01 * i, "EnergyRemaining": 49.0 - i * 0.01})
+        before = routes._LIVE_MEM[vin]["_go"]["ts"]
+        # The stored machine opened its trip a minute ago.
+        opened = {"ts": _t.time() - 60, "odo_km": 101.0 * 1.609344, "energy_kwh": 49.0,
+                  "soc": 0.0, "range_km": 0.0, "battery_level": 60.0}
+        routes._live_align_to_shadows({vin: {"open": opened}})
+        after = routes._LIVE_MEM[vin]["_go"]
+        assert after["ts"] > before + 1000 and abs(after["ts"] - opened["ts"]) < 1
+        # Already in step: left alone.
+        routes._live_align_to_shadows({vin: {"open": opened}})
+        assert routes._LIVE_MEM[vin]["_go"]["ts"] == after["ts"]
+        # Standing in Park with no stored trip open: closed.
+        routes._LIVE_MEM[vin]["_stop"] = _t.time()
+        routes._live_align_to_shadows({vin: {}})
+        assert "_go" not in routes._LIVE_MEM[vin]
+        # Moving with nothing stored yet (the stored machine lags): kept.
+        routes._LIVE_MEM[vin]["_go"] = {"ts": _t.time() - 5, "odo_km": 1.0}
+        routes._LIVE_MEM[vin].pop("_stop", None)
+        routes._live_align_to_shadows({vin: {}})
+        assert "_go" in routes._LIVE_MEM[vin]
+    finally:
+        routes._LIVE_MEM.clear()
