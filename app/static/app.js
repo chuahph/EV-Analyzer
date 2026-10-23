@@ -5108,6 +5108,43 @@ function glGauge3D(spd, col, nw, odo, needle) {
 }
 
 // c: { t, nw, spd, kw, tw, pct, odo, range, rated, lt, hist, regen, usedPct, h, n }
+// A tall LED ladder for the space beside a round gauge: "speed" lit in the
+// speed colours, "power" (regen below its zero mark) or "whkm" (green under
+// rated, amber over). Segments are always drawn; the lit ones glow.
+function glLadder(kind, c) {
+  const N = 22;
+  const colourStops = (f) => [[0, "#22d3ee"], [.35, "#2ee86a"], [.6, "#ffe03a"], [.8, "#ff8a1f"], [1, "#ff3b3b"]].find(([x]) => f <= x)?.[1] || "#ff3b3b";
+  let segs = "", title = "", scale = "", read = "";
+  if (kind === "speed") {
+    title = "Speed";
+    const lit = c.spd != null && c.spd > 0.5 ? Math.max(1, Math.ceil(Math.min(160, c.spd) / 160 * N)) : 0;
+    for (let i = 0; i < N; i++) segs += `<i class="${i < lit ? "on" : ""}" style="--c:${glSkinColour((i + 0.5) / N * 160)}"></i>`;
+    scale = "<em>160</em><em>120</em><em>80</em><em>40</em><em>0</em>";
+    read = c.spd != null ? `${Math.round(c.spd)}<small>km/h</small>` : "—";
+  } else if (kind === "power") {
+    title = c.kw != null && c.kw < 0 ? "Regen" : "Power";
+    const Z = 6, kw = c.kw;
+    const drive = kw != null && kw > 0 ? Math.max(1, Math.round(Math.min(150, kw) / 150 * (N - Z))) : 0;
+    const reg = kw != null && kw < 0 ? Math.max(1, Math.round(Math.min(60, -kw) / 60 * Z)) : 0;
+    for (let i = 0; i < N; i++) {
+      const on = i >= Z ? i < Z + drive : i >= Z - reg && kw != null && kw < 0;
+      segs += `<i class="${on ? "on" : ""}" style="--c:${i >= Z ? colourStops((i - Z + 1) / (N - Z)) : "#2ee86a"}"></i>`;
+    }
+    scale = "<em>150</em><em>100</em><em>50</em><em>0</em><em>regen</em>";
+    read = kw != null ? `${c.n(Math.abs(kw), 1)}<small>kW</small>` : "—";
+  } else {
+    title = "Wh/km";
+    const w = c.nowWh != null ? c.nowWh : c.whk, R = c.rated || 150;
+    const lit = w != null ? Math.max(1, Math.min(N, Math.round(Math.max(0, w) / 300 * N))) : 0;
+    for (let i = 0; i < N; i++) {
+      const v = (i + 0.5) / N * 300;
+      segs += `<i class="${i < lit ? "on" : ""}" style="--c:${v <= R ? "#2ee86a" : v <= R * 1.5 ? "#ffb020" : "#ff3b3b"}"></i>`;
+    }
+    scale = "<em>300</em><em>200</em><em>100</em><em>0</em>";
+    read = w != null ? `${c.n(w)}` : "—";
+  }
+  return `<div class="gl-ladder"><span>${title}</span><div class="gl-led-bar"><div class="gl-led-scale">${scale}</div><div class="gl-led-segs">${segs}</div></div><b>${read}</b></div>`;
+}
 // A column of small bars beside a round gauge: lit in the speed's colours up
 // to the speed, dim spectrum above it (so it is never empty).
 function glRail(spd, side) {
@@ -5201,7 +5238,7 @@ function glAltPage(skin, c) {
       <div class="gl-digi" style="--c:${tone}"><i>${ghost}</i><b>${value}</b><small>${unit}</small></div></div>`;
     return `<div class="gl-page gl-alt gl-dialpage">
       ${led(regen ? "Regen" : "Power", pseg, "88.8", kwShown, "kW", pwTone, "<em>150</em><em>75</em><em>0</em><em>regen</em>")}
-      <div class="gl-dialbox">${glRail(spd, "l")}${glGauge3D(spd, col, nw, null, true)}${glRail(spd, "r")}</div>
+      <div class="gl-dialbox">${glLadder("speed", c)}${glGauge3D(spd, col, nw, null, true)}${glLadder("whkm", { ...c, whk })}</div>
       ${led("Battery", bseg, "888", pct != null ? n(pct, 0) : "—", "%", bTone, "<em>100</em><em>75</em><em>50</em><em>25</em><em>0</em>")}
     </div>`;
   }
@@ -5271,7 +5308,7 @@ function glAltPage(skin, c) {
     const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
-      <div class="gl-rmix-mid">${glRail(spd, "l")}${round}${glRail(spd, "r")}</div>
+      <div class="gl-rmix-mid">${glLadder("speed", c)}${round}${glLadder("power", c)}</div>
       <div class="gl-rmix-col">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
         ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
     </div>`;

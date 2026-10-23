@@ -3027,3 +3027,17 @@ main > .card { max-width: 100%; }
 .gl-spdrail i:nth-child(5), .gl-spdrail i:nth-child(6) { width: 74%; } .gl-spdrail i:nth-child(7), .gl-spdrail i:nth-child(8) { width: 82%; }
 .gl-spdrail i:nth-child(9), .gl-spdrail i:nth-child(10) { width: 90%; }
 .gl-dim .gl-spdrail i.on { box-shadow: none; opacity: .7; }
+
+/* LED ladders in the space beside the round gauges. */
+.gl-ladder { flex: 1 1 0; min-width: 0; max-width: 92px; height: 88%; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.gl-ladder > span { text-align: center; font: 600 clamp(8px, 2.4vh, 12px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.gl-ladder .gl-led-bar { flex: 1 1 auto; min-height: 0; justify-content: center; }
+.gl-ladder .gl-led-segs { width: 52%; }
+.gl-ladder b { display: block; text-align: center; font: 800 clamp(15px, 4.8vh, 24px) ui-monospace, Menlo, monospace; color: #e8fbff; text-shadow: 0 0 10px rgba(34,211,238,.4); white-space: nowrap; }
+.gl-ladder b small { font: 700 clamp(8px, 2.2vh, 11px) system-ui, sans-serif; color: var(--muted); margin-left: 2px; text-shadow: none; }
+.gl-ladder .gl-led-scale { align-items: flex-end; }
+.gl-ladder:last-child .gl-led-bar { flex-direction: row-reverse; } .gl-ladder:last-child .gl-led-scale { align-items: flex-start; }
+.gl-dim .gl-ladder b { text-shadow: none; }
+/* The gauge keeps its own shape; the ladders share what is left either side of it. */
+.gl-rmix-mid svg, .gl-dialbox svg { flex: 0 1 auto; width: auto; height: 100%; max-width: 62%; aspect-ratio: 200 / 206; }
+.gl-ladder { min-width: 58px; max-width: 110px; }
