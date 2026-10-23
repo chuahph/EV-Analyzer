@@ -2850,3 +2850,52 @@ main > .card { max-width: 100%; }
 .gl-stk-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; padding: 3px 4px; }
 .gl-stk-trip .gl-hud-stat strong { font-size: clamp(15px, min(5vh, 3vw), 24px); }
 .gl-dim .gl-rmix-mid svg { opacity: .6; } .gl-dim .gl-stk-trace { opacity: .35; }
+
+/* ---- 3D surfaces for the swipeable designs ------------------------------ */
+/* Every panel: a lit top edge, a dark underside, depth below it. */
+.gl-hud-stat, .gl-en-big, .gl-big, .gl-pbar, .gl-mix-speed, .gl-mix-pw, .gl-alt .gl-trace {
+  background: linear-gradient(165deg, #1b2736 0%, #0d1520 42%, #070c13 100%);
+  border: 1px solid #243244; border-top-color: #41566f; border-bottom-color: #16222f;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -12px 20px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.35),
+    0 9px 18px rgba(0,0,0,.6), 0 2px 3px rgba(0,0,0,.7);
+}
+.gl-hud-stat strong, .gl-en-big strong, .gl-big strong, .gl-mix-kw strong, .gl-mix-batt strong, .gl-pbar strong, .gl-night-row span {
+  text-shadow: 0 1px 0 #000, 0 2px 3px rgba(0,0,0,.6);
+}
+.gl-big.good strong, .gl-hud-stat.good strong, .gl-en-big.good strong, .gl-en-big.regen strong { text-shadow: 0 1px 0 #000, 0 0 14px rgba(34,197,94,.45); }
+.gl-big.warn strong, .gl-hud-stat.warn strong, .gl-en-big.warn strong { text-shadow: 0 1px 0 #000, 0 0 14px rgba(245,158,11,.45); }
+/* The speed, extruded: a stack of darker copies underneath. */
+.gl-hud-speed, .gl-mix-speed, .gl-night-speed {
+  text-shadow: 0 1px 0 #1d2a3a, 0 2px 0 #172232, 0 3px 0 #111b28, 0 4px 0 #0c141f, 0 5px 0 #070d15,
+    0 9px 12px rgba(0,0,0,.85), 0 0 30px currentColor;
+}
+.gl-hud-speed small, .gl-mix-speed small { text-shadow: none; }
+/* Glass tubes for the power and battery bars. */
+.gl-pbar > div { background: linear-gradient(90deg, #04070b, #0f1824 40%, #04070b); border-color: #2a3a4e;
+  box-shadow: inset 0 0 8px #000, inset 0 0 0 1px rgba(255,255,255,.05); }
+.gl-pbar > div::before { content: ""; position: absolute; left: 14%; top: 4%; bottom: 4%; width: 14%; border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,.04)); z-index: 2; pointer-events: none; }
+.gl-pbar > div i { background-image: linear-gradient(90deg, rgba(255,255,255,.22), transparent 45%, rgba(0,0,0,.35)); background-blend-mode: overlay;
+  box-shadow: 0 0 14px currentColor; }
+.gl-alt-bar { background: linear-gradient(180deg, #03060a, #0e1722); box-shadow: inset 0 2px 4px #000, 0 1px 0 rgba(255,255,255,.08); }
+/* The gauges and the battery stand up off the page. */
+.gl-dialbox svg, .gl-rmix-mid svg { filter: drop-shadow(0 12px 14px rgba(0,0,0,.75)); }
+.gl-rng-mid svg { filter: drop-shadow(0 12px 14px rgba(0,0,0,.75)); }
+/* Touch tilt (--rx / --ry are set on #glance while a finger is down). */
+.gl-alt > * { transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transform-origin: 50% 60%; }
+.gl-alt { perspective-origin: 50% 50%; }
+/* A new design slides in from the side the swipe came from. */
+@keyframes gl-in-r { from { opacity: 0; transform: translateX(46px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes gl-in-l { from { opacity: 0; transform: translateX(-46px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes gl-in-b { from { opacity: 0; transform: translateY(40px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes gl-in-t { from { opacity: 0; transform: translateY(-40px) scale(.98); } to { opacity: 1; transform: none; } }
+.gl-alt.gl-in-r { animation: gl-in-r .22s ease-out; } .gl-alt.gl-in-l { animation: gl-in-l .22s ease-out; }
+.gl-alt.gl-in-b { animation: gl-in-b .22s ease-out; } .gl-alt.gl-in-t { animation: gl-in-t .22s ease-out; }
+.gl-dim .gl-alt { animation: none !important; }
+.gl-dim .gl-alt > * { transform: none; }
+.gl-dim .gl-hud-speed, .gl-dim .gl-mix-speed, .gl-dim .gl-night-speed { text-shadow: 0 0 18px currentColor; }
+.gl-dim .gl-hud-stat, .gl-dim .gl-en-big, .gl-dim .gl-big, .gl-dim .gl-pbar, .gl-dim .gl-mix-speed, .gl-dim .gl-mix-pw, .gl-dim .gl-alt .gl-trace { box-shadow: none; }
+.gl-rng-mid { position: relative; }
+.gl-rng-mid::after { content: ""; position: absolute; top: 9%; bottom: 12%; left: 31%; width: 38%; border-radius: 14px; pointer-events: none;
+  background: linear-gradient(112deg, rgba(255,255,255,.2) 0%, rgba(255,255,255,.05) 22%, transparent 38%); }
+.gl-dim .gl-rng-mid::after { display: none; }

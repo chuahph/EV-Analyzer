@@ -4962,18 +4962,23 @@ const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", 
 const GL_SINGLE = [0, 1, 4, 5, 6, 3];       // Cockpit, HUD, Night, Dial, Range, Trip
 const GL_COMBO = [7, 8, 2, 9];              // Mix, Round Mix, Energy, Stack
 let glLiveSkin = 0;
-function glSkinSet(id) {
+function glSkinSet(id, from) {
   glLiveSkin = GL_SKINS[id] ? id : 0;
   try { localStorage.setItem("glLiveSkin", String(glLiveSkin)); } catch (_) { /* private mode */ }
   glDimArm();
   if (typeof lastData !== "undefined" && lastData) renderGlance(lastData);
+  // The new design slides in from the side the swipe came from (once; the
+  // animation is off while the screen is dimmed or in eco mode).
+  const pageEl = from && document.querySelector("#glance .gl-alt");
+  if (pageEl) pageEl.classList.add("gl-in-" + from);
 }
 // Axis "h" walks the single designs, "v" the combinations. Coming from the
 // other row, a swipe enters this one at its first design.
 function glSkinStep(axis, dir) {
   const list = axis === "h" ? GL_SINGLE : GL_COMBO;
   const at = list.indexOf(glLiveSkin);
-  glSkinSet(at < 0 ? list[0] : list[(at + dir + list.length) % list.length]);
+  glSkinSet(at < 0 ? list[0] : list[(at + dir + list.length) % list.length],
+    axis === "h" ? (dir > 0 ? "r" : "l") : (dir > 0 ? "b" : "t"));
 }
 const glSkinColour = (x) => (x > 140 ? "#e040fb" : x > 120 ? "#ff3b3b" : x > 100 ? "#ff8a1f"
   : x > 80 ? "#ffe03a" : x > 60 ? "#2ee86a" : x > 30 ? "#19e3f5" : "#3d7bff");
@@ -4981,6 +4986,88 @@ const glSkinDots = () => {
   const dot = (id, cls) => `<button type="button" class="${cls}${id === glLiveSkin ? " on" : ""}" data-gl-skin="${id}" title="${GL_SKINS[id]}" aria-label="${GL_SKINS[id]}"></button>`;
   return `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_SINGLE.map((id) => dot(id, "")).join("")}<i></i>${GL_COMBO.map((id) => dot(id, "cb")).join("")}</span>`;
 };
+
+// A 3D round gauge: metal bezel, glass dome, glowing speed ring, engraved
+// marks and the speed set into it. `odo` set: a mechanical odometer in the
+// dome; `needle` set: a needle with a shadow instead.
+function glGauge3D(spd, col, nw, odo, needle) {
+  const num = spd != null ? String(Math.round(spd)) : "—";
+  const MAXV = 160, A0 = 135, SW = 270, cx = 100, cy = 100;
+  const v = spd != null ? Math.max(0, Math.min(MAXV, spd)) : 0;
+  const ang = (x) => A0 + x / MAXV * SW;
+  let ring = "";
+  for (let k = 0; k < 48; k++) {
+    const x0 = k / 48 * MAXV, x1 = (k + 1) / 48 * MAXV, on = spd != null && x0 + 1.5 <= v;
+    ring += `<path d="${glArcPath(cx, cy, 86, ang(x0) + 90.5, ang(x1) + 89.5)}" fill="none" stroke="${on ? glSkinColour(x0 + 1.5) : "#121c28"}" stroke-width="10"/>`;
+  }
+  const uid = `glr${++glDialSeq}`;
+  const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
+  // A mechanical odometer: one cylinder cell per digit, dark at the top and
+  // bottom edge and lit in the middle.
+  const CW = 14, ox = 100 - Math.max(odoDigits.length, 1) * CW / 2;
+  const cells = (odoDigits.length ? odoDigits : ["—"]).map((d, k) =>
+    `<rect x="${ox + k * CW + 0.5}" y="131" width="${CW - 1}" height="22" rx="2" fill="url(#${uid}-cyl)" stroke="#000" stroke-opacity=".7" stroke-width=".6"/>
+     <text x="${ox + k * CW + CW / 2}" y="147.5" text-anchor="middle" font-size="14" font-weight="700" fill="#f1f7ff"
+       font-family="ui-monospace,Menlo,monospace" style="paint-order:stroke" stroke="#000" stroke-width=".8" stroke-opacity=".5">${d}</text>`).join("");
+  // A bright bead where the speed reaches along the ring.
+  const ra = ang(v) * Math.PI / 180;
+  const tip = spd != null && spd > 0.5
+    ? `<circle cx="${(100 + 86 * Math.cos(ra)).toFixed(1)}" cy="${(100 + 86 * Math.sin(ra)).toFixed(1)}" r="6.5" fill="#fff" filter="url(#${uid}-glow)"/>
+       <circle cx="${(100 + 86 * Math.cos(ra)).toFixed(1)}" cy="${(100 + 86 * Math.sin(ra)).toFixed(1)}" r="3.4" fill="${col}"/>` : "";
+  let tick = "";
+  for (let x = 0; x <= MAXV; x += 20) {
+    const a = ang(x) * Math.PI / 180, big = x % 40 === 0;
+    tick += `<line x1="${(100 + 71 * Math.cos(a)).toFixed(1)}" y1="${(100 + 71 * Math.sin(a)).toFixed(1)}" x2="${(100 + (big ? 65 : 67.5) * Math.cos(a)).toFixed(1)}" y2="${(100 + (big ? 65 : 67.5) * Math.sin(a)).toFixed(1)}" stroke="${big ? "#9fb0c3" : "#4a5868"}" stroke-width="${big ? 1.4 : 1}"/>`;
+    if (big && x > 0 && x < MAXV) tick += `<text x="${(100 + 58 * Math.cos(a)).toFixed(1)}" y="${(103 + 58 * Math.sin(a)).toFixed(1)}" text-anchor="middle" font-size="7" font-weight="600" fill="#7e93ab">${x}</text>`;
+  }
+  const nrad = ang(v) * Math.PI / 180, nx = 100 + 64 * Math.cos(nrad), ny = 100 + 64 * Math.sin(nrad);
+  const needleSvg = `<line x1="102" y1="104" x2="${(nx + 2).toFixed(1)}" y2="${(ny + 4).toFixed(1)}" stroke="#000" stroke-opacity=".6" stroke-width="4" stroke-linecap="round" filter="url(#${uid}-bl)"/>
+    <line x1="100" y1="100" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#f4fbff" stroke-width="3" stroke-linecap="round" filter="url(#${uid}-glow)"/>
+    <line x1="100" y1="100" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${col}" stroke-width="1.2" stroke-linecap="round"/>
+    <circle cx="100" cy="100" r="9" fill="url(#${uid}-bz)" stroke="#000" stroke-width=".8"/>
+    <circle cx="100" cy="100" r="3.2" fill="#0a0f16"/>`;
+  return `<svg viewBox="0 0 200 206" role="img" aria-label="Speed ${num} km/h">
+    <defs>
+      <linearGradient id="${uid}-bz" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#e3eaf4"/><stop offset=".22" stop-color="#7c8898"/><stop offset=".5" stop-color="#1b232f"/>
+        <stop offset=".78" stop-color="#6b7788"/><stop offset="1" stop-color="#cfd8e4"/></linearGradient>
+      <linearGradient id="${uid}-gr" x1="1" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#0a0f16"/><stop offset="1" stop-color="#2a3442"/></linearGradient>
+      <radialGradient id="${uid}-dm" cx=".38" cy=".22" r=".95">
+        <stop offset="0" stop-color="#22344a"/><stop offset=".45" stop-color="#0d1621"/><stop offset="1" stop-color="#04070b"/></radialGradient>
+      <linearGradient id="${uid}-cyl" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#05080c"/><stop offset=".28" stop-color="#1a2330"/><stop offset=".5" stop-color="#34455a"/>
+        <stop offset=".72" stop-color="#1a2330"/><stop offset="1" stop-color="#05080c"/></linearGradient>
+      <linearGradient id="${uid}-gl" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <filter id="${uid}-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="${uid}-bl"><feGaussianBlur stdDeviation="3.2"/></filter>
+      <clipPath id="${uid}-cp"><circle cx="100" cy="100" r="62"/></clipPath>
+    </defs>
+    <ellipse cx="100" cy="197" rx="64" ry="6" fill="#000" opacity=".75" filter="url(#${uid}-bl)"/>
+    <circle cx="100" cy="100" r="99" fill="url(#${uid}-bz)"/>
+    <circle cx="100" cy="100" r="95.5" fill="url(#${uid}-gr)"/>
+    <circle cx="100" cy="100" r="93" fill="#05080c" stroke="#000" stroke-width="1"/>
+    <circle cx="100" cy="100" r="92" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1"/>
+    <g opacity=".9">${ring}</g>
+    <g filter="url(#${uid}-glow)" style="mix-blend-mode:screen">${ring.replaceAll('stroke="#121c28"', 'stroke="none"')}</g>
+    ${tip}
+    <circle cx="100" cy="100" r="74" fill="url(#${uid}-gr)"/>
+    <circle cx="100" cy="100" r="72.5" fill="url(#${uid}-dm)" stroke="#000" stroke-width="1"/>
+    ${tick}
+    <g clip-path="url(#${uid}-cp)"><ellipse cx="82" cy="58" rx="48" ry="26" fill="url(#${uid}-gl)" transform="rotate(-18 82 58)"/></g>
+    <text x="101.6" y="${(needle ? 41 : 0) + (num.length >= 3 ? 101 : 105)}" text-anchor="middle" font-size="${needle ? (num.length >= 3 ? 40 : 48) : (num.length >= 3 ? 50 : 62)}" font-weight="800" fill="#000" opacity=".7"
+      style="font-variant-numeric:tabular-nums">${num}</text>
+    <text x="100" y="${(needle ? 41 : 0) + (num.length >= 3 ? 98.5 : 102.5)}" text-anchor="middle" font-size="${needle ? (num.length >= 3 ? 40 : 48) : (num.length >= 3 ? 50 : 62)}" font-weight="800" fill="${col}" filter="url(#${uid}-glow)"
+      style="font-variant-numeric:tabular-nums">${num}</text>
+    <text x="100" y="${needle ? 158 : 118}" text-anchor="middle" font-size="8" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text>
+    ${needle ? needleSvg : `
+    <rect x="${ox - 3}" y="128" width="${Math.max(odoDigits.length, 1) * CW + 6}" height="28" rx="5" fill="#020406" stroke="#4a5868" stroke-width=".8"/>
+    ${cells}
+    <text x="100" y="166" text-anchor="middle" font-size="7" font-weight="650" letter-spacing="2" fill="#6f7f94">ODO KM</text>`}
+  </svg>`;
+}
 
 // c: { t, nw, spd, kw, tw, pct, odo, range, rated, lt, hist, regen, usedPct, h, n }
 function glAltSkin(skin, c) {
@@ -5040,30 +5127,13 @@ function glAltSkin(skin, c) {
     </div>`;
   }
   if (skin === 5) {
-    // Dial: an analogue speedometer between a power bar and a battery bar.
-    const MAXV = 160, A0 = 150, SW = 240, cx = 100, cy = 100;
-    const v = spd != null ? Math.max(0, Math.min(MAXV, spd)) : 0;
-    const ang = (x) => A0 + x / MAXV * SW;
-    let arcs = "", ticks = "";
-    for (let k = 0; k < 40; k++) {
-      const x0 = k / 40 * MAXV, x1 = (k + 1) / 40 * MAXV, on = spd != null && x0 + 2 <= v;
-      arcs += `<path d="${glArcPath(cx, cy, 78, ang(x0) + 90.6, ang(x1) + 89.4)}" fill="none" stroke="${on ? glSkinColour(x0 + 2) : "#121c28"}" stroke-width="11"/>`;
-    }
-    for (let x = 0; x <= MAXV; x += 20) {
-      const a = ang(x) * Math.PI / 180, tx = cx + 58 * Math.cos(a), ty = cy + 58 * Math.sin(a);
-      ticks += `<text x="${tx.toFixed(1)}" y="${(ty + 3).toFixed(1)}" text-anchor="middle" font-size="8" font-weight="600" fill="#6f7f94">${x}</text>`;
-    }
-    const na = ang(v) * Math.PI / 180;
-    const needle = `<line x1="${cx}" y1="${cy}" x2="${(cx + 72 * Math.cos(na)).toFixed(1)}" y2="${(cy + 72 * Math.sin(na)).toFixed(1)}" stroke="#f4fbff" stroke-width="2.4" stroke-linecap="round"/>
-      <circle cx="${cx}" cy="${cy}" r="6" fill="#0d1219" stroke="#f4fbff" stroke-width="2"/>`;
+    // Dial: the 3D gauge with a needle, between a power tube and a battery tube.
     const vbar = (frac, colour, label, text, mid) => `<div class="gl-pbar ${mid ? "mid" : ""}"><span>${label}</span>
       <div><i style="height:${Math.max(0, Math.min(100, frac * 100)).toFixed(1)}%;background:${colour}"></i></div><strong>${text}</strong></div>`;
     const pwFrac = kw == null ? 0 : kw >= 0 ? 0.28 + kw / 150 * 0.72 : 0.28 + kw / 60 * 0.28;
     return `<div class="gl-page gl-alt gl-dialpage">
       ${vbar(pwFrac, kw != null && kw < 0 ? "var(--green)" : kw > 60 ? "var(--amber)" : "#22d3ee", kw != null && kw < 0 ? "Regen" : "Power", `${kwShown}<small>kW</small>`, true)}
-      <div class="gl-dialbox"><svg viewBox="0 0 200 175" role="img" aria-label="Speed ${num} km/h">${arcs}${ticks}${needle}
-        <text x="100" y="150" text-anchor="middle" font-size="34" font-weight="800" fill="${col}" style="font-variant-numeric:tabular-nums">${num}</text>
-        <text x="100" y="166" text-anchor="middle" font-size="9" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text></svg></div>
+      <div class="gl-dialbox">${glGauge3D(spd, col, nw, null, true)}</div>
       ${vbar(pct != null ? pct / 100 : 0, pct != null && pct < 20 ? "#ff6b70" : "var(--green)", "Battery", `${pct != null ? n(pct, 0) : "—"}<small>%</small>`)}
     </div>`;
   }
@@ -5085,74 +5155,7 @@ function glAltSkin(skin, c) {
   if (skin === 8) {
     // Round Mix: a round speed ring with the odometer set into it, the trip
     // on its left and power and battery on its right.
-    const MAXV = 160, A0 = 135, SW = 270, cx = 100, cy = 100;
-    const v = spd != null ? Math.max(0, Math.min(MAXV, spd)) : 0;
-    const ang = (x) => A0 + x / MAXV * SW;
-    let ring = "";
-    for (let k = 0; k < 48; k++) {
-      const x0 = k / 48 * MAXV, x1 = (k + 1) / 48 * MAXV, on = spd != null && x0 + 1.5 <= v;
-      ring += `<path d="${glArcPath(cx, cy, 86, ang(x0) + 90.5, ang(x1) + 89.5)}" fill="none" stroke="${on ? glSkinColour(x0 + 1.5) : "#121c28"}" stroke-width="10"/>`;
-    }
-    const uid = `glr${++glDialSeq}`;
-    const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
-    // A mechanical odometer: one cylinder cell per digit, dark at the top and
-    // bottom edge and lit in the middle.
-    const CW = 14, ox = 100 - Math.max(odoDigits.length, 1) * CW / 2;
-    const cells = (odoDigits.length ? odoDigits : ["—"]).map((d, k) =>
-      `<rect x="${ox + k * CW + 0.5}" y="131" width="${CW - 1}" height="22" rx="2" fill="url(#${uid}-cyl)" stroke="#000" stroke-opacity=".7" stroke-width=".6"/>
-       <text x="${ox + k * CW + CW / 2}" y="147.5" text-anchor="middle" font-size="14" font-weight="700" fill="#f1f7ff"
-         font-family="ui-monospace,Menlo,monospace" style="paint-order:stroke" stroke="#000" stroke-width=".8" stroke-opacity=".5">${d}</text>`).join("");
-    // A bright bead where the speed reaches along the ring.
-    const ra = ang(v) * Math.PI / 180;
-    const tip = spd != null && spd > 0.5
-      ? `<circle cx="${(100 + 86 * Math.cos(ra)).toFixed(1)}" cy="${(100 + 86 * Math.sin(ra)).toFixed(1)}" r="6.5" fill="#fff" filter="url(#${uid}-glow)"/>
-         <circle cx="${(100 + 86 * Math.cos(ra)).toFixed(1)}" cy="${(100 + 86 * Math.sin(ra)).toFixed(1)}" r="3.4" fill="${col}"/>` : "";
-    let tick = "";
-    for (let x = 0; x <= MAXV; x += 20) {
-      const a = ang(x) * Math.PI / 180, big = x % 40 === 0;
-      tick += `<line x1="${(100 + 71 * Math.cos(a)).toFixed(1)}" y1="${(100 + 71 * Math.sin(a)).toFixed(1)}" x2="${(100 + (big ? 65 : 67.5) * Math.cos(a)).toFixed(1)}" y2="${(100 + (big ? 65 : 67.5) * Math.sin(a)).toFixed(1)}" stroke="${big ? "#9fb0c3" : "#4a5868"}" stroke-width="${big ? 1.4 : 1}"/>`;
-      if (big && x > 0 && x < MAXV) tick += `<text x="${(100 + 58 * Math.cos(a)).toFixed(1)}" y="${(103 + 58 * Math.sin(a)).toFixed(1)}" text-anchor="middle" font-size="7" font-weight="600" fill="#7e93ab">${x}</text>`;
-    }
-    const round = `<svg viewBox="0 0 200 206" role="img" aria-label="Speed ${num} km/h">
-      <defs>
-        <linearGradient id="${uid}-bz" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#e3eaf4"/><stop offset=".22" stop-color="#7c8898"/><stop offset=".5" stop-color="#1b232f"/>
-          <stop offset=".78" stop-color="#6b7788"/><stop offset="1" stop-color="#cfd8e4"/></linearGradient>
-        <linearGradient id="${uid}-gr" x1="1" y1="1" x2="0" y2="0">
-          <stop offset="0" stop-color="#0a0f16"/><stop offset="1" stop-color="#2a3442"/></linearGradient>
-        <radialGradient id="${uid}-dm" cx=".38" cy=".22" r=".95">
-          <stop offset="0" stop-color="#22344a"/><stop offset=".45" stop-color="#0d1621"/><stop offset="1" stop-color="#04070b"/></radialGradient>
-        <linearGradient id="${uid}-cyl" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#05080c"/><stop offset=".28" stop-color="#1a2330"/><stop offset=".5" stop-color="#34455a"/>
-          <stop offset=".72" stop-color="#1a2330"/><stop offset="1" stop-color="#05080c"/></linearGradient>
-        <linearGradient id="${uid}-gl" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-        <filter id="${uid}-glow" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-        <filter id="${uid}-bl"><feGaussianBlur stdDeviation="3.2"/></filter>
-        <clipPath id="${uid}-cp"><circle cx="100" cy="100" r="62"/></clipPath>
-      </defs>
-      <ellipse cx="100" cy="197" rx="64" ry="6" fill="#000" opacity=".75" filter="url(#${uid}-bl)"/>
-      <circle cx="100" cy="100" r="99" fill="url(#${uid}-bz)"/>
-      <circle cx="100" cy="100" r="95.5" fill="url(#${uid}-gr)"/>
-      <circle cx="100" cy="100" r="93" fill="#05080c" stroke="#000" stroke-width="1"/>
-      <circle cx="100" cy="100" r="92" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1"/>
-      <g opacity=".9">${ring}</g>
-      <g filter="url(#${uid}-glow)" style="mix-blend-mode:screen">${ring.replaceAll('stroke="#121c28"', 'stroke="none"')}</g>
-      ${tip}
-      <circle cx="100" cy="100" r="74" fill="url(#${uid}-gr)"/>
-      <circle cx="100" cy="100" r="72.5" fill="url(#${uid}-dm)" stroke="#000" stroke-width="1"/>
-      ${tick}
-      <g clip-path="url(#${uid}-cp)"><ellipse cx="82" cy="58" rx="48" ry="26" fill="url(#${uid}-gl)" transform="rotate(-18 82 58)"/></g>
-      <text x="101.6" y="${num.length >= 3 ? 101 : 105}" text-anchor="middle" font-size="${num.length >= 3 ? 50 : 62}" font-weight="800" fill="#000" opacity=".7"
-        style="font-variant-numeric:tabular-nums">${num}</text>
-      <text x="100" y="${num.length >= 3 ? 98.5 : 102.5}" text-anchor="middle" font-size="${num.length >= 3 ? 50 : 62}" font-weight="800" fill="${col}" filter="url(#${uid}-glow)"
-        style="font-variant-numeric:tabular-nums">${num}</text>
-      <text x="100" y="118" text-anchor="middle" font-size="8" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text>
-      <rect x="${ox - 3}" y="128" width="${Math.max(odoDigits.length, 1) * CW + 6}" height="28" rx="5" fill="#020406" stroke="#4a5868" stroke-width=".8"/>
-      ${cells}
-      <text x="100" y="166" text-anchor="middle" font-size="7" font-weight="650" letter-spacing="2" fill="#6f7f94">ODO KM</text>
-    </svg>`;
+    const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
       <div class="gl-rmix-mid">${round}</div>
@@ -6958,4 +6961,25 @@ showHome();
     else if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) glSkinStep("v", dy < 0 ? 1 : -1);
   }, { passive: true });
   document.addEventListener("pointercancel", () => { sw = null; }, { passive: true });
+}
+
+// Touch the Live page and the panels tilt towards your finger, a little, for
+// as long as it is down. The tilt is kept on #glance itself, which the page
+// does not rebuild, so it survives each new reading.
+{
+  const root = () => document.getElementById("glance");
+  const clear = () => { const r = root(); if (r) { r.style.removeProperty("--rx"); r.style.removeProperty("--ry"); } };
+  document.addEventListener("pointermove", (e) => {
+    if (!e.buttons && e.pointerType !== "touch") return;
+    const alt = e.target.closest && e.target.closest(".gl-alt");
+    const r = root();
+    if (!alt || !r || document.body.classList.contains("gl-dim")) return;
+    const b = alt.getBoundingClientRect();
+    const nx = Math.max(-1, Math.min(1, (e.clientX - b.left - b.width / 2) / (b.width / 2)));
+    const ny = Math.max(-1, Math.min(1, (e.clientY - b.top - b.height / 2) / (b.height / 2)));
+    r.style.setProperty("--ry", (nx * 5).toFixed(1) + "deg");
+    r.style.setProperty("--rx", (-ny * 4).toFixed(1) + "deg");
+  }, { passive: true });
+  document.addEventListener("pointerup", clear, { passive: true });
+  document.addEventListener("pointercancel", clear, { passive: true });
 }
