@@ -103,7 +103,7 @@ with sync_playwright() as p:
             if o: res[f"{key} | {tab}{'-parked' if tab=='live' else ''}"]=o
             if tab=="live" and mode=="app": pg.screenshot(path=f"{OUT}/ss-{W}-parked.png")
             if tab=="live":
-                for sk in (1,2,3,4,5,6,7,8,9,10,11):          # the swipeable designs, parked
+                for sk in (1,2,3,4,5,6,7,8,9,10,11,12,13,14):          # the swipeable designs, parked
                     pg.evaluate(f"glSkinSet({sk})"); pg.wait_for_timeout(300)
                     o=pg.evaluate(CHK,[L,R,bo])
                     if o: res[f"{key} | live-parked-skin{sk}"]=o
@@ -123,7 +123,7 @@ with sync_playwright() as p:
         pg.evaluate("glLiveState.data.now.age_sec=30; glLiveState.recvAt=Date.now()-1000"); pg.wait_for_timeout(1300)
         o=pg.evaluate(CHK,[L,R,bo]);  res.update({f"{key} | live-stale":o} if o else {})
         if mode=="app": pg.screenshot(path=f"{OUT}/ss-{W}-stale.png")
-        for sk in (1,2,3,4,5,6,7,8,9,10,11):                  # the swipeable designs, driving, bright then dimmed
+        for sk in (1,2,3,4,5,6,7,8,9,10,11,12,13,14):                  # the swipeable designs, driving, bright then dimmed
             pg.evaluate(f"glSkinSet({sk})"); pg.wait_for_timeout(300)
             o=pg.evaluate(CHK,[L,R,bo])
             if o: res[f"{key} | live-drive-skin{sk}"]=o

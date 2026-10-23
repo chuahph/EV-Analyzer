@@ -4956,11 +4956,12 @@ function glAutoLive(d) {
 // the others show the same readings differently, each for a different glance:
 // a huge speed, the energy flow, or the trip in big figures. Swipe left or
 // right on the Live page, or tap the dots.
-const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph"];
-// Two rows of designs. Left and right swipe through the single-purpose ones;
-// up and down through the combinations, which put several readings together.
-const GL_SINGLE = [0, 1, 4, 5, 6, 3, 10];    // Cockpit, HUD, Night, Dial, Range, Trip, Lines
-const GL_COMBO = [7, 8, 2, 9, 11];           // Mix, Round Mix, Energy, Stack, Graph
+const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph", "Digital Mix", "Power", "Efficiency"];
+// Two rows of designs. Up and down: the MIX designs, each with the odometer
+// and several readings together, in analogue or digital style. Left and
+// right: ONE reading at a time, big, and never the odometer.
+const GL_COMBO = [0, 8, 12, 7, 9, 2, 11];     // Cockpit, Round Mix, Digital Mix, Mix, Stack, Energy, Graph
+const GL_SINGLE = [1, 5, 4, 10, 6, 3, 13, 14]; // HUD, Dial, Night, Lines, Range, Trip, Power, Efficiency
 let glLiveSkin = 0;
 function glSkinSet(id, from) {
   glLiveSkin = GL_SKINS[id] ? id : 0;
@@ -4995,7 +4996,12 @@ function glKeyBar(c) {
   const { t, nw } = c;
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+  // The mix designs carry the odometer as a row of drums (Round Mix and the
+  // Cockpit already show it in their own way).
+  const odoChip = [7, 9, 2, 11, 12].includes(c.skin) && c.odo != null
+    ? `<span class="gl-kb gl-kodo"><em>Odo km</em><span class="gl-drum">${String(Math.round(c.odo)).split("").map((d) => `<b>${d}</b>`).join("")}</span></span>` : "";
   const chips = [
+    odoChip,
     `<span class="gl-kb"><em>Time</em><b>${hh}</b></span>`,
     c.rangeHere != null || c.range != null ? `<span class="gl-kb gl-opt"><em>Range</em><b>${c.n(c.rangeHere != null ? c.rangeHere : c.range)} km</b></span>` : "",
     nw.out_temp != null ? `<span class="gl-kb gl-opt"><em>Outside</em><b>${c.n(nw.out_temp, 0)}°C</b></span>` : "",
@@ -5257,6 +5263,53 @@ function glAltPage(skin, c) {
       </div>
     </div>`;
   }
+  if (skin === 12) {
+    // Digital Mix: a digital speed, the odometer as drums, and six boxes.
+    const dg = (v) => String(v).padStart(3, " ");
+    const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
+    return `<div class="gl-page gl-alt gl-dmix">
+      <div class="gl-dm-main">
+        <div class="gl-dm-speed" style="--c:${col}"><i>888</i><b>${spd != null ? dg(Math.round(spd)).replace(/ /g, " ") : "—"}</b><small>km/h · ${nw.shift || "P"}</small></div>
+        <div class="gl-dm-odo"><span>ODO KM</span><div class="gl-drum big">${(odoDigits.length ? odoDigits : ["—"]).map((d) => `<b>${d}</b>`).join("")}</div></div>
+      </div>
+      <div class="gl-dm-grid">
+        ${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}
+        ${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}
+        ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}
+      </div></div>`;
+  }
+  if (skin === 13) {
+    // Power: one reading, the power, across the whole page.
+    const NS = 40, Z = 10, drv = kw != null && kw > 0 ? Math.max(1, Math.round(Math.min(150, kw) / 150 * (NS - Z))) : 0;
+    const rg = kw != null && kw < 0 ? Math.max(1, Math.round(Math.min(60, -kw) / 60 * Z)) : 0;
+    const stops = [[0, "#22d3ee"], [.35, "#2ee86a"], [.6, "#ffe03a"], [.8, "#ff8a1f"], [1, "#ff3b3b"]];
+    const colAt = (f) => (stops.find(([x]) => f <= x) || stops[4])[1];
+    let segs = "";
+    for (let i = 0; i < NS; i++) {
+      const on = i >= Z ? i < Z + drv : i >= Z - rg && kw != null && kw < 0;
+      segs += `<i class="${on ? "on" : ""}" style="--c:${i >= Z ? colAt((i - Z + 1) / (NS - Z)) : "#2ee86a"}"></i>`;
+    }
+    const tone = kw == null ? "#7e93ab" : kw < 0 ? "#2ee86a" : colAt(Math.min(1, kw / 150));
+    return `<div class="gl-page gl-alt gl-power1">
+      <div class="gl-p1-top"><span>${kw != null && kw < 0 ? "Regen · energy coming back" : "Power · energy going out"}</span></div>
+      <div class="gl-p1-num" style="--c:${tone}">${kwShown}<small>kW</small></div>
+      <div class="gl-p1-bar"><div class="gl-p1-segs">${segs}</div>
+        <div class="gl-p1-scale"><em>regen 60</em><em>0</em><em>50</em><em>100</em><em>150 kW</em></div></div>
+    </div>`;
+  }
+  if (skin === 14) {
+    // Efficiency: one reading, Wh/km, against the rated figure.
+    const now = c.nowWh, base = whk, R = rated || 150, shown = now != null ? now : base;
+    const pctVs = shown != null && R ? (shown - R) / R * 100 : null;
+    const tone = shown == null ? "#7e93ab" : shown <= R ? "#2ee86a" : shown <= R * 1.5 ? "#ffb020" : "#ff3b3b";
+    const pos = (x) => Math.max(0, Math.min(100, x / (R * 2.5) * 100)).toFixed(1);
+    return `<div class="gl-page gl-alt gl-eff1">
+      <div class="gl-p1-top"><span>${now != null ? "Wh/km right now" : "Wh/km this trip"}</span></div>
+      <div class="gl-p1-num" style="--c:${tone}">${shown != null ? n(shown) : "—"}<small>Wh/km</small></div>
+      <div class="gl-ef-bar"><i class="fill" style="width:${shown != null ? pos(shown) : 0}%;background:${tone}"></i><b style="left:${pos(R)}%"><em>rated ${n(R)}</em></b></div>
+      <div class="gl-ef-note" style="color:${tone}">${pctVs == null ? "" : pctVs <= 0 ? `${n(Math.abs(pctVs))}% better than rated` : `${n(pctVs)}% worse than rated`}</div>
+    </div>`;
+  }
   if (skin === 10) {
     // Lines: an outlined speed with streaks either side that lengthen and take
     // the speed's colour, and a row of figures split by thin rules.
@@ -5339,7 +5392,7 @@ function glAltPage(skin, c) {
     <div class="gl-bigs-g">
       ${tile("km", dist != null ? n(dist, 1) : "—")}${tile("min", mins != null ? n(mins) : "—")}
       ${tile("avg km/h", avg != null ? n(avg) : "—")}${tile("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
-      ${tile("odometer km", odo != null ? n(odo, 0) : "—")}${tile("battery %", pct != null ? n(pct, 1) : "—", pct != null && pct < 20 ? "warn" : "good")}
+      ${tile("energy kWh", t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—")}${tile("battery %", pct != null ? n(pct, 1) : "—", pct != null && pct < 20 ? "warn" : "good")}
     </div></div>`;
 }
 

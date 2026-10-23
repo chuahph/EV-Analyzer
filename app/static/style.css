@@ -3041,3 +3041,51 @@ main > .card { max-width: 100%; }
 /* The gauge keeps its own shape; the ladders share what is left either side of it. */
 .gl-rmix-mid svg, .gl-dialbox svg { flex: 0 1 auto; width: auto; height: 100%; max-width: 62%; aspect-ratio: 200 / 206; }
 .gl-ladder { min-width: 58px; max-width: 110px; }
+
+/* ---- Odometer drums, Digital Mix, and the one-reading designs ------------- */
+.gl-drum { display: inline-flex; gap: 2px; padding: 2px; border-radius: 5px; background: #02050a; border: 1px solid #3a4a5e; box-shadow: inset 0 0 6px #000; }
+.gl-drum b { display: block; min-width: 1.05em; text-align: center; padding: 0 2px; border-radius: 3px; font: 700 clamp(12px, 3.6vh, 17px) ui-monospace, Menlo, monospace; color: #f1f7ff;
+  background: linear-gradient(180deg, #05080c, #1a2330 28%, #34455a 50%, #1a2330 72%, #05080c); text-shadow: 0 1px 1px #000; }
+.gl-kodo { gap: 8px; align-items: center; }
+.gl-drum.big b { font-size: clamp(18px, 6.4vh, 32px); padding: 1px 4px; min-width: 1.15em; }
+.gl-dmix { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.gl-dm-main { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.gl-dm-speed { flex: 1 1 auto; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; border-radius: 14px;
+  background: linear-gradient(165deg, #131c28, #04070b); border: 1px solid #243244; border-top-color: color-mix(in srgb, var(--c) 60%, #41566f);
+  box-shadow: inset 0 2px 14px #000, 0 8px 18px rgba(0,0,0,.6); }
+.gl-dm-speed i, .gl-dm-speed b { font: 800 min(36vh, 19vw) / 1 ui-monospace, Menlo, monospace; letter-spacing: .02em; }
+.gl-dm-speed i { position: absolute; font-style: normal; color: var(--c); opacity: .07; }
+.gl-dm-speed b { position: relative; color: var(--c); text-shadow: 0 0 22px var(--c), 0 3px 0 rgba(0,0,0,.7); }
+.gl-dm-speed small { position: absolute; right: 14px; bottom: 8px; font: 650 clamp(10px, 3vh, 14px) system-ui, sans-serif; letter-spacing: .14em; color: #7e93ab; }
+.gl-dm-odo { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-radius: 12px;
+  background: linear-gradient(165deg, #1b2736, #070c13); border: 1px solid #243244; border-top-color: #41566f; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 6px 12px rgba(0,0,0,.5); }
+.gl-dm-odo span { font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .1em; }
+.gl-dm-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 0; }
+.gl-dm-grid .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; }
+.gl-dm-grid .gl-hud-stat:nth-child(5) { --ac: #f59e0b; } .gl-dm-grid .gl-hud-stat:nth-child(6) { --ac: #22c55e; }
+/* One reading, whole page. */
+.gl-power1, .gl-eff1 { justify-content: center; gap: 10px; }
+.gl-p1-top { text-align: center; font: 600 clamp(11px, 3.4vh, 16px) system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.gl-p1-num { text-align: center; font: 800 min(34vh, 20vw) / 1 ui-monospace, Menlo, monospace; color: var(--c); text-shadow: 0 0 24px var(--c), 0 4px 0 rgba(0,0,0,.7); }
+.gl-p1-num small { font: 700 clamp(14px, 5vh, 26px) system-ui, sans-serif; color: var(--muted); margin-left: 8px; text-shadow: none; }
+.gl-p1-bar { padding: 0 6px; }
+.gl-p1-segs { display: flex; gap: 3px; padding: 4px; border-radius: 8px; background: #04070b; box-shadow: inset 0 0 8px #000; height: clamp(22px, 8vh, 42px); }
+.gl-p1-segs i { flex: 1 1 0; border-radius: 2.5px; background: #0d1620; }
+.gl-p1-segs i.on { background: var(--c); box-shadow: 0 0 9px var(--c), inset 0 1px 0 rgba(255,255,255,.4); }
+.gl-p1-scale { display: flex; justify-content: space-between; margin-top: 4px; font: 600 clamp(9px, 2.6vh, 12px) ui-monospace, Menlo, monospace; color: #6f7f94; }
+.gl-p1-scale em { font-style: normal; }
+.gl-ef-bar { position: relative; height: clamp(20px, 7vh, 34px); margin: 8px 6px 18px; border-radius: 8px; background: #04070b; box-shadow: inset 0 0 8px #000; }
+.gl-ef-bar .fill { position: absolute; left: 0; top: 3px; bottom: 3px; border-radius: 6px; box-shadow: 0 0 14px currentColor; }
+.gl-ef-bar b { position: absolute; top: -6px; bottom: -6px; width: 2px; background: #fff; box-shadow: 0 0 8px #fff; }
+.gl-ef-bar b em { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; font: 600 clamp(9px, 2.6vh, 12px) system-ui, sans-serif; font-style: normal; color: #cfe8ff; white-space: nowrap; }
+.gl-ef-note { text-align: center; font: 700 clamp(14px, 4.4vh, 22px) system-ui, sans-serif; }
+.gl-dim .gl-p1-num, .gl-dim .gl-dm-speed b { text-shadow: none; }
+.gl-dim .gl-p1-segs i.on { box-shadow: none; }
+@media (orientation: landscape) and (max-height: 300px) {
+  .gl-power1, .gl-eff1 { gap: 3px; }
+  .gl-p1-num { font-size: min(26vh, 16vw); }
+  .gl-p1-segs { height: 18px; padding: 3px; }
+  .gl-ef-bar { height: 18px; margin: 4px 6px 14px; }
+  .gl-ef-note { font-size: 13px; }
+  .gl-p1-top { font-size: 10px; }
+}
