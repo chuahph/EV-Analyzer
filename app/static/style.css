@@ -2945,3 +2945,27 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-hud-stat::before, .gl-dim .gl-big::before, .gl-dim .gl-en-big::before,
 .gl-dim .gl-hud-stat::after, .gl-dim .gl-big::after, .gl-dim .gl-en-big::after { box-shadow: none; opacity: .45; }
 .gl-dim .gl-hud-stat strong, .gl-dim .gl-big strong, .gl-dim .gl-en-big strong { text-shadow: none; }
+
+/* Dial: digital LED bars with a lit readout. */
+.gl-ledcol { flex: 0 0 clamp(70px, 13vw, 108px); min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 6px 8px;
+  border-radius: 12px; background: linear-gradient(165deg, #1b2736 0%, #0d1520 42%, #070c13 100%);
+  border: 1px solid #243244; border-top-color: #41566f; border-bottom-color: #16222f;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -12px 20px rgba(0,0,0,.5), 0 9px 18px rgba(0,0,0,.6), 0 2px 3px rgba(0,0,0,.7); }
+.gl-ledcol > span { text-align: center; font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-dim .gl-ledcol { box-shadow: none; border-color: #12181f; }
+.gl-led-bar { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; gap: 4px; align-items: stretch; justify-content: center; }
+.gl-led-segs { width: 46%; display: flex; flex-direction: column-reverse; gap: 2.5px; padding: 3px; border-radius: 7px;
+  background: #04070b; box-shadow: inset 0 0 8px #000, 0 1px 0 rgba(255,255,255,.07); }
+.gl-led-segs i { flex: 1 1 0; border-radius: 2.5px; background: #0d1620; box-shadow: inset 0 1px 2px #000; }
+.gl-led-segs i.on { background: var(--c); box-shadow: 0 0 9px var(--c), inset 0 1px 0 rgba(255,255,255,.4); }
+.gl-led-segs i.zero { margin-bottom: 2px; }
+.gl-led-scale { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+  font: 600 clamp(7px, 2vh, 10px) ui-monospace, Menlo, monospace; color: #6f7f94; padding: 2px 0; }
+.gl-led-scale em { font-style: normal; }
+.gl-digi { position: relative; width: 100%; text-align: center; padding: 3px 4px; border-radius: 7px; background: #02050a; border: 1px solid #1d2a38;
+  box-shadow: inset 0 0 10px #000; white-space: nowrap; line-height: 1.1; }
+.gl-digi i, .gl-digi b { font: 800 clamp(18px, 6vh, 30px) ui-monospace, Menlo, monospace; letter-spacing: .04em; }
+.gl-digi i { position: absolute; left: 0; right: 0; top: 3px; font-style: normal; color: var(--c); opacity: .06; }
+.gl-digi b { position: relative; color: var(--c); text-shadow: 0 0 12px var(--c); }
+.gl-digi small { font: 700 clamp(9px, 2.6vh, 13px) system-ui, sans-serif; color: var(--muted); margin-left: 3px; }
+.gl-dim .gl-led-segs i.on, .gl-dim .gl-digi b { box-shadow: none; text-shadow: none; }

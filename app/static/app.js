@@ -5158,14 +5158,36 @@ function glAltPage(skin, c) {
     </div>`;
   }
   if (skin === 5) {
-    // Dial: the 3D gauge with a needle, between a power tube and a battery tube.
-    const vbar = (frac, colour, label, text, mid) => `<div class="gl-pbar ${mid ? "mid" : ""}"><span>${label}</span>
-      <div><i style="height:${Math.max(0, Math.min(100, frac * 100)).toFixed(1)}%;background:${colour}"></i></div><strong>${text}</strong></div>`;
-    const pwFrac = kw == null ? 0 : kw >= 0 ? 0.28 + kw / 150 * 0.72 : 0.28 + kw / 60 * 0.28;
+    // Dial: the 3D gauge with a needle, between two digital LED bars: power
+    // on the left and battery on the right, each with a lit readout.
+    const NSEG = 24, ZERO = 7;                  // power: segments below ZERO are regen
+    const stops = [[0, "#22d3ee"], [.35, "#2ee86a"], [.6, "#ffe03a"], [.8, "#ff8a1f"], [1, "#ff3b3b"]];
+    const powerCol = (f) => (stops.find(([x]) => f <= x) || stops[stops.length - 1])[1];
+    const battCol = (pc) => (pc < 20 ? "#ff3b3b" : pc < 35 ? "#ff8a1f" : pc < 55 ? "#ffe03a" : "#2ee86a");
+    const regen = kw != null && kw < 0;
+    const litDrive = kw != null && kw > 0 ? Math.max(1, Math.round(Math.min(150, kw) / 150 * (NSEG - ZERO))) : 0;
+    const litRegen = regen ? Math.max(1, Math.round(Math.min(60, -kw) / 60 * ZERO)) : 0;
+    let pseg = "";
+    for (let i = 0; i < NSEG; i++) {
+      const on = i >= ZERO ? i < ZERO + litDrive : i >= ZERO - litRegen && regen;
+      const col = i >= ZERO ? powerCol((i - ZERO + 1) / (NSEG - ZERO)) : "#2ee86a";
+      pseg += `<i class="${on ? "on" : ""}${i === ZERO ? " zero" : ""}" style="--c:${col}"></i>`;
+    }
+    const litB = pct != null ? Math.round(pct / 100 * NSEG) : 0;
+    let bseg = "";
+    for (let i = 0; i < NSEG; i++) {
+      bseg += `<i class="${i < litB ? "on" : ""}" style="--c:${battCol((i + 0.5) / NSEG * 100)}"></i>`;
+    }
+    const pwTone = kw == null ? "#7e93ab" : regen ? "#2ee86a" : powerCol(Math.min(1, kw / 150));
+    const bTone = pct == null ? "#7e93ab" : battCol(pct);
+    const led = (label, segs, ghost, value, unit, tone, scale) => `<div class="gl-ledcol">
+      <span>${label}</span>
+      <div class="gl-led-bar"><div class="gl-led-segs">${segs}</div><div class="gl-led-scale">${scale}</div></div>
+      <div class="gl-digi" style="--c:${tone}"><i>${ghost}</i><b>${value}</b><small>${unit}</small></div></div>`;
     return `<div class="gl-page gl-alt gl-dialpage">
-      ${vbar(pwFrac, kw != null && kw < 0 ? "var(--green)" : kw > 60 ? "var(--amber)" : "#22d3ee", kw != null && kw < 0 ? "Regen" : "Power", `${kwShown}<small>kW</small>`, true)}
+      ${led(regen ? "Regen" : "Power", pseg, "88.8", kwShown, "kW", pwTone, "<em>150</em><em>75</em><em>0</em><em>regen</em>")}
       <div class="gl-dialbox">${glGauge3D(spd, col, nw, null, true)}</div>
-      ${vbar(pct != null ? pct / 100 : 0, pct != null && pct < 20 ? "#ff6b70" : "var(--green)", "Battery", `${pct != null ? n(pct, 0) : "—"}<small>%</small>`)}
+      ${led("Battery", bseg, "888", pct != null ? n(pct, 0) : "—", "%", bTone, "<em>100</em><em>75</em><em>50</em><em>25</em><em>0</em>")}
     </div>`;
   }
   if (skin === 6) {
