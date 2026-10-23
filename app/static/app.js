@@ -4952,9 +4952,85 @@ function glAutoLive(d) {
   }
 }
 
+// Swipeable Live designs. 0 is the Cockpit (the page this app has always had);
+// the others show the same readings differently, each for a different glance:
+// a huge speed, the energy flow, or the trip in big figures. Swipe left or
+// right on the Live page, or tap the dots.
+const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip"];
+let glLiveSkin = 0;
+function glSkinSet(i) {
+  glLiveSkin = (i + GL_SKINS.length) % GL_SKINS.length;
+  try { localStorage.setItem("glLiveSkin", String(glLiveSkin)); } catch (_) { /* private mode */ }
+  glDimArm();
+  if (typeof lastData !== "undefined" && lastData) renderGlance(lastData);
+}
+const glSkinColour = (x) => (x > 140 ? "#e040fb" : x > 120 ? "#ff3b3b" : x > 100 ? "#ff8a1f"
+  : x > 80 ? "#ffe03a" : x > 60 ? "#2ee86a" : x > 30 ? "#19e3f5" : "#3d7bff");
+const glSkinDots = () => `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_SKINS.map((nm, i) =>
+  `<button type="button" class="${i === glLiveSkin ? "on" : ""}" data-gl-skin="${i}" title="${nm}" aria-label="${nm}"></button>`).join("")}</span>`;
+
+// c: { t, nw, spd, kw, tw, pct, odo, range, rated, lt, hist, regen, usedPct, h, n }
+function glAltSkin(skin, c) {
+  const { t, nw, spd, kw, tw, pct, odo, range, rated, lt } = c, n = c.n;
+  const num = spd != null ? String(Math.round(spd)) : "—";
+  const col = spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff";
+  const gear = ["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("");
+  const batt = `<span class="gl-hud-batt ${pct != null && pct < 20 ? "low" : ""}">${pct != null ? n(pct, 0) : "—"}<small>%</small>
+    <em>${range != null ? n(range) + " km" : ""}</em></span>`;
+  const kwShown = kw != null ? n(Math.abs(kw), 1) : "—";
+  const kwMin = -60, kwMax = 150, zero = -kwMin / (kwMax - kwMin) * 100;
+  const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
+  const bar = `<div class="gl-power-track gl-alt-bar">${kwPos == null ? "" : `<i class="gl-power-fill ${kw < 0 ? "regen" : kw > 60 ? "hard" : ""}"
+    style="left:${Math.min(zero, kwPos).toFixed(1)}%;width:${Math.abs(kwPos - zero).toFixed(1)}%"></i>`}<b style="left:${zero.toFixed(1)}%"></b></div>`;
+  const stat = (label, value, tone = "") => `<div class="gl-hud-stat ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
+  const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
+  const dist = t ? t.distance_km : lt && lt.distance_km;
+  const mins = t ? t.duration_min : lt && lt.duration_min;
+  const avg = t ? t.avg_speed_kmh : lt && lt.avg_speed_kmh;
+  const whk = t ? tw : lt && lt.wh_per_km;
+  const sub = t ? "this drive" : lt ? "last trip" : "";
+  if (skin === 1) {
+    return `<div class="gl-page gl-alt gl-hud">
+      <div class="gl-hud-top"><span class="gl-hud-gear">${gear}</span>${batt}</div>
+      <div class="gl-hud-speed" style="color:${col}">${num}<small>km/h</small></div>
+      <div class="gl-hud-pw">${bar}<span>${kw != null && kw < 0 ? "regen " : ""}${kwShown} kW</span></div>
+      <div class="gl-hud-row">
+        ${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}
+        ${stat("avg km/h", avg != null ? n(avg) : "—")}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
+      </div></div>`;
+  }
+  if (skin === 2) {
+    const now = c.nowWh;
+    return `<div class="gl-page gl-alt gl-en">
+      <div class="gl-en-top">
+        <div class="gl-en-big ${kw != null && kw < 0 ? "regen" : ""}"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span>
+          <strong>${kwShown}<small>kW</small></strong></div>
+        <div class="gl-en-big ${now != null && rated && now > rated ? "warn" : "good"}"><span>Wh/km now</span>
+          <strong>${now != null ? n(now) : "—"}</strong></div>
+        <div class="gl-en-big ${twTone}"><span>Wh/km ${t ? "trip" : "last"}</span><strong>${whk != null ? n(whk) : "—"}</strong></div>
+        <div class="gl-en-big"><span>Regen</span><strong>${t && t.regen_kwh != null ? n(t.regen_kwh, 2) : "—"}<small>kWh</small></strong></div>
+      </div>
+      ${bar}
+      <div class="gl-en-trace">${c.trace}</div>
+      <div class="gl-en-bot"><span>Battery <strong>${pct != null ? n(pct, 1) : "—"}%</strong></span>
+        <span>Est. range <strong>${c.rangeHere != null ? n(c.rangeHere) : "—"} km</strong></span>
+        <span>Speed <strong style="color:${col}">${num} km/h</strong></span></div>
+    </div>`;
+  }
+  const tile = (label, value, tone = "") => `<div class="gl-big ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
+  return `<div class="gl-page gl-alt gl-bigs">
+    <div class="gl-bigs-h"><span>${t ? "Trip computer" : lt ? "Last trip" : "Trip"}</span><em>${sub}</em></div>
+    <div class="gl-bigs-g">
+      ${tile("km", dist != null ? n(dist, 1) : "—")}${tile("min", mins != null ? n(mins) : "—")}
+      ${tile("avg km/h", avg != null ? n(avg) : "—")}${tile("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
+      ${tile("odometer km", odo != null ? n(odo, 0) : "—")}${tile("battery %", pct != null ? n(pct, 1) : "—", pct != null && pct < 20 ? "warn" : "good")}
+    </div></div>`;
+}
+
 const glPref = (k, fallback) => { try { return localStorage.getItem(k) || fallback; } catch (_) { return fallback; } };
 const glSave = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } };
 let glanceTab = glPref("glanceTab", "drive");
+glLiveSkin = Math.max(0, Math.min(GL_SKINS.length - 1, +glPref("glLiveSkin", "0") || 0));
 
 function renderGlance(d) {
   const el = document.getElementById("glance");
@@ -5005,7 +5081,8 @@ function renderGlance(d) {
         <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "Always Bright" : "Auto Dim"}</button>
         ${nw.out_temp != null ? `<span class="gl-chip gl-opt">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip gl-opt">climate on</span>' : ""}
-        ${t && t.eta ? `<span class="gl-chip gl-opt">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}`;
+        ${t && t.eta ? `<span class="gl-chip gl-opt">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}
+        ${glSkinDots()}`;
       const ico = {
         dist: '<path d="M4 18 10 6l4 8 2-4 4 8"/>',
         time: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
@@ -5021,6 +5098,18 @@ function renderGlance(d) {
           <i><svg viewBox="0 0 24 24" aria-hidden="true">${ico[k]}</svg></i>
           <span>${h(label)}</span><strong>${value}</strong></div>`;
       const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
+      if (glLiveSkin > 0) {
+        const twA = t ? (t.wh_per_km ?? t.driving_wh_per_km) : null;
+        const odoA = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
+        const hist = glLiveState.hist || [];
+        const traceHtml = glEffTrace(hist, rated);
+        return { body: glAltSkin(glLiveSkin, {
+          t, nw, spd, kw: inst && inst.kw != null ? inst.kw : null, tw: twA, pct, odo: odoA,
+          range: nw.range_km ?? null, rated, lt, trace: traceHtml,
+          nowWh: inst && inst.whkm != null ? inst.whkm : null,
+          rangeHere: nw.energy_kwh != null && twA > 0 ? nw.energy_kwh * 1000 / twA : null, n,
+        }), foot };
+      }
       if (!t) {
         // Parked: the car now on the left, the last drive on the right, in the
         // same tiles as the driving view. The odometer comes from the
@@ -5417,6 +5506,8 @@ document.addEventListener("click", (e) => {
     if (glanceTab === "live") glLivePoll(); else glWakeSync();
     return;
   }
+  const skinDot = e.target.closest("[data-gl-skin]");
+  if (skinDot) { glSkinSet(+skinDot.dataset.glSkin); return; }
   if (e.target.closest("[data-gl-dim]")) {
     glDim.off = !glDim.off;
     glDimArm();
@@ -6678,3 +6769,24 @@ showHome();
     if (e.touches && e.touches.length > 1) e.preventDefault();
   }, { passive: false });
 })();
+
+// Swipe left or right across the Live page to change its design. A swipe has
+// to be mostly sideways and a good length, and not start at the screen's
+// edge (where the browser's own back gesture lives).
+{
+  let sw = null;
+  document.addEventListener("pointerdown", (e) => {
+    const g = e.target.closest && e.target.closest("#glance");
+    const edge = 28;
+    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select")
+      && e.clientX > edge && e.clientX < innerWidth - edge
+      ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId } : null;
+  }, { passive: true });
+  document.addEventListener("pointerup", (e) => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = Date.now() - sw.t;
+    sw = null;
+    if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && dt < 900) glSkinSet(glLiveSkin + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+  document.addEventListener("pointercancel", () => { sw = null; }, { passive: true });
+}
