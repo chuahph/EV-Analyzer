@@ -4956,11 +4956,11 @@ function glAutoLive(d) {
 // the others show the same readings differently, each for a different glance:
 // a huge speed, the energy flow, or the trip in big figures. Swipe left or
 // right on the Live page, or tap the dots.
-const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack"];
+const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph"];
 // Two rows of designs. Left and right swipe through the single-purpose ones;
 // up and down through the combinations, which put several readings together.
-const GL_SINGLE = [0, 1, 4, 5, 6, 3];       // Cockpit, HUD, Night, Dial, Range, Trip
-const GL_COMBO = [7, 8, 2, 9];              // Mix, Round Mix, Energy, Stack
+const GL_SINGLE = [0, 1, 4, 5, 6, 3, 10];    // Cockpit, HUD, Night, Dial, Range, Trip, Lines
+const GL_COMBO = [7, 8, 2, 9, 11];           // Mix, Round Mix, Energy, Stack, Graph
 let glLiveSkin = 0;
 function glSkinSet(id, from) {
   glLiveSkin = GL_SKINS[id] ? id : 0;
@@ -5007,7 +5007,11 @@ function glKeyBar(c) {
 }
 function glAltSkin(skin, c) {
   c.skin = skin; c.h = h;
-  return `<div class="gl-page gl-altwrap">${glKeyBar(c)}${glAltPage(skin, c)}</div>`;
+  // The whole page takes the speed's colour: --spd for borders, bars and the
+  // speed line along the top, --spdp (0-100) for how long that line is.
+  const sp = c.spd != null && c.spd > 0.5 ? c.spd : 0;
+  const spCol = sp ? glSkinColour(sp) : "#22d3ee";
+  return `<div class="gl-page gl-altwrap" style="--spd:${spCol};--spdp:${Math.min(100, sp / 160 * 100).toFixed(1)}">${glKeyBar(c)}${glAltPage(skin, c)}</div>`;
 }
 function glKeyFit(root) {
   const f = (root || document).querySelector(".glance .gl-keybar");
@@ -5205,6 +5209,51 @@ function glAltPage(skin, c) {
       </div>
     </div>`;
   }
+  if (skin === 10) {
+    // Lines: an outlined speed with streaks either side that lengthen and take
+    // the speed's colour, and a row of figures split by thin rules.
+    const sp = spd != null ? Math.max(0, Math.min(160, spd)) : 0;
+    const lens = [1, .78, .6, .84, .52, .7, .9];
+    const streak = (mirror) => `<span class="gl-ln-st ${mirror ? "r" : "l"}">${lens.map((f, k) =>
+      `<i style="width:${(sp / 160 * 100 * f).toFixed(1)}%;background:linear-gradient(${mirror ? 270 : 90}deg, transparent, ${glSkinColour(Math.max(5, sp * (0.55 + 0.07 * k)))})"></i>`).join("")}</span>`;
+    const cell = (label, value, tone = "") => `<div class="gl-ln-c ${tone}"><span>${label}</span><strong>${value}</strong></div>`;
+    return `<div class="gl-page gl-alt gl-lines">
+      <div class="gl-ln-mid">${streak(false)}<div class="gl-ln-num" style="--c:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>${streak(true)}</div>
+      <div class="gl-ln-row">
+        ${cell("km", dist != null ? n(dist, 1) : "—")}${cell("min", mins != null ? n(mins) : "—")}${cell("avg km/h", avg != null ? n(avg) : "—")}
+        ${cell("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}${cell(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}
+        ${cell("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}
+      </div></div>`;
+  }
+  if (skin === 11) {
+    // Graph: the last three minutes of speed and of power as two lines, the
+    // speed one drawn in the colour of the speed at each moment.
+    const hist = (c.hist || []).filter((x) => x && x.t != null);
+    const W = 300, H = 90;
+    const t1 = hist.length ? hist[hist.length - 1].t : 0, t0 = t1 - 180;
+    const X = (tt) => ((tt - t0) / 180 * W).toFixed(1);
+    let sLine = "", sFill = "";
+    for (let i = 1; i < hist.length; i++) {
+      const a = hist[i - 1], b = hist[i];
+      if (b.t < t0) continue;
+      const ya = (H - 4 - Math.min(160, a.v) / 160 * (H - 8)).toFixed(1), yb = (H - 4 - Math.min(160, b.v) / 160 * (H - 8)).toFixed(1);
+      sLine += `<line x1="${X(Math.max(a.t, t0))}" y1="${ya}" x2="${X(b.t)}" y2="${yb}" stroke="${glSkinColour(b.v)}" stroke-width="2.4" stroke-linecap="round"/>`;
+    }
+    const pk = hist.filter((x) => x.kw != null && x.t >= t0);
+    const kwMax = Math.max(60, ...pk.map((x) => Math.abs(x.kw))), PY = (kv) => (H / 2 - kv / kwMax * (H / 2 - 5)).toFixed(1);
+    let pLine = "";
+    for (let i = 1; i < pk.length; i++) {
+      pLine += `<line x1="${X(pk[i - 1].t)}" y1="${PY(pk[i - 1].kw)}" x2="${X(pk[i].t)}" y2="${PY(pk[i].kw)}" stroke="${pk[i].kw < 0 ? "#2ee86a" : pk[i].kw > 60 ? "#ff8a1f" : "#22d3ee"}" stroke-width="2.2" stroke-linecap="round"/>`;
+    }
+    const grid = (n2) => Array.from({ length: n2 }, (_, k) => `<line x1="0" x2="${W}" y1="${(k + 1) * H / (n2 + 1)}" y2="${(k + 1) * H / (n2 + 1)}" stroke="#1d2a38" stroke-width=".6" stroke-dasharray="3 4"/>`).join("");
+    const chart = (title, big, unit, body, tone) => `<div class="gl-gr-box"><div class="gl-gr-h"><span>${title}</span><strong style="color:${tone}">${big}<small>${unit}</small></strong></div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${grid(3)}${body}</svg></div>`;
+    return `<div class="gl-page gl-alt gl-graph">
+      ${chart("Speed · last 3 min", num, "km/h", sLine || '<text x="150" y="50" text-anchor="middle" font-size="9" fill="#6f7f94">building the line…</text>', col)}
+      ${chart("Power · last 3 min", kwShown, "kW", `<line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="#cfe8ff" stroke-width=".8" stroke-dasharray="5 4" opacity=".6"/>${pLine}` , kw != null && kw < 0 ? "#2ee86a" : "#22d3ee")}
+      <div class="gl-gr-row">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
+    </div>`;
+  }
   if (skin === 8) {
     // Round Mix: a round speed ring with the odometer set into it, the trip
     // on its left and power and battery on its right.
@@ -5323,7 +5372,7 @@ function renderGlance(d) {
         const hist = glLiveState.hist || [];
         const traceHtml = glEffTrace(hist, rated);
         return { body: glAltSkin(glLiveSkin, {
-          t, nw, spd, kw: inst && inst.kw != null ? inst.kw : null, tw: twA, pct, odo: odoA,
+          t, nw, spd, kw: inst && inst.kw != null ? inst.kw : null, tw: twA, pct, odo: odoA, hist,
           range: nw.range_km ?? null, rated, lt, trace: traceHtml,
           nowWh: inst && inst.whkm != null ? inst.whkm : null,
           rangeHere: nw.energy_kwh != null && twA > 0 ? nw.energy_kwh * 1000 / twA : null, n,
