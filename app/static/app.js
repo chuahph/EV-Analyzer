@@ -5093,15 +5093,66 @@ function glAltSkin(skin, c) {
       const x0 = k / 48 * MAXV, x1 = (k + 1) / 48 * MAXV, on = spd != null && x0 + 1.5 <= v;
       ring += `<path d="${glArcPath(cx, cy, 86, ang(x0) + 90.5, ang(x1) + 89.5)}" fill="none" stroke="${on ? glSkinColour(x0 + 1.5) : "#121c28"}" stroke-width="10"/>`;
     }
-    const odoTxt = odo != null ? n(odo, 0) : "—";
-    const round = `<svg viewBox="0 0 200 200" role="img" aria-label="Speed ${num} km/h">${ring}
-      <circle cx="100" cy="100" r="70" fill="#080d13" stroke="#1d2a38"/>
-      <text x="100" y="${num.length >= 3 ? 98 : 102}" text-anchor="middle" font-size="${num.length >= 3 ? 50 : 62}" font-weight="800" fill="${col}"
+    const uid = `glr${++glDialSeq}`;
+    const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
+    // A mechanical odometer: one cylinder cell per digit, dark at the top and
+    // bottom edge and lit in the middle.
+    const CW = 14, ox = 100 - Math.max(odoDigits.length, 1) * CW / 2;
+    const cells = (odoDigits.length ? odoDigits : ["—"]).map((d, k) =>
+      `<rect x="${ox + k * CW + 0.5}" y="131" width="${CW - 1}" height="22" rx="2" fill="url(#${uid}-cyl)" stroke="#000" stroke-opacity=".7" stroke-width=".6"/>
+       <text x="${ox + k * CW + CW / 2}" y="147.5" text-anchor="middle" font-size="14" font-weight="700" fill="#f1f7ff"
+         font-family="ui-monospace,Menlo,monospace" style="paint-order:stroke" stroke="#000" stroke-width=".8" stroke-opacity=".5">${d}</text>`).join("");
+    // A bright bead where the speed reaches along the ring.
+    const ra = ang(v) * Math.PI / 180;
+    const tip = spd != null && spd > 0.5
+      ? `<circle cx="${(100 + 86 * Math.cos(ra)).toFixed(1)}" cy="${(100 + 86 * Math.sin(ra)).toFixed(1)}" r="6.5" fill="#fff" filter="url(#${uid}-glow)"/>
+         <circle cx="${(100 + 86 * Math.cos(ra)).toFixed(1)}" cy="${(100 + 86 * Math.sin(ra)).toFixed(1)}" r="3.4" fill="${col}"/>` : "";
+    let tick = "";
+    for (let x = 0; x <= MAXV; x += 20) {
+      const a = ang(x) * Math.PI / 180, big = x % 40 === 0;
+      tick += `<line x1="${(100 + 71 * Math.cos(a)).toFixed(1)}" y1="${(100 + 71 * Math.sin(a)).toFixed(1)}" x2="${(100 + (big ? 65 : 67.5) * Math.cos(a)).toFixed(1)}" y2="${(100 + (big ? 65 : 67.5) * Math.sin(a)).toFixed(1)}" stroke="${big ? "#9fb0c3" : "#4a5868"}" stroke-width="${big ? 1.4 : 1}"/>`;
+      if (big && x > 0 && x < MAXV) tick += `<text x="${(100 + 58 * Math.cos(a)).toFixed(1)}" y="${(103 + 58 * Math.sin(a)).toFixed(1)}" text-anchor="middle" font-size="7" font-weight="600" fill="#7e93ab">${x}</text>`;
+    }
+    const round = `<svg viewBox="0 0 200 206" role="img" aria-label="Speed ${num} km/h">
+      <defs>
+        <linearGradient id="${uid}-bz" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e3eaf4"/><stop offset=".22" stop-color="#7c8898"/><stop offset=".5" stop-color="#1b232f"/>
+          <stop offset=".78" stop-color="#6b7788"/><stop offset="1" stop-color="#cfd8e4"/></linearGradient>
+        <linearGradient id="${uid}-gr" x1="1" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#0a0f16"/><stop offset="1" stop-color="#2a3442"/></linearGradient>
+        <radialGradient id="${uid}-dm" cx=".38" cy=".22" r=".95">
+          <stop offset="0" stop-color="#22344a"/><stop offset=".45" stop-color="#0d1621"/><stop offset="1" stop-color="#04070b"/></radialGradient>
+        <linearGradient id="${uid}-cyl" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#05080c"/><stop offset=".28" stop-color="#1a2330"/><stop offset=".5" stop-color="#34455a"/>
+          <stop offset=".72" stop-color="#1a2330"/><stop offset="1" stop-color="#05080c"/></linearGradient>
+        <linearGradient id="${uid}-gl" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+        <filter id="${uid}-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="${uid}-bl"><feGaussianBlur stdDeviation="3.2"/></filter>
+        <clipPath id="${uid}-cp"><circle cx="100" cy="100" r="62"/></clipPath>
+      </defs>
+      <ellipse cx="100" cy="197" rx="64" ry="6" fill="#000" opacity=".75" filter="url(#${uid}-bl)"/>
+      <circle cx="100" cy="100" r="99" fill="url(#${uid}-bz)"/>
+      <circle cx="100" cy="100" r="95.5" fill="url(#${uid}-gr)"/>
+      <circle cx="100" cy="100" r="93" fill="#05080c" stroke="#000" stroke-width="1"/>
+      <circle cx="100" cy="100" r="92" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1"/>
+      <g opacity=".9">${ring}</g>
+      <g filter="url(#${uid}-glow)" style="mix-blend-mode:screen">${ring.replaceAll('stroke="#121c28"', 'stroke="none"')}</g>
+      ${tip}
+      <circle cx="100" cy="100" r="74" fill="url(#${uid}-gr)"/>
+      <circle cx="100" cy="100" r="72.5" fill="url(#${uid}-dm)" stroke="#000" stroke-width="1"/>
+      ${tick}
+      <g clip-path="url(#${uid}-cp)"><ellipse cx="82" cy="58" rx="48" ry="26" fill="url(#${uid}-gl)" transform="rotate(-18 82 58)"/></g>
+      <text x="101.6" y="${num.length >= 3 ? 101 : 105}" text-anchor="middle" font-size="${num.length >= 3 ? 50 : 62}" font-weight="800" fill="#000" opacity=".7"
         style="font-variant-numeric:tabular-nums">${num}</text>
-      <text x="100" y="118" text-anchor="middle" font-size="9" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text>
-      <rect x="44" y="128" width="112" height="26" rx="5" fill="#05080c" stroke="#2a3645"/>
-      <text x="54" y="145" font-size="8" font-weight="650" letter-spacing="1.5" fill="#6f7f94">ODO</text>
-      <text x="148" y="147" text-anchor="end" font-size="16" font-weight="700" fill="#e8fbff" font-family="ui-monospace,Menlo,monospace">${odoTxt}</text></svg>`;
+      <text x="100" y="${num.length >= 3 ? 98.5 : 102.5}" text-anchor="middle" font-size="${num.length >= 3 ? 50 : 62}" font-weight="800" fill="${col}" filter="url(#${uid}-glow)"
+        style="font-variant-numeric:tabular-nums">${num}</text>
+      <text x="100" y="118" text-anchor="middle" font-size="8" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text>
+      <rect x="${ox - 3}" y="128" width="${Math.max(odoDigits.length, 1) * CW + 6}" height="28" rx="5" fill="#020406" stroke="#4a5868" stroke-width=".8"/>
+      ${cells}
+      <text x="100" y="166" text-anchor="middle" font-size="7" font-weight="650" letter-spacing="2" fill="#6f7f94">ODO KM</text>
+    </svg>`;
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
       <div class="gl-rmix-mid">${round}</div>
