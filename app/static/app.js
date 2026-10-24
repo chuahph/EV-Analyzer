@@ -5161,7 +5161,7 @@ function glGauge3D(spd, col, nw, odo, needle) {
       style="font-variant-numeric:tabular-nums">${num}</text>
     <text x="100" y="${(needle ? 41 : 0) + (num.length >= 3 ? 98.5 : 102.5)}" text-anchor="middle" font-size="${needle ? (num.length >= 3 ? 40 : 48) : (num.length >= 3 ? 50 : 62)}" font-weight="800" fill="${col}" filter="url(#${uid}-glow)"
       style="font-variant-numeric:tabular-nums">${num}</text>
-    <text x="100" y="${needle ? 158 : 118}" text-anchor="middle" font-size="8" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H · ${nw.shift || "P"}</text>
+    <text x="100" y="${needle ? 158 : 118}" text-anchor="middle" font-size="8" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H</text>
     ${needle ? needleSvg : `
     <rect x="${ox - 3}" y="128" width="${Math.max(odoDigits.length, 1) * CW + 6}" height="28" rx="5" fill="#020406" stroke="#4a5868" stroke-width=".8"/>
     ${cells}

@@ -3204,3 +3204,4 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-gearrow b.on { box-shadow: none; text-shadow: none; }
 .gl-gearrow { bottom: -3px; gap: clamp(4px, 1.1vw, 9px); font-size: clamp(11px, 3vh, 15px); }
 .gl-gearrow b { padding: 1px 5px; }
+.gl-gearrow { bottom: -11px; }
