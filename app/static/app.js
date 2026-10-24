@@ -5672,7 +5672,7 @@ function renderGlance(d) {
             ${tile("dist", "km", n(t.distance_km, 1))}
             ${tile("time", "min", n(t.duration_min))}
             ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
-            ${tile("whkm", "Max Wh/km", glLiveState.maxWh != null ? n(glLiveState.maxWh) : "—", "")}
+            ${tile("speed", "Max km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—", "")}
           </div>
           <div class="gl-odo"><span>Odo km</span>
             <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
