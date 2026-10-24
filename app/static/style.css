@@ -3039,7 +3039,7 @@ main > .card { max-width: 100%; }
 .gl-ladder:last-child .gl-led-bar { flex-direction: row-reverse; } .gl-ladder:last-child .gl-led-scale { align-items: flex-start; }
 .gl-dim .gl-ladder b { text-shadow: none; }
 /* The gauge keeps its own shape; the ladders share what is left either side of it. */
-.gl-rmix-mid svg, .gl-dialbox svg { flex: 0 1 auto; width: auto; height: 100%; max-width: 62%; aspect-ratio: 228 / 232; }
+.gl-rmix-mid svg, .gl-dialbox svg { flex: 0 1 auto; width: auto; height: 100%; max-width: 62%; aspect-ratio: 218 / 224; }
 .gl-ladder { min-width: 58px; max-width: 110px; }
 
 /* ---- Odometer drums, Digital Mix, and the one-reading designs ------------- */
