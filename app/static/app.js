@@ -5146,17 +5146,18 @@ function glLadder(kind, c) {
     read = c.spd != null ? `${Math.round(c.spd)}<small>km/h</small>` : "—";
   } else if (kind === "whbat") {
     // Half and half: Wh/km fills upward in the top half (green under rated,
-    // amber, red); the battery fills upward in the bottom half.
+    // amber, red); the battery fills DOWNWARD from the middle line: red near
+    // the line when low, green at the far end when full.
     const H = 12, R = c.rated || 150, w = c.nowWh != null ? c.nowWh : c.whk, pc = c.pct;
     title = "Wh/km";
     const up = w != null ? Math.max(1, Math.min(H, Math.round(Math.max(0, w) / 300 * H))) : 0;
     const bt = pc != null ? Math.max(0, Math.min(H, Math.round(pc / 100 * H))) : 0;
     const wCol = (k) => { const v = (k + 0.5) / H * 300; return v <= R ? "#2ee86a" : v <= R * 1.5 ? "#ffb020" : "#ff3b3b"; };
     const bCol = (k) => { const v = (k + 0.5) / H * 100; return v < 20 ? "#ff3b3b" : v < 35 ? "#ff8a1f" : v < 55 ? "#ffe03a" : "#2ee86a"; };
-    for (let k = 0; k < H; k++) segs += `<i class="${k < bt ? "on" : ""}" style="--c:${bCol(H - 1 - k)}"></i>`;
+    for (let k = 0; k < H; k++) segs += `<i class="${H - 1 - k < bt ? "on" : ""}" style="--c:${bCol(H - 1 - k)}"></i>`;
     segs += '<i class="mid"></i>';
     for (let k = 0; k < H; k++) segs += `<i class="${k < up ? "on" : ""}" style="--c:${wCol(k)}"></i>`;
-    scale = "<em>300</em><em>150</em><em>0|100%</em><em>50%</em><em>0%</em>";
+    scale = "<em>300</em><em>150</em><em>0|0%</em><em>50%</em><em>100%</em>";
     topRead = w != null ? `${c.n(w)}<small>Wh/km</small>` : "—";
     topTone = w == null ? "#7e93ab" : w <= R ? "#2ee86a" : w <= R * 1.5 ? "#ffb020" : "#ff3b3b";
     read = pc != null ? `${c.n(pc, 0)}<small>%</small>` : "—";
