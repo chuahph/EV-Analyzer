@@ -5072,6 +5072,20 @@ function glGauge3D(spd, col, nw, odo, needle) {
     if (on) ringLit += seg;
   }
   const uid = `glr${++glDialSeq}`;
+  // Colour lines on the outer rim: fine radial strokes all round the bezel's
+  // groove, lit in each band's colour up to the speed and faint beyond it, and
+  // a glowing rim line that brightens with speed.
+  let rimFx = "";
+  {
+    const NL = 80;
+    for (let k = 0; k < NL; k++) {
+      const x = (k + 0.5) / NL * MAXV, a = ang(x) * Math.PI / 180, on = spd != null && x <= v;
+      const r0 = on ? 90.2 : 91.6, r1 = 96;
+      rimFx += `<line x1="${(100 + r0 * Math.cos(a)).toFixed(1)}" y1="${(100 + r0 * Math.sin(a)).toFixed(1)}" x2="${(100 + r1 * Math.cos(a)).toFixed(1)}" y2="${(100 + r1 * Math.sin(a)).toFixed(1)}" stroke="${glSkinColour(x)}" stroke-width="${on ? 1.7 : 1.1}" stroke-linecap="round" opacity="${on ? 1 : .22}"/>`;
+    }
+    const glowA = spd != null && spd > 0.5 ? Math.min(1, .35 + v / MAXV * .65) : .25;
+    rimFx = `<circle cx="100" cy="100" r="98" fill="none" stroke="${col}" stroke-width="1.4" opacity="${glowA.toFixed(2)}" filter="url(#${uid}-glow)"/>` + rimFx;
+  }
   const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
   // A mechanical odometer: one cylinder cell per digit, dark at the top and
   // bottom edge and lit in the middle.
@@ -5123,6 +5137,7 @@ function glGauge3D(spd, col, nw, odo, needle) {
     <circle cx="100" cy="100" r="92" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1"/>
     <g opacity=".9">${ring}</g>
     <g filter="url(#${uid}-glow)" style="mix-blend-mode:screen">${ringLit}</g>
+    ${rimFx}
     ${tip}
     <circle cx="100" cy="100" r="74" fill="url(#${uid}-gr)"/>
     <circle cx="100" cy="100" r="72.5" fill="url(#${uid}-dm)" stroke="#000" stroke-width="1"/>
