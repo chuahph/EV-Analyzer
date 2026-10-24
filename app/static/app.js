@@ -5144,6 +5144,22 @@ function glLadder(kind, c) {
     for (let i = 0; i < N; i++) segs += `<i class="${i < lit ? "on" : ""}" style="--c:${glSkinColour((i + 0.5) / N * 160)}"></i>`;
     scale = "<em>160</em><em>120</em><em>80</em><em>40</em><em>0</em>";
     read = c.spd != null ? `${Math.round(c.spd)}<small>km/h</small>` : "—";
+  } else if (kind === "flow") {
+    // Half and half: power going out fills upward from the middle line, regen
+    // coming back fills downward from it. Unlit segments keep their colour, dim.
+    const H = 12, kw = c.kw;
+    title = kw != null && kw < 0 ? "Regen" : "Power";
+    const up = kw != null && kw > 0 ? Math.max(1, Math.round(Math.min(150, kw) / 150 * H)) : 0;
+    const dn = kw != null && kw < 0 ? Math.max(1, Math.round(Math.min(60, -kw) / 60 * H)) : 0;
+    const upCol = (k) => ["#22d3ee", "#19e3c0", "#2ee86a", "#7be84a", "#c8e83a", "#ffe03a", "#ffc02a", "#ff9a1f", "#ff7a1f", "#ff5a2a", "#ff3b3b", "#ff2d72"][k];
+    const dnCol = (k) => ["#2ee86a", "#27e07f", "#20d994", "#19d3a8", "#19d0c0", "#19c9d8", "#22bbee", "#2fa8f5", "#3d95fa", "#4a82ff", "#5b6dff", "#6b5bff"][k];
+    // The column is laid out bottom-up, so regen's far end comes first.
+    for (let k = H - 1; k >= 0; k--) segs += `<i class="${k < dn ? "on" : ""}" style="--c:${dnCol(k)}"></i>`;
+    segs += '<i class="mid"></i>';
+    for (let k = 0; k < H; k++) segs += `<i class="${k < up ? "on" : ""}" style="--c:${upCol(k)}"></i>`;
+    scale = "<em>150</em><em>75</em><em>0</em><em>30</em><em>60</em>";
+    read = kw != null ? `${c.n(Math.abs(kw), 1)}<small>kW</small>` : "—";
+    sub = c.regenKwh != null ? `${c.n(c.regenKwh, 2)} kWh back` : "";
   } else if (kind === "regen") {
     title = "Regen";
     const kw = c.kw, back = kw != null && kw < 0 ? -kw : 0;
@@ -5389,7 +5405,7 @@ function glAltPage(skin, c) {
     const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
-      <div class="gl-rmix-mid">${glLadder("regen", c)}${round}${glLadder("power", c)}</div>
+      <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whkm", { ...c, whk })}</div>
       <div class="gl-rmix-col">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
         ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
     </div>`;
