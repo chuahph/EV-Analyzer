@@ -5198,7 +5198,7 @@ function glAltPage(skin, c) {
   const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
   const bar = `<div class="gl-power-track gl-alt-bar">${kwPos == null ? "" : `<i class="gl-power-fill ${kw < 0 ? "regen" : kw > 60 ? "hard" : ""}"
     style="left:${Math.min(zero, kwPos).toFixed(1)}%;width:${Math.abs(kwPos - zero).toFixed(1)}%"></i>`}<b style="left:${zero.toFixed(1)}%"></b></div>`;
-  const stat = (label, value, tone = "") => `<div class="gl-hud-stat ${tone}"><span>${glIcon(label)}${label}</span><strong>${value}</strong></div>`;
+  const stat = (label, value, tone = "") => `<div class="gl-hud-stat ${tone}${/wh/i.test(label) ? " gl-whkm" : ""}"><span>${glIcon(label)}${label}</span><strong>${value}</strong></div>`;
   const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
   const dist = t ? t.distance_km : lt && lt.distance_km;
   const mins = t ? t.duration_min : lt && lt.duration_min;
