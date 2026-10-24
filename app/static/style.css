@@ -3036,7 +3036,7 @@ main > .card { max-width: 100%; }
 .gl-ladder b { display: block; text-align: center; font: 800 clamp(15px, 4.8vh, 24px) ui-monospace, Menlo, monospace; color: #e8fbff; text-shadow: 0 0 10px rgba(34,211,238,.4); white-space: nowrap; }
 .gl-ladder b small { font: 700 clamp(8px, 2.2vh, 11px) system-ui, sans-serif; color: var(--muted); margin-left: 2px; text-shadow: none; }
 .gl-ladder .gl-led-scale { align-items: flex-end; }
-.gl-ladder:last-child .gl-led-bar { flex-direction: row-reverse; } .gl-ladder:last-child .gl-led-scale { align-items: flex-start; }
+.gl-ladder:nth-last-child(1) .gl-led-bar, .gl-ladder:nth-last-child(2) .gl-led-bar { flex-direction: row-reverse; } .gl-ladder:nth-last-child(1) .gl-led-scale, .gl-ladder:nth-last-child(2) .gl-led-scale { align-items: flex-start; }
 .gl-dim .gl-ladder b { text-shadow: none; }
 /* The gauge keeps its own shape; the ladders share what is left either side of it. */
 .gl-rmix-mid svg, .gl-dialbox svg { flex: 0 1 auto; width: auto; height: 100%; max-width: 62%; aspect-ratio: 218 / 224; }
@@ -3174,3 +3174,24 @@ main > .card { max-width: 100%; }
 .gl-whbar i.mk { opacity: 1; background: #fff; box-shadow: 0 0 8px #fff; }
 .gl-whbar-s { display: flex; justify-content: space-between; font: 600 9px ui-monospace, Menlo, monospace; color: #6f7f94; margin-top: 2px; }
 .gl-dim .gl-whbar i.on { box-shadow: none; }
+
+/* Under the round gauge: gear and a colour speed strip. */
+.gl-rmix-mid { position: relative; }
+.gl-under { position: absolute; left: 24%; right: 24%; bottom: 0; display: flex; flex-direction: column; align-items: stretch; gap: 3px; pointer-events: none; }
+.gl-under-g { display: flex; justify-content: center; gap: 14px; font: 700 clamp(11px, 3.2vh, 16px) system-ui, sans-serif; letter-spacing: .1em; }
+.gl-under-g b { color: #3b4757; padding: 0 5px; border: 1px solid transparent; border-radius: 3px; }
+.gl-under-g b.on { color: #22d3ee; border-color: #22d3ee; text-shadow: 0 0 8px #22d3ee; }
+.gl-under-bar { display: flex; gap: 2px; height: clamp(8px, 2.6vh, 13px); }
+.gl-under-bar i { flex: 1 1 0; border-radius: 2px; background: var(--c); opacity: .2; }
+.gl-under-bar i.on { opacity: 1; box-shadow: 0 0 6px var(--c); }
+.gl-under-bar i.top { opacity: 1; background: #fff; box-shadow: 0 0 6px #fff; }
+.gl-under-s { display: flex; justify-content: space-between; font: 600 clamp(7px, 2vh, 10px) ui-monospace, Menlo, monospace; color: #6f7f94; }
+.gl-under-s em { font-style: normal; }
+.gl-dim .gl-under-bar i.on { box-shadow: none; }
+.gl-rmix-mid { padding-bottom: clamp(34px, 10vh, 50px); }
+.gl-ladder:first-child .gl-led-bar { flex-direction: row; } .gl-ladder:first-child .gl-led-scale { align-items: flex-end; }
+.gl-under { left: 14%; right: 14%; flex-direction: row; align-items: center; gap: 10px; }
+.gl-under-g { gap: 4px; flex: 0 0 auto; }
+.gl-under-g b { padding: 0 3px; }
+.gl-under-bar { flex: 1 1 auto; }
+.gl-rmix-mid { padding-bottom: clamp(18px, 5.6vh, 28px); }
