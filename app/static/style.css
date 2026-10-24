@@ -3148,3 +3148,12 @@ main > .card { max-width: 100%; }
   .gl-hud-stat strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(14px, 6vh, 19px); }
   .gl-hud-stat.gl-whkm strong { font-size: clamp(13px, 5vh, 17px); }
 }
+
+/* One size for every tile figure on the mix designs, the size Wh/km uses, so the boxes look even. */
+.gl-hud-stat strong, .gl-hud-stat.gl-whkm strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong {
+  font-size: clamp(16px, min(5.8vh, 3.4vw), 29px); }
+.gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong, .gl-stk-trip .gl-hud-stat strong {
+  font-size: clamp(14px, min(5vh, 3.1vw), 24px); }
+@media (orientation: landscape) and (max-height: 300px) {
+  .gl-hud-stat strong, .gl-hud-stat.gl-whkm strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(13px, 5vh, 17px); }
+}
