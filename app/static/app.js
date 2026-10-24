@@ -5046,6 +5046,17 @@ function glAltSkin(skin, c) {
   const spCol = glSkinColour(sp);
   return `<div class="gl-page gl-altwrap" style="--spd:${spCol};--spdp:${Math.min(100, sp / 160 * 100).toFixed(1)}">${glKeyBar(c)}${glAltPage(skin, c)}</div>`;
 }
+// P R N D under the round gauge: moved so its centre line is the footer dots' centre line, whatever the phone.
+function glGearAlign(root) {
+  const g = (root || document).querySelector(".glance .gl-gearrow"), d = (root || document).querySelector(".glance .gl-dots button");
+  if (!g || !d) return;
+  g.style.transform = "translateX(-50%)";
+  const b = g.querySelector("b");
+  if (!b) return;
+  const gb = b.getBoundingClientRect(), db = d.getBoundingClientRect();
+  const dy = (db.top + db.height / 2) - (gb.top + gb.height / 2);
+  if (Math.abs(dy) > 0.2 && Math.abs(dy) < 40) g.style.transform = `translateX(-50%) translateY(${dy.toFixed(1)}px)`;
+}
 function glKeyFit(root) {
   const f = (root || document).querySelector(".glance .gl-keybar");
   if (!f) return;
@@ -6000,6 +6011,7 @@ function glFit(root) {
   for (const row of root.querySelectorAll(".gl-odo, .gl-trace-h, .gl-battbar-top, .gl-power-top")) glFitRow(row);
   glFootFit(root);
   glKeyFit(root);
+  glGearAlign(root);
 }
 
 document.addEventListener("click", (e) => {
