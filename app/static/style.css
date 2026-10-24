@@ -3174,3 +3174,4 @@ main > .card { max-width: 100%; }
 .gl-whbar i.mk { opacity: 1; background: #fff; box-shadow: 0 0 8px #fff; }
 .gl-whbar-s { display: flex; justify-content: space-between; font: 600 9px ui-monospace, Menlo, monospace; color: #6f7f94; margin-top: 2px; }
 .gl-dim .gl-whbar i.on { box-shadow: none; }
+.gl-rmix-mid svg, .gl-dialbox svg { overflow: visible; }

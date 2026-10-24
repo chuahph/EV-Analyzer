@@ -5084,6 +5084,20 @@ function glGauge3D(spd, col, nw, odo, needle) {
       rimFx += `<line x1="${(100 + r0 * Math.cos(a)).toFixed(1)}" y1="${(100 + r0 * Math.sin(a)).toFixed(1)}" x2="${(100 + r1 * Math.cos(a)).toFixed(1)}" y2="${(100 + r1 * Math.sin(a)).toFixed(1)}" stroke="${glSkinColour(x)}" stroke-width="${on ? 1.7 : 1.1}" stroke-linecap="round" opacity="${on ? 1 : .22}"/>`;
     }
     const glowA = spd != null && spd > 0.5 ? Math.min(1, .35 + v / MAXV * .65) : .25;
+    // Four corner curves hugging the bezel, a double line in each corner. They
+    // lengthen from the sides toward the top and bottom as the speed rises,
+    // in the speed's colour.
+    const frac = spd != null ? Math.min(1, v / MAXV) : 0;
+    for (const [mx, my] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      for (const [rr, w] of [[103.8, 2.2], [108, 1.2]]) {
+        const A0c = 22, A1c = 68, A = A0c + (A1c - A0c) * frac;
+        const pt = (deg) => { const t = deg * Math.PI / 180; return [(100 + mx * rr * Math.cos(t)).toFixed(1), (100 + my * rr * Math.sin(t)).toFixed(1)]; };
+        const sw = mx * my > 0 ? 1 : 0;
+        const [x0, y0] = pt(A0c), [x1, y1] = pt(A1c), [xa, ya] = pt(A);
+        rimFx += `<path d="M${x0} ${y0} A${rr} ${rr} 0 0 ${sw} ${x1} ${y1}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" opacity=".16"/>`;
+        if (frac > 0.01) rimFx += `<path d="M${x0} ${y0} A${rr} ${rr} 0 0 ${sw} ${xa} ${ya}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" filter="url(#${uid}-glow)"/>`;
+      }
+    }
     rimFx = `<circle cx="100" cy="100" r="98" fill="none" stroke="${col}" stroke-width="1.4" opacity="${glowA.toFixed(2)}" filter="url(#${uid}-glow)"/>` + rimFx;
   }
   const odoDigits = odo != null ? String(Math.round(odo)).split("") : [];
