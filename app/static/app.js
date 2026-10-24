@@ -5490,7 +5490,7 @@ function glAltPage(skin, c) {
     const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
-      <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}${glUnder(spd, nw, t, c.hist)}</div>
+      <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}</div>
       <div class="gl-rmix-col">${stat("batt used %", c.usedPct != null ? n(c.usedPct, 1) : "—")}
         ${stat("net used kWh", t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—")}
         ${stat("top km/h", t && t.max_speed_kmh != null ? n(t.max_speed_kmh) : lt && lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—")}</div>

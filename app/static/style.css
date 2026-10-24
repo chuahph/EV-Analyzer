@@ -3195,3 +3195,4 @@ main > .card { max-width: 100%; }
 .gl-under-g b { padding: 0 3px; }
 .gl-under-bar { flex: 1 1 auto; }
 .gl-rmix-mid { padding-bottom: clamp(18px, 5.6vh, 28px); }
+.gl-rmix-mid { padding-bottom: 0; }
