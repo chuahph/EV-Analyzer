@@ -3208,3 +3208,7 @@ main > .card { max-width: 100%; }
 .gl-gearrow { bottom: -17px; gap: clamp(8px, 1.9vw, 16px); font-size: clamp(15px, 4.4vh, 22px); }
 .gl-gearrow b { padding: 2px 8px; }
 .gl-gearrow { gap: clamp(5px, 1.2vw, 11px); }
+/* Key-info strip a little lower, clear of the speed line above it; P R N D level with the footer dots. */
+.gl-keybar { margin-top: 6px; }
+.gl-gearrow { bottom: -29px; }
+@media (orientation: landscape) and (max-height: 300px) { .gl-keybar { margin-top: 0; } }
