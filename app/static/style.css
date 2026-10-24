@@ -3196,3 +3196,11 @@ main > .card { max-width: 100%; }
 .gl-under-bar { flex: 1 1 auto; }
 .gl-rmix-mid { padding-bottom: clamp(18px, 5.6vh, 28px); }
 .gl-rmix-mid { padding-bottom: 0; }
+/* P R N D under the round gauge, in the free space (no change to the gauge's size). */
+.gl-gearrow { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: clamp(10px, 3vw, 22px); pointer-events: none;
+  font: 700 clamp(12px, 3.4vh, 17px) system-ui, sans-serif; letter-spacing: .1em; line-height: 1; }
+.gl-gearrow b { color: #3b4757; padding: 2px 6px; border: 1px solid transparent; border-radius: 4px; }
+.gl-gearrow b.on { color: #22d3ee; border-color: #22d3ee; text-shadow: 0 0 8px #22d3ee; box-shadow: 0 0 8px rgba(34,211,238,.4); }
+.gl-dim .gl-gearrow b.on { box-shadow: none; text-shadow: none; }
+.gl-gearrow { bottom: -3px; gap: clamp(4px, 1.1vw, 9px); font-size: clamp(11px, 3vh, 15px); }
+.gl-gearrow b { padding: 1px 5px; }
