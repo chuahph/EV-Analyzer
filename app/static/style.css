@@ -3127,3 +3127,10 @@ main > .card { max-width: 100%; }
   .gl-rng-side .gl-big strong { font-size: clamp(20px, 11vh, 40px); }
   .gl-big span { font-size: clamp(9px, 3vh, 13px); }
 }
+
+/* Range design: calmer type, the figures no longer crowd their boxes. */
+.gl-rng-side .gl-big span { font-size: clamp(9px, 2.6vh, 13px); letter-spacing: .05em; white-space: nowrap; }
+.gl-rng-side .gl-big strong { font-size: clamp(22px, min(10vh, 5vw), 46px); }
+.gl-rng-side .gl-big .gl-ic { width: 1.2em; height: 1.2em; }
+.gl-big strong { font-size: clamp(22px, min(12vh, 6vw), 56px); }
+.gl-big span { font-size: clamp(10px, 3vh, 15px); }
