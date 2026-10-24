@@ -4570,6 +4570,25 @@ function glTrace(hist) {
 // Wh/km over the last three minutes, each point averaged over the 15 s
 // before it (energy over distance, not a one-second ratio), against the rated
 // line: green under it, amber over it.
+// Wh/km as a bar of LED dots: low on the left, high on the right, green up to
+// the rated figure, amber to one and a half times it, red beyond. The lit
+// part is the figure now; a white tick marks the drive's highest.
+function glWhBar(now, rated, max) {
+  const R = rated || 150, N = 36, TOP = R * 2.5;
+  const lit = now != null ? Math.max(0, Math.min(N, Math.round(Math.max(0, now) / TOP * N))) : 0;
+  const mk = max != null ? Math.max(0, Math.min(N - 1, Math.round(max / TOP * N) - 1)) : -1;
+  let dots = "";
+  for (let i = 0; i < N; i++) {
+    const v = (i + 0.5) / N * TOP;
+    const c = v <= R ? "#2ee86a" : v <= R * 1.5 ? "#ffb020" : "#ff3b3b";
+    dots += `<i class="${i < lit ? "on" : ""}${i === mk ? " mk" : ""}" style="--c:${c}"></i>`;
+  }
+  const n0 = (v) => Math.round(v).toLocaleString("en-US");
+  return `<div class="gl-trace"><div class="gl-trace-h"><span>Wh/km<i data-opt="1"> · low to high</i></span>
+    <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${n0(now)}</strong><i data-opt="2"> now</i> · ` : ""}<i data-opt="3">rated </i>${n0(R)}</span></div>
+    <div class="gl-whbar">${dots}</div></div>`;
+}
+
 function glEffTrace(hist, rated) {
   const W = 300, H = 92, R = rated || 150;
   const n = (v) => Math.round(v).toLocaleString("en-US");
@@ -4825,6 +4844,14 @@ function glLiveApply(L) {
   if (Date.now() - (glLiveState.saved || 0) > 5000) {
     glLiveState.saved = Date.now();
     try { localStorage.setItem("glLive", JSON.stringify({ at: Date.now(), L })); } catch (_) { /* private mode */ }
+  }
+  // The highest Wh/km of this drive, from moments at 30 km/h or more (below that
+  // a few kW over a crawl reads as thousands).
+  if (L.trip && L.trip.start_time !== glLiveState.maxKey) { glLiveState.maxKey = L.trip.start_time; glLiveState.maxWh = null; }
+  if (!L.trip) { glLiveState.maxKey = null; glLiveState.maxWh = null; }
+  if (nw.power_kw != null && nw.power_kw > 0 && (+nw.speed_kmh || 0) >= 30 && L.trip) {
+    const w = nw.power_kw * 1000 / nw.speed_kmh;
+    if (glLiveState.maxWh == null || w > glLiveState.maxWh) glLiveState.maxWh = w;
   }
   if (nw.power_kw != null) {
     const kw = nw.power_kw;
@@ -5594,6 +5621,8 @@ function renderGlance(d) {
         ? t.regen_kwh / (t.energy_kwh + t.regen_kwh) * 100 : null;
       const kwMin = -60, kwMax = 150, zero = -kwMin / (kwMax - kwMin) * 100;
       const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
+      const packKwh0 = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+      const usedPct0 = Math.max(+t.soc_used || 0, packKwh0 && t.energy_kwh > 0 ? t.energy_kwh / packKwh0 * 100 : 0);
       const powerBar = `<div class="gl-power">
           <div class="gl-power-top"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span>
             <strong class="${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></strong></div>
@@ -5603,12 +5632,12 @@ function renderGlance(d) {
             <b style="left:${zero.toFixed(1)}%"></b></div>
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           <div class="gl-minis">
-            <div class="gl-mini"><span data-short="Range">Est. range</span>
-              <div><strong>${rangeHere != null ? n(rangeHere) : "—"}<small>km</small></strong>
-              <em>${nw.range_km != null ? `rated ${n(nw.range_km)}` : ""}</em></div></div>
-            <div class="gl-mini regen"><span>Regen</span>
-              <div><strong>${t.regen_kwh != null ? n(t.regen_kwh, 2) : "—"}<small>kWh</small></strong>
-              <em>${regenPct != null ? `${n(regenPct)}%` : ""}</em></div></div>
+            <div class="gl-mini"><span data-short="Batt">Batt used</span>
+              <div><strong>${n(usedPct0, 1)}<small>%</small></strong>
+              <em>${t.regen_kwh != null ? `regen ${n(t.regen_kwh, 2)}` : ""}</em></div></div>
+            <div class="gl-mini regen"><span data-short="Net use">Net use</span>
+              <div><strong>${t.energy_kwh != null ? n(t.energy_kwh, 2) : "—"}<small>kWh</small></strong>
+              <em>${regenPct != null ? `${n(regenPct)}% back` : ""}</em></div></div>
           </div>
         </div>`;
       // The car's battery % moves in whole steps, which barely register on a short
@@ -5628,14 +5657,14 @@ function renderGlance(d) {
             ${tile("dist", "km", n(t.distance_km, 1))}
             ${tile("time", "min", n(t.duration_min))}
             ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
-            ${tile("whkm", "Wh/km", n(tw), twTone)}
+            ${tile("whkm", "Max Wh/km", glLiveState.maxWh != null ? n(glLiveState.maxWh) : "—", "")}
           </div>
           <div class="gl-odo"><span>Odo km</span>
             <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
         </div>`,
         glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
         `${powerBar}
-         ${glEffTrace(glLiveState.hist, rated)}
+         ${glWhBar(inst && inst.whkm != null ? inst.whkm : null, rated, glLiveState.maxWh)}
          ${battBar}`,
         foot);
     },

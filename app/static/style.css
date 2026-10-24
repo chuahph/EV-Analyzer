@@ -3166,3 +3166,11 @@ main > .card { max-width: 100%; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(2) { --ac: #a78bfa; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(3) { --ac: #f59e0b; }
 .gl-ladder .gl-ltop { font-size: clamp(14px, 4.4vh, 21px); }
+
+/* Wh/km as a bar of LED dots (Cockpit): low on the left, high on the right. */
+.gl-whbar { flex: 1 1 auto; min-height: 14px; display: flex; gap: 2px; align-items: stretch; margin-top: 4px; }
+.gl-whbar i { flex: 1 1 0; border-radius: 2px; background: var(--c); opacity: .2; }
+.gl-whbar i.on { opacity: 1; box-shadow: 0 0 6px var(--c); }
+.gl-whbar i.mk { opacity: 1; background: #fff; box-shadow: 0 0 8px #fff; }
+.gl-whbar-s { display: flex; justify-content: space-between; font: 600 9px ui-monospace, Menlo, monospace; color: #6f7f94; margin-top: 2px; }
+.gl-dim .gl-whbar i.on { box-shadow: none; }
