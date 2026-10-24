@@ -3161,3 +3161,4 @@ main > .card { max-width: 100%; }
 .gl-led-segs i:not(.on):not(.mid) { background: color-mix(in srgb, var(--c, #123) 26%, #070b11); }
 .gl-led-segs i.mid { flex: 0 0 3px; background: #e8fbff; box-shadow: 0 0 8px #fff; border-radius: 2px; }
 .gl-ladder .gl-led-segs { gap: 2px; }
+.gl-ladder .gl-led-scale em { white-space: nowrap; }

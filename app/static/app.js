@@ -5144,6 +5144,21 @@ function glLadder(kind, c) {
     for (let i = 0; i < N; i++) segs += `<i class="${i < lit ? "on" : ""}" style="--c:${glSkinColour((i + 0.5) / N * 160)}"></i>`;
     scale = "<em>160</em><em>120</em><em>80</em><em>40</em><em>0</em>";
     read = c.spd != null ? `${Math.round(c.spd)}<small>km/h</small>` : "—";
+  } else if (kind === "whbat") {
+    // Half and half: Wh/km fills upward in the top half (green under rated,
+    // amber, red); the battery fills upward in the bottom half.
+    const H = 12, R = c.rated || 150, w = c.nowWh != null ? c.nowWh : c.whk, pc = c.pct;
+    title = "Wh/km";
+    const up = w != null ? Math.max(1, Math.min(H, Math.round(Math.max(0, w) / 300 * H))) : 0;
+    const bt = pc != null ? Math.max(0, Math.min(H, Math.round(pc / 100 * H))) : 0;
+    const wCol = (k) => { const v = (k + 0.5) / H * 300; return v <= R ? "#2ee86a" : v <= R * 1.5 ? "#ffb020" : "#ff3b3b"; };
+    const bCol = (k) => { const v = (k + 0.5) / H * 100; return v < 20 ? "#ff3b3b" : v < 35 ? "#ff8a1f" : v < 55 ? "#ffe03a" : "#2ee86a"; };
+    for (let k = 0; k < H; k++) segs += `<i class="${k < bt ? "on" : ""}" style="--c:${bCol(H - 1 - k)}"></i>`;
+    segs += '<i class="mid"></i>';
+    for (let k = 0; k < H; k++) segs += `<i class="${k < up ? "on" : ""}" style="--c:${wCol(k)}"></i>`;
+    scale = "<em>300</em><em>150</em><em>0|100%</em><em>50%</em><em>0%</em>";
+    read = w != null ? `${c.n(w)}<small>Wh/km</small>` : "—";
+    sub = pc != null ? `battery ${c.n(pc, 0)}%` : "";
   } else if (kind === "flow") {
     // Half and half: power going out fills upward from the middle line, regen
     // coming back fills downward from it. Unlit segments keep their colour, dim.
@@ -5405,7 +5420,7 @@ function glAltPage(skin, c) {
     const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
-      <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whkm", { ...c, whk })}</div>
+      <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}</div>
       <div class="gl-rmix-col">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km", whk != null ? n(whk) : "—", t ? twTone : "")}
         ${stat("battery %", pct != null ? n(pct, 0) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
     </div>`;
