@@ -5089,12 +5089,12 @@ function glGauge3D(spd, col, nw, odo, needle) {
     // in the speed's colour.
     const frac = spd != null ? Math.min(1, v / MAXV) : 0;
     for (const [mx, my] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-      for (const [rr, w] of [[103.8, 2.2], [108, 1.2]]) {
-        const A0c = 22, A1c = 68, A = A0c + (A1c - A0c) * frac;
+      for (const [rr, w] of [[104.5, 3.6], [110, 1.9]]) {
+        const A0c = 8, A1c = 82, A = A0c + (A1c - A0c) * frac;
         const pt = (deg) => { const t = deg * Math.PI / 180; return [(100 + mx * rr * Math.cos(t)).toFixed(1), (100 + my * rr * Math.sin(t)).toFixed(1)]; };
         const sw = mx * my > 0 ? 1 : 0;
         const [x0, y0] = pt(A0c), [x1, y1] = pt(A1c), [xa, ya] = pt(A);
-        rimFx += `<path d="M${x0} ${y0} A${rr} ${rr} 0 0 ${sw} ${x1} ${y1}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" opacity=".16"/>`;
+        rimFx += `<path d="M${x0} ${y0} A${rr} ${rr} 0 0 ${sw} ${x1} ${y1}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" opacity=".2"/>`;
         if (frac > 0.01) rimFx += `<path d="M${x0} ${y0} A${rr} ${rr} 0 0 ${sw} ${xa} ${ya}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" filter="url(#${uid}-glow)"/>`;
       }
     }
@@ -5125,7 +5125,7 @@ function glGauge3D(spd, col, nw, odo, needle) {
     <line x1="100" y1="100" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${col}" stroke-width="1.2" stroke-linecap="round"/>
     <circle cx="100" cy="100" r="9" fill="url(#${uid}-bz)" stroke="#000" stroke-width=".8"/>
     <circle cx="100" cy="100" r="3.2" fill="#0a0f16"/>`;
-  return `<svg viewBox="0 0 200 206" role="img" aria-label="Speed ${num} km/h">
+  return `<svg viewBox="-14 -14 228 232" role="img" aria-label="Speed ${num} km/h">
     <defs>
       <linearGradient id="${uid}-bz" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#e3eaf4"/><stop offset=".22" stop-color="#7c8898"/><stop offset=".5" stop-color="#1b232f"/>
