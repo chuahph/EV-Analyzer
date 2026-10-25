@@ -4986,11 +4986,11 @@ function glAutoLive(d) {
 // a huge speed, the energy flow, or the trip in big figures. Swipe left or
 // right on the Live page, or tap the dots.
 const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph", "Digital Mix", "Power", "Efficiency"];
-// Two rows of designs. Up and down: the MIX designs, each with the odometer
-// and several readings together, in analogue or digital style. Left and
-// right: ONE reading at a time, big, and never the odometer.
-const GL_COMBO = [0, 8, 12, 7, 9, 2, 11];     // Cockpit, Round Mix, Digital Mix, Mix, Stack, Energy, Graph
-const GL_SINGLE = [1, 5, 4, 10, 6, 3, 13, 14]; // HUD, Dial, Night, Lines, Range, Trip, Power, Efficiency
+// Two rows of designs. Up and down: the three GAUGE designs, each with the
+// odometer, a dial or ring and several readings together. Left and right: the
+// rest, one reading or one theme at a time.
+const GL_COMBO = [0, 8, 5];     // Cockpit, Round Mix, Dial
+const GL_SINGLE = [1, 4, 10, 6, 3, 13, 14, 12, 7, 9, 2, 11]; // HUD, Night, Lines, Range, Trip, Power, Efficiency, Digital Mix, Mix, Stack, Energy, Graph
 let glLiveSkin = 0;
 function glSkinSet(id, from) {
   glLiveSkin = GL_SKINS[id] ? id : 0;
