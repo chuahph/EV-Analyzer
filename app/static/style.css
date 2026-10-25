@@ -3277,3 +3277,6 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-kb b { opacity: 1; }
 .gl-dim .gl-gearrow b:not(.on) { opacity: .3; }
 .gl-dim .gl-gearrow b.on { opacity: .8; }
+/* Round Mix's two bars: their four labels in ordinary capitals (Power, Regen,
+   Efficiency, Battery), not all capitals. */
+.gl-lad-flow > span, .gl-lad-whbat > span { text-transform: none; letter-spacing: .03em; }

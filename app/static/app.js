@@ -5253,12 +5253,12 @@ function glLadder(kind, c) {
     topTone = w == null ? "#7e93ab" : w <= R ? "#2ee86a" : w <= R * 1.5 ? "#ffb020" : "#ff3b3b";
     read = pc != null ? `${c.n(pc, 0)}<small>%</small>` : "—";
     readTone = pc == null ? "#7e93ab" : bCol(Math.round(pc / 100 * H - 0.5));
-    sub = "battery";
+    sub = "Battery";
   } else if (kind === "flow") {
     // Half and half: power going out fills upward from the middle line, regen
     // coming back fills downward from it. Unlit segments keep their colour, dim.
     const H = 12, kw = c.kw;
-    title = kw != null && kw < 0 ? "Regen" : "Power";
+    title = "Power";   // the kW turns green while braking; Regen has its own label below
     const up = kw != null && kw > 0 ? Math.max(1, Math.round(Math.min(150, kw) / 150 * H)) : 0;
     const dn = kw != null && kw < 0 ? Math.max(1, Math.round(Math.min(60, -kw) / 60 * H)) : 0;
     const upCol = (k) => ["#22d3ee", "#19e3c0", "#2ee86a", "#7be84a", "#c8e83a", "#ffe03a", "#ffc02a", "#ff9a1f", "#ff7a1f", "#ff5a2a", "#ff3b3b", "#ff2d72"][k];
@@ -5274,7 +5274,7 @@ function glLadder(kind, c) {
     topTone = kw == null ? "#7e93ab" : kw < 0 ? "#2ee86a" : "#e8fbff";
     read = c.regenKwh != null ? `${c.n(c.regenKwh, 2)}<small>kWh</small>` : "—";
     readTone = "#2ee86a";
-    sub = "regen back";
+    sub = "Regen";
   } else if (kind === "regen") {
     title = "Regen";
     const kw = c.kw, back = kw != null && kw < 0 ? -kw : 0;
@@ -5308,7 +5308,7 @@ function glLadder(kind, c) {
     scale = "<em>300</em><em>200</em><em>100</em><em>0</em>";
     read = w != null ? `${c.n(w)}` : "—";
   }
-  return `<div class="gl-ladder"><span>${title}</span>${topRead ? `<b class="gl-ltop" style="color:${topTone}">${topRead}</b>` : ""}<div class="gl-led-bar"><div class="gl-led-scale">${scale}</div><div class="gl-led-segs">${segs}</div></div><b${readTone ? ` style="color:${readTone}"` : ""}>${read}</b>${sub ? `<em class="gl-lsub">${sub}</em>` : ""}</div>`;
+  return `<div class="gl-ladder gl-lad-${kind}"><span>${title}</span>${topRead ? `<b class="gl-ltop" style="color:${topTone}">${topRead}</b>` : ""}<div class="gl-led-bar"><div class="gl-led-scale">${scale}</div><div class="gl-led-segs">${segs}</div></div><b${readTone ? ` style="color:${readTone}"` : ""}>${read}</b>${sub ? `<em class="gl-lsub">${sub}</em>` : ""}</div>`;
 }
 // Under a round gauge: the gear selector and a colour LED speed strip with the
 // drive's top speed marked, filling the space below the dial.
