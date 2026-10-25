@@ -4983,14 +4983,14 @@ function glAutoLive(d) {
 
 // Swipeable Live designs. 0 is the Cockpit (the page this app has always had);
 // the others show the same readings differently, each for a different glance:
-// a huge speed, the energy flow, or the trip in big figures. Swipe up or
-// down on the Live page, or tap the dots.
+// a huge speed, the energy flow, or the trip in big figures. Swipe left or
+// right on the Live page, or tap the dots.
 const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph", "Digital Mix", "Power", "Efficiency"];
-// Only the MIX designs are offered, each with the odometer and several
-// readings together, in analogue or digital style; swipe up or down between
-// them. The one-reading designs (HUD, Dial, Night, Lines, Range, Trip, Power,
-// Efficiency) are kept in glAltSkin but no longer offered.
+// Two rows of designs. Up and down: the MIX designs, each with the odometer
+// and several readings together, in analogue or digital style. Left and
+// right: ONE reading at a time, big, and never the odometer.
 const GL_COMBO = [0, 8, 12, 7, 9, 2, 11];     // Cockpit, Round Mix, Digital Mix, Mix, Stack, Energy, Graph
+const GL_SINGLE = [1, 5, 4, 10, 6, 3, 13, 14]; // HUD, Dial, Night, Lines, Range, Trip, Power, Efficiency
 let glLiveSkin = 0;
 function glSkinSet(id, from) {
   glLiveSkin = GL_SKINS[id] ? id : 0;
@@ -5002,16 +5002,19 @@ function glSkinSet(id, from) {
   const pageEl = from && document.querySelector("#glance .gl-alt");
   if (pageEl) pageEl.classList.add("gl-in-" + from);
 }
-// Up or down walks the mix designs, round and round.
-function glSkinStep(dir) {
-  const at = GL_COMBO.indexOf(glLiveSkin);
-  glSkinSet(at < 0 ? GL_COMBO[0] : GL_COMBO[(at + dir + GL_COMBO.length) % GL_COMBO.length], dir > 0 ? "b" : "t");
+// Axis "h" walks the single designs, "v" the combinations. Coming from the
+// other row, a swipe enters this one at its first design.
+function glSkinStep(axis, dir) {
+  const list = axis === "h" ? GL_SINGLE : GL_COMBO;
+  const at = list.indexOf(glLiveSkin);
+  glSkinSet(at < 0 ? list[0] : list[(at + dir + list.length) % list.length],
+    axis === "h" ? (dir > 0 ? "r" : "l") : (dir > 0 ? "b" : "t"));
 }
 const glSkinColour = (x) => (x > 140 ? "#e040fb" : x > 120 ? "#ff3b3b" : x > 100 ? "#ff8a1f"
   : x > 80 ? "#ffe03a" : x > 60 ? "#2ee86a" : x > 30 ? "#19e3f5" : "#3d7bff");
 const glSkinDots = () => {
   const dot = (id, cls) => `<button type="button" class="${cls}${id === glLiveSkin ? " on" : ""}" data-gl-skin="${id}" title="${GL_SKINS[id]}" aria-label="${GL_SKINS[id]}"></button>`;
-  return `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_COMBO.map((id) => dot(id, "cb")).join("")}</span>`;
+  return `<span class="gl-dots" role="tablist" aria-label="Live design">${GL_SINGLE.map((id) => dot(id, "")).join("")}<i></i>${GL_COMBO.map((id) => dot(id, "cb")).join("")}</span>`;
 };
 
 // Every design opens with the same slim strip of the things worth a glance
@@ -5561,8 +5564,7 @@ function glAltPage(skin, c) {
 const glPref = (k, fallback) => { try { return localStorage.getItem(k) || fallback; } catch (_) { return fallback; } };
 const glSave = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } };
 let glanceTab = glPref("glanceTab", "drive");
-// A one-reading design saved from before falls back to the Cockpit.
-glLiveSkin = GL_COMBO.includes(+glPref("glLiveSkin", "0")) ? +glPref("glLiveSkin", "0") : 0;
+glLiveSkin = GL_SKINS[+glPref("glLiveSkin", "0")] ? +glPref("glLiveSkin", "0") : 0;
 
 function renderGlance(d) {
   const el = document.getElementById("glance");
@@ -7313,8 +7315,8 @@ showHome();
   }, { passive: false });
 })();
 
-// Swipe up or down across the Live page to change its design (left and
-// right do nothing). A swipe has to be mostly
+// Swipe across the Live page to change its design: left or right for the
+// single designs, up or down for the combinations. A swipe has to be mostly
 // along one axis and a good length, and not start at a screen edge (where the
 // browser's own back and home gestures live).
 {
@@ -7331,7 +7333,8 @@ showHome();
     const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = Date.now() - sw.t;
     sw = null;
     if (dt >= 900) return;
-    if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) glSkinStep(dy < 0 ? 1 : -1);
+    if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.6) glSkinStep("h", dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) glSkinStep("v", dy < 0 ? 1 : -1);
   }, { passive: true });
   document.addEventListener("pointercancel", () => { sw = null; }, { passive: true });
 }
