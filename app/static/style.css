@@ -1641,8 +1641,9 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
     radial-gradient(60% 70% at 50% 38%, #142234 0%, transparent 70%),
     radial-gradient(120% 100% at 50% 120%, #0b1320 0%, var(--bg) 60%);
   overflow: auto;
-  padding: max(8px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
-           max(8px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  --sl: max(14px, env(safe-area-inset-left)); --sr: max(14px, env(safe-area-inset-right));
+  padding: max(8px, env(safe-area-inset-top)) var(--sr)
+           max(8px, env(safe-area-inset-bottom)) var(--sl);
   flex-direction: column; gap: 8px;
 }
 body.glance-on .glance { display: flex; justify-content: center; align-items: center; }
@@ -2042,6 +2043,17 @@ body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max
     radial-gradient(120% 100% at 50% 50%, #0b1220 0%, #05070c 75%);
 }
 .gl-frame { position: absolute; inset: -2px; pointer-events: none; z-index: 0; }
+/* Sideways on a phone the frame and its backdrop run on into the side safe
+   areas (the camera cut-out and rounded corners), stopping 4px from the
+   screen edge, so the view fills the screen; the readings and tabs stay
+   inside the safe area. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .glance > .gl-main { --xl: calc(var(--sl) - 4px); --xr: calc(var(--sr) - 4px); }
+  .glance > .gl-main::before { left: calc(-1 * var(--xl)); right: calc(-1 * var(--xr)); }
+  .glance > .gl-main::after { left: calc(-1px - var(--xl)); right: calc(-1px - var(--xr)); }
+  .glance > .gl-main > .gl-frame { left: calc(-2px - var(--xl)); right: calc(-2px - var(--xr)); }
+  .glance > .gl-main { padding-left: max(10px, calc(26px - var(--xl))) !important; padding-right: max(10px, calc(26px - var(--xr))) !important; }
+}
 .gl-main > :not(.gl-frame) { position: relative; z-index: 1; }
 .gl-frame .c { position: absolute; width: 150px; height: 96px; display: block;
   filter: drop-shadow(0 4px 6px rgba(0,0,0,.7)); }

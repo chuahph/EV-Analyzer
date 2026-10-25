@@ -89,7 +89,7 @@ with sync_playwright() as p:
         bo=Bo if mode=="app" else 0
         pg.set_viewport_size({"width":W,"height":h})
         pad=f"max(8px,0px) max(14px,{R}px) max(8px,{bo}px) max(14px,{L}px)"
-        pg.evaluate("(css)=>{let s=document.getElementById('safe-emu');if(!s){s=document.createElement('style');s.id='safe-emu';document.head.appendChild(s);} s.textContent=css;}", f".glance{{padding:{pad} !important}}")
+        pg.evaluate("(css)=>{let s=document.getElementById('safe-emu');if(!s){s=document.createElement('style');s.id='safe-emu';document.head.appendChild(s);} s.textContent=css;}", f".glance{{padding:{pad} !important; --sl:max(14px,{L}px) !important; --sr:max(14px,{R}px) !important}}")
         pg.wait_for_timeout(500)
         return f"{name} {W}x{h} {mode}", bo
     combos=[(d,m) for d in DEV for m in ("app","safari") if not ONLY or ONLY in d[0]]
