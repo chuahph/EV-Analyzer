@@ -3265,11 +3265,11 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-rmix-col .gl-hud-stat::before, .gl-dim .gl-rmix-col .gl-hud-stat::after { opacity: .15; }
 .gl-dim .gl-rmix-col .gl-hud-stat strong { opacity: .8; }
 .gl-dim .gl-rmix-col .gl-hud-stat span { opacity: .5; }
-.gl-dim .gl-ladder > span, .gl-dim .gl-ladder .gl-led-scale, .gl-dim .gl-lsub { opacity: .22; }
-.gl-dim .gl-led-segs i:not(.on):not(.mid) { opacity: .18; }
-.gl-dim .gl-led-segs i.on { opacity: .4; }
-.gl-dim .gl-led-segs i.mid { opacity: .5; box-shadow: none; }
-.gl-dim .gl-ladder b { opacity: .6; }
+.gl-dim .gl-ladder > span, .gl-dim .gl-ladder .gl-led-scale, .gl-dim .gl-lsub { opacity: .18; }
+.gl-dim .gl-led-segs i:not(.on):not(.mid) { opacity: .14; }
+.gl-dim .gl-led-segs i.on { opacity: .28; }
+.gl-dim .gl-led-segs i.mid { opacity: .3; box-shadow: none; }
+.gl-dim .gl-ladder b { opacity: .5; }
 .gl-dim .gl-kb { opacity: .4; }
 .gl-dim .gl-kb b { opacity: 1; }
 .gl-dim .gl-gearrow b:not(.on) { opacity: .3; }
