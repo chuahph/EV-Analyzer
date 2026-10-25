@@ -76,6 +76,13 @@ SPOOL_MAX_BATCHES = int(os.environ.get("SPOOL_MAX_BATCHES", "20000"))
 # to ZMQ, and POST_TIMEOUT is 30 seconds, so a long backlog drains steadily
 # over many cycles rather than stalling the process on one.
 SPOOL_DRAIN_MAX = int(os.environ.get("SPOOL_DRAIN_MAX", "5"))
+# After the app has failed a full round of retries, new batches go straight to
+# the spool for this long instead of trying again. Each failed round holds the
+# loop for up to POST_RETRIES x POST_TIMEOUT plus the waits between (about
+# 100 s), and an app that times out on every batch would otherwise let the
+# car's records pile up unread in ZMQ, which drops them once its queue is full.
+DOWN_PAUSE_SECONDS = float(os.environ.get("DOWN_PAUSE_SECONDS", "30"))
+_down_until = 0.0
 # Drain even when the car is silent: a backlog written during an outage would
 # otherwise sit there until the next record arrives, which for a sleeping car
 # is the next morning.
@@ -166,8 +173,11 @@ def send(records: list) -> None:
 
 def post(records: list) -> bool:
     """POST one batch, retrying briefly. False means it did not get through."""
+    global _down_until
     if not records or not APP_URL:
         return True
+    if time.monotonic() < _down_until:
+        return False      # still in the pause after a failed round: spool it
     url = f"{APP_URL}/api/telemetry"
     params = {"key": SYNC_KEY} if SYNC_KEY else {}
     for attempt in range(1, POST_RETRIES + 1):
@@ -191,6 +201,7 @@ def post(records: list) -> bool:
         time.sleep(2 ** attempt)
     LOG.warning("app unreachable after %d attempts; spooling %d record(s)",
                 POST_RETRIES, len(records))
+    _down_until = time.monotonic() + DOWN_PAUSE_SECONDS
     return False
 
 

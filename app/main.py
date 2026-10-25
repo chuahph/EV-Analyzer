@@ -315,15 +315,22 @@ def login_page() -> HTMLResponse:
 # the passcode is only a matter of how fast the host answers.
 LOGIN_MAX_FAILS = 10
 LOGIN_WINDOW_SEC = 15 * 60
+# And from everyone together: the per-client count can only be as sure as the
+# client's address, so this one cap holds whatever addresses a guesser claims.
+# One user means no one else is ever caught by it; a signed-in phone keeps its
+# cookie and is not asked at all.
+LOGIN_MAX_FAILS_ALL = 30
 _login_fails: dict[str, list[float]] = {}
+_login_fails_all: list[float] = []
 
 
 def _client_id(request: Request) -> str:
-    # Behind Render's proxy the peer is the proxy; the first forwarded hop is
-    # the browser.
+    # Behind Render's proxy the peer is the proxy. The LAST forwarded hop is
+    # the one the proxy itself added; the first is whatever the sender wrote,
+    # so keying on it let a guesser claim a new address on every try.
     fwd = request.headers.get("x-forwarded-for", "")
-    return (fwd.split(",")[0].strip() if fwd else
-            (request.client.host if request.client else "?"))
+    hops = [h.strip() for h in fwd.split(",") if h.strip()]
+    return hops[-1] if hops else (request.client.host if request.client else "?")
 
 
 @app.post("/login")
@@ -333,7 +340,8 @@ def login_submit(request: Request, passcode: str = Form("")):
     now = _time.monotonic()
     who = _client_id(request)
     recent = [t for t in _login_fails.get(who, []) if now - t < LOGIN_WINDOW_SEC]
-    if len(recent) >= LOGIN_MAX_FAILS:
+    _login_fails_all[:] = [t for t in _login_fails_all if now - t < LOGIN_WINDOW_SEC]
+    if len(recent) >= LOGIN_MAX_FAILS or len(_login_fails_all) >= LOGIN_MAX_FAILS_ALL:
         return HTMLResponse(
             LOGIN_HTML.replace("{err}", '<div class="err">Too many wrong attempts — '
                                         'wait 15 minutes.</div>'),
@@ -342,15 +350,24 @@ def login_submit(request: Request, passcode: str = Form("")):
     if expected and secrets.compare_digest(passcode.strip(), expected):
         _login_fails.pop(who, None)
         resp = RedirectResponse("/", status_code=303)
+        # Secure on https (Render's proxy says so in x-forwarded-proto), so
+        # the cookie never travels over a plain http request; left off for a
+        # local http run, where the browser would otherwise drop it.
+        https = (request.headers.get("x-forwarded-proto", request.url.scheme)
+                 .split(",")[0].strip() == "https")
         resp.set_cookie(
             AUTH_COOKIE, _auth_token(expected),
-            max_age=60 * 60 * 24 * 90, httponly=True, samesite="lax",
+            max_age=60 * 60 * 24 * 90, httponly=True, samesite="lax", secure=https,
         )
         return resp
     recent.append(now)
     _login_fails[who] = recent
-    if len(_login_fails) > 1000:  # bounded, whatever is thrown at it
-        _login_fails.clear()
+    _login_fails_all.append(now)
+    if len(_login_fails) > 1000:
+        # Bounded, whatever is thrown at it: expired entries go, not every
+        # entry (clearing them all reset the guesser's own count too).
+        for k in [k for k, v in _login_fails.items() if now - v[-1] >= LOGIN_WINDOW_SEC]:
+            del _login_fails[k]
     return HTMLResponse(
         LOGIN_HTML.replace("{err}", '<div class="err">Wrong passcode — try again.</div>'),
         status_code=401,

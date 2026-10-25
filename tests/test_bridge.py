@@ -173,3 +173,26 @@ def test_replays_pass_unpaced():
     p = bridge.Pacer()
     r = dict(_rec(1_800_000_000.0, VehicleSpeed=5.0), isResend=True)
     assert p.pace(r) is r and p.pace(r) is r
+
+
+def test_after_a_failed_round_batches_spool_without_waiting(monkeypatch, _spool_file):
+    """An app that times out on every batch held the loop for a full round of
+    retries per batch, while the car's records piled up unread in ZMQ. After
+    one failed round, batches go straight to the spool for a short pause."""
+    calls = []
+
+    def boom(*a, **k):
+        calls.append(1)
+        raise bridge.requests.ConnectionError("down")
+
+    monkeypatch.setattr(bridge.requests, "post", boom)
+    monkeypatch.setattr(bridge.time, "sleep", lambda s: None)
+    monkeypatch.setattr(bridge, "APP_URL", "http://app")
+    monkeypatch.setattr(bridge, "_down_until", 0.0)
+    assert bridge.post([{"vin": "A"}]) is False
+    assert len(calls) == bridge.POST_RETRIES
+    assert bridge.post([{"vin": "B"}]) is False
+    assert len(calls) == bridge.POST_RETRIES      # no new attempt in the pause
+    monkeypatch.setattr(bridge, "_down_until", 0.0)
+    assert bridge.post([{"vin": "C"}]) is False
+    assert len(calls) == 2 * bridge.POST_RETRIES  # tried again once it ended

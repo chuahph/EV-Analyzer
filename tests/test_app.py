@@ -11733,6 +11733,7 @@ def test_login_stops_answering_after_repeated_wrong_passcodes():
     old = settings.app_passcode
     settings.app_passcode = "secret123"
     main_mod._login_fails.clear()
+    main_mod._login_fails_all.clear()
     try:
         with TestClient(app) as client:
             for _ in range(main_mod.LOGIN_MAX_FAILS):
@@ -11742,6 +11743,56 @@ def test_login_stops_answering_after_repeated_wrong_passcodes():
                                follow_redirects=False).status_code == 429
     finally:
         main_mod._login_fails.clear()
+        main_mod._login_fails_all.clear()
+        settings.app_passcode = old
+
+
+def test_login_limit_holds_when_the_guesser_fakes_its_address():
+    """The first X-Forwarded-For hop is whatever the sender writes. Keyed on
+    it, a new made-up address on every try meant unlimited guesses; the hop
+    the proxy adds, and a cap across all clients, hold either way."""
+    from app import main as main_mod
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = "secret123"
+    main_mod._login_fails.clear()
+    main_mod._login_fails_all.clear()
+    try:
+        with TestClient(app) as client:
+            codes = [client.post("/login", data={"passcode": "nope"},
+                                 headers={"x-forwarded-for": f"10.0.{i}.1, 203.0.113.{i % 250}"}).status_code
+                     for i in range(main_mod.LOGIN_MAX_FAILS_ALL + 5)]
+            assert codes.count(401) == main_mod.LOGIN_MAX_FAILS_ALL and codes[-1] == 429
+            # The same fake first hop with one real address: that address's own limit.
+            main_mod._login_fails.clear()
+            main_mod._login_fails_all.clear()
+            codes = [client.post("/login", data={"passcode": "nope"},
+                                 headers={"x-forwarded-for": f"10.9.{i}.1, 198.51.100.7"}).status_code
+                     for i in range(main_mod.LOGIN_MAX_FAILS + 1)]
+            assert codes[-1] == 429
+    finally:
+        main_mod._login_fails.clear()
+        main_mod._login_fails_all.clear()
+        settings.app_passcode = old
+
+
+def test_login_cookie_is_secure_over_https():
+    from app import main as main_mod
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = "secret123"
+    main_mod._login_fails.clear()
+    main_mod._login_fails_all.clear()
+    try:
+        with TestClient(app) as client:
+            r = client.post("/login", data={"passcode": "secret123"},
+                            headers={"x-forwarded-proto": "https"}, follow_redirects=False)
+            assert r.status_code == 303 and "secure" in r.headers["set-cookie"].lower()
+            r = client.post("/login", data={"passcode": "secret123"}, follow_redirects=False)
+            assert r.status_code == 303 and "secure" not in r.headers["set-cookie"].lower()
+    finally:
         settings.app_passcode = old
 
 

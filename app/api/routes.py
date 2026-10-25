@@ -1649,7 +1649,7 @@ def road_overrides(session: Session = Depends(get_session)):
 @router.api_route("/road-overrides/add", methods=["GET", "POST"])
 def road_overrides_add(
     at: str = Query(..., description="lat,lon on the road, e.g. 5.3356,100.2978"),
-    radius_m: float = Query(CITY_OVERRIDE_RADIUS_DEFAULT_M, ge=50, le=3000),
+    radius_m: float = Query(CITY_OVERRIDE_RADIUS_DEFAULT_M, ge=50, le=3000, allow_inf_nan=False),
     name: str = Query(""),
     session: Session = Depends(get_session),
 ):
@@ -7381,7 +7381,7 @@ def telegram_chat_id():
 def repair_trip_boundary(
     closed_id: int = Query(...),
     open_id: int = Query(...),
-    boundary_odo_km: float = Query(...),
+    boundary_odo_km: float = Query(..., allow_inf_nan=False),
     closed_end_time: str | None = Query(None),
     closed_end_coords: str | None = Query(None),
     apply: bool = Query(False),
@@ -7498,8 +7498,8 @@ def repair_trip_boundary(
 @router.api_route("/repair-departure-start", methods=["GET", "POST"])
 def repair_departure_start(
     drive_id: int = Query(...),
-    true_duration_min: float | None = Query(None),
-    true_wh_per_km: float | None = Query(None),
+    true_duration_min: float | None = Query(None, allow_inf_nan=False),
+    true_wh_per_km: float | None = Query(None, allow_inf_nan=False),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
@@ -7889,8 +7889,8 @@ def estimated_tails(
 @router.api_route("/repair-arrival-tail", methods=["GET", "POST"])
 def repair_arrival_tail(
     drive_id: int = Query(...),
-    true_distance_km: float = Query(...),
-    true_duration_min: float | None = Query(None),
+    true_distance_km: float = Query(..., allow_inf_nan=False),
+    true_duration_min: float | None = Query(None, allow_inf_nan=False),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
@@ -8468,8 +8468,8 @@ def _energy_basis_agreement(session: Session, vehicle: Any) -> dict[str, Any]:
 
 @router.api_route("/add-screen-reading", methods=["GET", "POST"])
 def add_screen_reading(
-    kwh: float = Query(..., gt=0),
-    pct: float = Query(..., gt=0, le=100),
+    kwh: float = Query(..., gt=0, allow_inf_nan=False),
+    pct: float = Query(..., gt=0, le=100, allow_inf_nan=False),
     session: Session = Depends(get_session),
 ):
     """Record one Since-Charge reading off the car's Energy screen.
@@ -8515,8 +8515,8 @@ def add_screen_reading(
 @router.api_route("/drop-screen-reading", methods=["GET", "POST"])
 def drop_screen_reading(
     all: bool = Query(False),
-    kwh: float | None = Query(None, description="The reading's kWh, as listed"),
-    pct: float | None = Query(None, description="The reading's %, as listed"),
+    kwh: float | None = Query(None, description="The reading's kWh, as listed", allow_inf_nan=False),
+    pct: float | None = Query(None, description="The reading's %, as listed", allow_inf_nan=False),
     session: Session = Depends(get_session),
 ):
     """Remove one screen reading by its figures, or all of them.
@@ -8890,9 +8890,9 @@ def add_car_reading(
 
 @router.get("/accuracy")
 def accuracy(
-    target_pct: float = Query(2.0, gt=0),
-    since_charge_kwh: float | None = Query(None, gt=0),
-    since_charge_km: float | None = Query(None, gt=0),
+    target_pct: float = Query(2.0, gt=0, allow_inf_nan=False),
+    since_charge_kwh: float | None = Query(None, gt=0, allow_inf_nan=False),
+    since_charge_km: float | None = Query(None, gt=0, allow_inf_nan=False),
     session: Session = Depends(get_session),
 ):
     """How far this app is from the car, decomposed, over every recorded pair.
@@ -9172,8 +9172,8 @@ def accuracy(
 @router.api_route("/set-charge-billed", methods=["GET", "POST"])
 def set_charge_billed(
     charge_id: int = Query(...),
-    kwh: float = Query(..., gt=0),
-    paid: float | None = Query(None, ge=0),
+    kwh: float = Query(..., gt=0, allow_inf_nan=False),
+    paid: float | None = Query(None, ge=0, allow_inf_nan=False),
     session: Session = Depends(get_session),
 ):
     """Record what a charger's receipt said: energy delivered, and paid.
@@ -9251,7 +9251,7 @@ def set_charge_billed(
 
 @router.get("/capacity-evidence")
 def capacity_evidence(
-    min_swing_pct: float = Query(15.0, ge=1.0, le=90.0),
+    min_swing_pct: float = Query(15.0, ge=1.0, le=90.0, allow_inf_nan=False),
     session: Session = Depends(get_session),
 ):
     """What this car's own charges say its usable pack is.
@@ -10586,7 +10586,7 @@ def energy_reconcile(session: Session = Depends(get_session)):
 @router.api_route("/repair-all", methods=["GET", "POST"])
 def repair_all(
     days: int = Query(730, ge=1, le=3650),
-    min_km: float = Query(0.02, ge=0.001),
+    min_km: float = Query(0.02, ge=0.001, allow_inf_nan=False),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
@@ -10761,8 +10761,8 @@ def _gaps_note(skipped: int, bad_blocks: int, unreachable: int = 0) -> str:
 @router.get("/trip-gaps")
 def trip_gaps(
     days: int = Query(30, ge=1, le=730),
-    min_km: float = Query(0.01, ge=0.001),
-    from_odo_km: float | None = Query(None),
+    min_km: float = Query(0.01, ge=0.001, allow_inf_nan=False),
+    from_odo_km: float | None = Query(None, allow_inf_nan=False),
     from_time: str | None = Query(None),
     session: Session = Depends(get_session),
 ):
@@ -11006,8 +11006,8 @@ def trip_gaps(
 def repair_missing_trip(
     start_time: str = Query(...),
     end_time: str = Query(...),
-    distance_km: float | None = Query(None),
-    energy_kwh: float | None = Query(None),
+    distance_km: float | None = Query(None, allow_inf_nan=False),
+    energy_kwh: float | None = Query(None, allow_inf_nan=False),
     start_location: str | None = Query(None),
     end_location: str | None = Query(None),
     apply: bool = Query(False),
@@ -11282,7 +11282,7 @@ def set_drive_place(
 @router.api_route("/repair-split-trip", methods=["GET", "POST"])
 def repair_split_trip(
     drive_id: int = Query(...),
-    boundary_odo_km: float = Query(...),
+    boundary_odo_km: float = Query(..., allow_inf_nan=False),
     first_start: str | None = Query(None),
     first_end: str | None = Query(None),
     second_start: str | None = Query(None),
@@ -11757,7 +11757,7 @@ def sync_log_summary(session: Session = Depends(get_session)):
 @router.get("/recheck-plan")
 def recheck_plan(
     days: int = Query(RECHECK_FIT_DAYS, ge=7, le=365),
-    wide_min: float = Query(40.0, gt=0),
+    wide_min: float = Query(40.0, gt=0, allow_inf_nan=False),
     max_departures: int = Query(0, ge=0),
     session: Session = Depends(get_session),
 ):
@@ -12074,8 +12074,8 @@ def polling_coverage(session: Session = Depends(get_session)):
 @router.api_route("/repair-trip-energy", methods=["GET", "POST"])
 def repair_trip_energy(
     drive_id: int = Query(...),
-    true_wh_per_km: float | None = Query(None),
-    true_consumed_pct: float | None = Query(None),
+    true_wh_per_km: float | None = Query(None, allow_inf_nan=False),
+    true_consumed_pct: float | None = Query(None, allow_inf_nan=False),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
@@ -12146,8 +12146,8 @@ def repair_trip_energy(
 @router.api_route("/repair-lost-departure", methods=["GET", "POST"])
 def repair_lost_departure(
     drive_id: int = Query(...),
-    true_distance_km: float = Query(...),
-    true_duration_min: float | None = Query(None),
+    true_distance_km: float = Query(..., allow_inf_nan=False),
+    true_duration_min: float | None = Query(None, allow_inf_nan=False),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
@@ -15095,9 +15095,9 @@ CHARGE_END_PARKED_KWH = 0.25
 @router.api_route("/telemetry/set-charge-end", methods=["GET", "POST"])
 def telemetry_set_charge_end(
     start: str = Query(..., description="the charge's start_time, as stored"),
-    soc_end: float | None = Query(None, ge=0, le=100),
-    pair_level: float | None = Query(None, ge=0, le=100),
-    pair_energy: float | None = Query(None, ge=0),
+    soc_end: float | None = Query(None, ge=0, le=100, allow_inf_nan=False),
+    pair_level: float | None = Query(None, ge=0, le=100, allow_inf_nan=False),
+    pair_energy: float | None = Query(None, ge=0, allow_inf_nan=False),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
@@ -15603,7 +15603,7 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
 @router.get("/live")
 def live_now(
     vin: str | None = Query(None),
-    capacity_kwh: float | None = Query(None, gt=20, lt=200),
+    capacity_kwh: float | None = Query(None, gt=20, lt=200, allow_inf_nan=False),
     view: int = Query(0),
     debug: int = Query(0),
 ):
@@ -15713,7 +15713,7 @@ def _record_live_view(vin: str, start: float, end: float, ns: int = 0, np_: int 
 
 
 @router.get("/live/views")
-def live_views(days: float = Query(3, gt=0, le=30), session: Session = Depends(get_session)):
+def live_views(days: float = Query(3, gt=0, le=30, allow_inf_nan=False), session: Session = Depends(get_session)):
     """When the Live page was on screen in the last ``days``, for the trip
     list to say how long it was watched during each drive, and how it was fed:
     [[vin, open_ts, close_ts, stream_n, poll_n], ...], the spell still running
@@ -15735,7 +15735,7 @@ def live_views(days: float = Query(3, gt=0, le=30), session: Session = Depends(g
 async def live_stream(
     request: Request,
     vin: str | None = Query(None),
-    capacity_kwh: float | None = Query(None, gt=20, lt=200),
+    capacity_kwh: float | None = Query(None, gt=20, lt=200, allow_inf_nan=False),
 ):
     """The same answer as /api/live, pushed the instant a record arrives
     (Server-Sent Events), so the page shows each reading as the relay
