@@ -5240,7 +5240,7 @@ function glLadder(kind, c) {
     // The trip's Wh/km, as the digital tiles and the car's own trip card show
     // it, so it moves at the car's pace rather than with every throttle change.
     const H = 12, R = c.rated || 150, w = c.whk != null ? c.whk : c.nowWh, pc = c.pct;
-    title = "Wh/km";
+    title = "Efficiency";   // the figure under it already carries "Wh/km"
     const up = w != null ? Math.max(1, Math.min(H, Math.round(Math.max(0, w) / 300 * H))) : 0;
     const bt = pc != null ? Math.max(0, Math.min(H, Math.round(pc / 100 * H))) : 0;
     const wCol = (k) => { const v = (k + 0.5) / H * 300; return v <= R ? "#2ee86a" : v <= R * 1.5 ? "#ffb020" : "#ff3b3b"; };
@@ -5268,8 +5268,13 @@ function glLadder(kind, c) {
     segs += '<i class="mid"></i>';
     for (let k = 0; k < H; k++) segs += `<i class="${k < up ? "on" : ""}" style="--c:${upCol(k)}"></i>`;
     scale = "<em>150</em><em>75</em><em>0</em><em>30</em><em>60</em>";
-    read = kw != null ? `${c.n(Math.abs(kw), 1)}<small>kW</small>` : "—";
-    sub = c.regenKwh != null ? `${c.n(c.regenKwh, 2)} kWh back` : "";
+    // Like the Wh/km bar opposite: power now on top (green while braking puts
+    // energy back), and the energy won back by regen this drive below.
+    topRead = kw != null ? `${c.n(Math.abs(kw), 1)}<small>kW</small>` : "—";
+    topTone = kw == null ? "#7e93ab" : kw < 0 ? "#2ee86a" : "#e8fbff";
+    read = c.regenKwh != null ? `${c.n(c.regenKwh, 2)}<small>kWh</small>` : "—";
+    readTone = "#2ee86a";
+    sub = "regen back";
   } else if (kind === "regen") {
     title = "Regen";
     const kw = c.kw, back = kw != null && kw < 0 ? -kw : 0;
