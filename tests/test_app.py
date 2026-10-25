@@ -13386,3 +13386,70 @@ def test_power_sign_is_kept_across_a_restart():
         routes._LIVE_MEM.clear(); routes._LIVE_SIGN_SEEN.clear()
         with SessionLocal() as s:
             state.put(s, state.TELEMETRY_POWER_SIGN_KEY, "{}"); s.commit()
+
+
+def test_car_tables_lists_every_table_that_points_at_a_car():
+    """purge_demo kept its own list and missed two tables, so on Postgres
+    (which enforces the link) removing the demo car failed and linking a
+    real one with it. Both clean-ups share CAR_TABLES; this keeps it whole."""
+    from app import models  # noqa: F401 - registers every table
+    from app.database import Base
+    from app.services import CAR_TABLES
+
+    pointing = {t.name for t in Base.metadata.sorted_tables
+                if any(fk.column.table.name == "vehicles" for fk in t.foreign_keys)}
+    assert {m.__tablename__ for m in CAR_TABLES} == pointing
+
+
+def test_purge_demo_removes_every_demo_row(session):
+    from app.models import ArrivalTailSample, SecurityEvent, Vehicle
+    from app.sample_data import generate
+    from app.services import CAR_TABLES, purge_demo
+
+    generate(session)
+    demo = session.query(Vehicle).filter(Vehicle.vin.like("DEMO%")).first()
+    assert demo is not None
+    for model in (SecurityEvent, ArrivalTailSample):
+        cols = {c.name: c for c in model.__table__.columns}
+        row = {"vehicle_id": demo.id}
+        for name, col in cols.items():
+            if name in ("id", "vehicle_id") or col.nullable or col.default is not None or col.server_default is not None:
+                continue
+            row[name] = __import__("datetime").datetime(2026, 10, 1) if "DATETIME" in str(col.type).upper() else 0
+        session.add(model(**row))
+    session.commit()
+    purge_demo(session)
+    assert session.query(Vehicle).filter(Vehicle.vin.like("DEMO%")).count() == 0
+    for model in CAR_TABLES:
+        assert session.query(model).filter(model.vehicle_id == demo.id).count() == 0
+
+
+def test_a_restore_keeps_free_charges_and_their_temperatures(session):
+    """A free charge's cost of 0 read as "no price given" on restore and was
+    priced, and the JSON export left out each charge's temperature."""
+    import json as _json
+
+    from app.api.routes import _build_export_zip
+    from app.importer import parse_upload
+    from app.models import Charge, Drive
+    from app.sample_data import generate
+    from app.schemas import ChargeOut, DriveOut
+    from app.services import replace_with_import
+
+    generate(session)
+    ch = session.query(Charge).order_by(Charge.start_time).all()
+    free = ch[0]
+    free.is_free, free.cost, free.outside_temp_c = True, 0.0, 31.5
+    session.commit()
+    drives = session.query(Drive).order_by(Drive.start_time).all()
+    zip_bytes = _build_export_zip(drives, ch, {})
+    json_bytes = _json.dumps({
+        "drives": [DriveOut.model_validate(d).model_dump(mode="json") for d in drives],
+        "charges": [ChargeOut.model_validate(c).model_dump(mode="json") for c in ch],
+    }).encode()
+    for name, blob in (("backup.zip", zip_bytes), ("export.json", json_bytes)):
+        d, c = parse_upload(name, blob)
+        replace_with_import(session, d, c)
+        back = session.query(Charge).order_by(Charge.start_time).first()
+        assert back.is_free and back.cost == 0.0, name
+        assert back.outside_temp_c == 31.5, name

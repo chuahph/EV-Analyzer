@@ -58,6 +58,7 @@ CHARGE_ALIASES = {
     "location": ["location", "site", "address", "sitename"],
     "cost": ["cost", "price", "amount", "totalcost"],
     "outside_temp_c": ["outsidetempc", "outsidetemp", "temperature", "temp"],
+    "is_free": ["isfree", "free"],
 }
 
 
@@ -206,6 +207,9 @@ def _normalise_charge(row: dict[str, Any], index: dict[str, str]) -> dict[str, A
         "location": str(g("location", "") or ""),
         "cost": _num(g("cost")),
         "outside_temp_c": _num(g("outside_temp_c"), 20.0),
+        # This app's own exports carry it: a free charge's cost of 0 must not
+        # be read as "no price given" and priced on restore.
+        "is_free": str(g("is_free", "") or "").strip().lower() in ("true", "1", "yes"),
     }
 
 

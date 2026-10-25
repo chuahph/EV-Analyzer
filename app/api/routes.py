@@ -6613,10 +6613,12 @@ def _build_export_zip(drives: list[Drive], charges: list[Charge],
     charges_csv = sheet(
         ["start_time", "end_time", "duration_min", "start_soc", "end_soc",
          "energy_added_kwh", "charge_type", "max_power_kw", "location",
-         "cost", "outside_temp_c"],
+         "cost", "outside_temp_c", "is_free"],
+        # is_free last, so an older reader that stops at outside_temp_c still
+        # parses the rest; without it a free charge came back priced.
         [[ts(c.start_time), ts(c.end_time), c.duration_min, c.start_soc,
           c.end_soc, c.energy_added_kwh, c.charge_type, c.max_power_kw,
-          c.location, c.cost, c.outside_temp_c] for c in charges],
+          c.location, c.cost, c.outside_temp_c, bool(c.is_free)] for c in charges],
     )
 
     zbuf = io.BytesIO()

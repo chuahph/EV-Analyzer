@@ -54,6 +54,9 @@ class ChargeOut(BaseModel):
     location: str
     cost: float
     is_free: bool
+    # In the JSON export so a restore keeps it, as the ZIP's charges.csv does;
+    # without it every charge came back at the importer's 20 C default.
+    outside_temp_c: float | None = None
 
     class Config:
         from_attributes = True

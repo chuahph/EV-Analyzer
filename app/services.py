@@ -8,24 +8,24 @@ from .config import get_settings
 from .models import (ArrivalTailSample, BatteryReading, Charge, Drive,
                      SecurityEvent, ServiceRecord, Vehicle)
 
+# Every table keyed by vehicle_id, cleared before the cars they belong to. One
+# list for both _wipe and purge_demo: purge_demo kept its own and missed the
+# last two, which Postgres refuses (a row still points at the car), so linking
+# a real car on a fresh install failed while the demo still held them.
+CAR_TABLES = (Drive, Charge, BatteryReading, ServiceRecord, SecurityEvent, ArrivalTailSample)
+
 
 def _wipe(session) -> None:
     # Every table keyed by vehicle_id must be cleared together with Vehicle:
     # SQLite reuses freed integer ids, so any row left behind silently
     # attaches to whatever NEW car later lands on the same id (the exact
     # cross-vehicle leak once shipped with BatteryReading).
-    session.execute(delete(Drive))
-    session.execute(delete(Charge))
-    session.execute(delete(BatteryReading))
-    session.execute(delete(ServiceRecord))
-    # Both of these were added after the rule above was written and neither was
-    # added here, which is how a rule stated once and enforced nowhere fails.
-    # SecurityEvent carries the Sentry correlation experiment and
-    # ArrivalTailSample the arrival model's calibration set — a relink would
-    # have re-attached both to whichever car next landed on the freed id,
-    # quietly poisoning two datasets whose whole value is that they are real.
-    session.execute(delete(SecurityEvent))
-    session.execute(delete(ArrivalTailSample))
+    # SecurityEvent and ArrivalTailSample were once missed here too: a relink
+    # would have re-attached the Sentry experiment and the arrival model's
+    # calibration set to whichever car next landed on the freed id. A test now
+    # checks CAR_TABLES against every table that points at a car.
+    for table in CAR_TABLES:
+        session.execute(delete(table))
     session.execute(delete(Vehicle))
     session.commit()
 
@@ -37,10 +37,8 @@ def purge_demo(session) -> None:
     ]
     if not demo_ids:
         return
-    session.execute(delete(Drive).where(Drive.vehicle_id.in_(demo_ids)))
-    session.execute(delete(Charge).where(Charge.vehicle_id.in_(demo_ids)))
-    session.execute(delete(BatteryReading).where(BatteryReading.vehicle_id.in_(demo_ids)))
-    session.execute(delete(ServiceRecord).where(ServiceRecord.vehicle_id.in_(demo_ids)))
+    for table in CAR_TABLES:
+        session.execute(delete(table).where(table.vehicle_id.in_(demo_ids)))
     session.execute(delete(Vehicle).where(Vehicle.id.in_(demo_ids)))
     session.commit()
 
@@ -193,7 +191,7 @@ def replace_with_import(
 
     for c in charges:
         c = dict(c)
-        if not c.get("cost") and c.get("energy_added_kwh"):
+        if not c.get("cost") and c.get("energy_added_kwh") and not c.get("is_free"):
             source, rate = pricing_prefs.resolve_source_and_rate(
                 session, settings, c.get("location", ""), c.get("charge_type") == "DC", c["start_time"])
             pk = pricing_prefs.payable_kwh(
