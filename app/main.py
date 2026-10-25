@@ -52,7 +52,7 @@ class _UTF8JSONResponse(JSONResponse):
 
 app = FastAPI(
     default_response_class=_UTF8JSONResponse,
-    title="Tesla Analyzer",
+    title="EV Analyzer",
     description="Self-hosted analytics for driving, usage and charging patterns.",
     version="0.1.0",
 )
@@ -80,7 +80,7 @@ def _is_authed(request: Request, passcode: str) -> bool:
 LOGIN_HTML = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tesla Analyzer — Sign in</title>
+<title>EV Analyzer — Sign in</title>
 <style>
  *{box-sizing:border-box}
  body{margin:0;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;
@@ -121,7 +121,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 </style></head><body>
 <form method="post" action="/login">
   <div class="logo">⚡</div>
-  <h1>Tesla Analyzer</h1>
+  <h1>EV Analyzer</h1>
   <p class="tagline">Driving · Charging · Efficiency Analytics</p>
   <p class="hint">Enter the passcode to open your dashboard.</p>
   <input type="password" name="passcode" placeholder="Passcode" autofocus autocomplete="current-password">

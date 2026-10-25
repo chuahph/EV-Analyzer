@@ -178,7 +178,7 @@ def edit_drive(session, drive_id: int, start_time, end_time) -> Drive | None:
 
 
 def replace_with_import(
-    session, drives: list[dict], charges: list[dict], *, name: str = "Imported Tesla"
+    session, drives: list[dict], charges: list[dict], *, name: str = "Imported EV"
 ) -> dict:
     """Replace all stored data with an imported data set. Returns a small summary."""
     settings = get_settings()
@@ -268,7 +268,7 @@ def link_with_token(
         if existing is None:
             session.add(Vehicle(
                 vin=vin,
-                name=v.get("display_name") or "My Tesla",
+                name=v.get("display_name") or "My EV",
                 model="Tesla",
             ))
     session.commit()

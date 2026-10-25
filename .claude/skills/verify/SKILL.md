@@ -1,9 +1,9 @@
 ---
 name: verify
-description: Launch Tesla Analyzer against a scratch DB with demo data and drive the dashboard end-to-end in a headless browser.
+description: Launch EV Analyzer against a scratch DB with demo data and drive the dashboard end-to-end in a headless browser.
 ---
 
-# Verify Tesla Analyzer
+# Verify EV Analyzer
 
 ## Launch (demo mode seeds sample drives/charges on startup)
 

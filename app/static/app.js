@@ -466,7 +466,7 @@ function carCard(car) {
   main.className = "car-card-main";
   const name = document.createElement("span");
   name.className = "car-card-name";
-  name.textContent = car.name || "My Tesla";
+  name.textContent = car.name || "My EV";
   const sub = document.createElement("span");
   sub.className = "car-card-sub";
   const realVin = car.vin && !/^(DEMO|IMPORT|LINKED)/.test(car.vin);
@@ -3989,7 +3989,7 @@ async function load() {
     const now = new Date();
     const windowText = d.window_label || `${d.window_days}-day window`;
     document.getElementById("footer-meta").textContent =
-      `Generated ${footerDateFmt.format(now)} ${hhmm(now)} MYT · ${windowText} · Tesla Analyzer v0.1`;
+      `Generated ${footerDateFmt.format(now)} ${hhmm(now)} MYT · ${windowText} · EV Analyzer v0.1`;
   } catch (e) {
     document.getElementById("kpis").innerHTML =
       `<div class="loading">Could not load data: ${e.message}</div>`;
@@ -5901,7 +5901,7 @@ function renderGlance(d) {
         style="--tc:${t.c}" title="${t.label}" aria-label="${t.label}"><span class="gl-tab-face"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ico}</svg></span></button>`).join("")}
     </nav>`;
   const cur_tab = GLANCE_TABS.find((t) => t.id === glanceTab);
-  const name = v.name || v.model || "Tesla";
+  const name = v.name || v.model || "EV";
   const pg = pages[glanceTab]();
   // The rail sits in the same row as the page, centred beside it, so the
   // spine lines up with the side boxes rather than the whole screen.
@@ -6100,7 +6100,7 @@ document.querySelectorAll(".modal").forEach((m) => {
 });
 
 const staticNote =
-  "This is the static demo dashboard. Loading your own data or linking a Tesla " +
+  "This is the static demo dashboard. Loading your own data or linking your Tesla " +
   "account needs the self-hosted app — see the README to run it locally.";
 
 function setStatus(el, msg, kind) {
@@ -6426,7 +6426,7 @@ importSubmit.addEventListener("click", async () => {
       // Parse, merge and analyse entirely in the browser — no backend needed.
       const { drives, charges, vehicle } = await TA.parseFiles(pendingFiles);
       const dataset = {
-        vehicle: vehicle || { name: "Imported Tesla", model: "Imported", trim: "" },
+        vehicle: vehicle || { name: "Imported EV", model: "Imported", trim: "" },
         drives, charges, source: "imported",
       };
       localStorage.setItem(STORE_KEY, JSON.stringify(dataset));
@@ -6694,7 +6694,7 @@ async function exportCsv() {
   if (!STATIC_MODE) {
     const q = all ? "" : currentDrive ? "?current_drive=1"
       : (sinceCharge ? "?since_charge=1" : `?days=${rawRange}`);
-    await saveFile("/api/export/csv" + q, "tesla-analyzer.zip");
+    await saveFile("/api/export/csv" + q, "ev-analyzer.zip");
     return;
   }
 
@@ -6727,8 +6727,8 @@ async function exportCsv() {
     "energy_added_kwh", "charge_type", "max_power_kw", "location",
     "cost", "outside_temp_c"]));
   const blob = await zip.generateAsync({ type: "blob" });
-  await saveFile(blob, all ? "tesla-analyzer-all.zip"
-    : `tesla-analyzer-${currentDrive ? "current-drive" : sinceCharge ? "since-charge" : rawRange + "d"}.zip`);
+  await saveFile(blob, all ? "ev-analyzer-all.zip"
+    : `ev-analyzer-${currentDrive ? "current-drive" : sinceCharge ? "since-charge" : rawRange + "d"}.zip`);
 }
 const exportBtn = document.getElementById("btn-export");
 if (exportBtn) exportBtn.addEventListener("click", exportCsv);
@@ -6755,7 +6755,7 @@ function wireSectionExports() {
       const q = raw === "drive" ? "current_drive=1"
         : raw === "charge" ? "since_charge=1" : `days=${raw}`;
       saveFile(`/api/export/section?name=${encodeURIComponent(card.dataset.export)}&${q}`,
-        `tesla-analyzer-${card.dataset.export}.csv`);
+        `ev-analyzer-${card.dataset.export}.csv`);
     });
     h2.appendChild(btn);
   });
@@ -6790,7 +6790,7 @@ function buildReport(d) {
   const repKmPerSoc = repSocPct != null && repSocPct >= 0.2 && drv.total_distance_km
     ? drv.total_distance_km / repSocPct : null;
   return `
-    <h1>Tesla Analyzer — ${windowText}</h1>
+    <h1>EV Analyzer — ${windowText}</h1>
     <p class="rep-sub">${h([v.year, v.model, v.name].filter(Boolean).join(" · "))}
       · generated ${footerDateFmt.format(new Date())}</p>
     <h2>Driving</h2>
@@ -6844,7 +6844,7 @@ if (reportBtn) reportBtn.addEventListener("click", () => {
     || window.matchMedia("(display-mode: standalone)").matches;
   if (standalone) {
     const page = `<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>Tesla Analyzer report</title>
+      <title>EV Analyzer report</title>
       <style>${REPORT_STANDALONE_CSS}</style></head>
       <body>${html}<script>
         window.onload = () => setTimeout(() => window.print(), 200);

@@ -1491,7 +1491,7 @@ def _place_and_area(coords: str, session: Session | None = None) -> tuple[str, s
                     "format": "jsonv2", "lat": lat, "lon": lon,
                     "zoom": 18, "addressdetails": 1, "namedetails": 1,
                 },
-                headers={"User-Agent": "tesla-analyzer/0.1"},
+                headers={"User-Agent": "ev-analyzer/0.1"},
                 timeout=4.0,
             )
             resp.raise_for_status()
@@ -1553,7 +1553,7 @@ def _country_at(coords: str) -> str | None:
             "https://nominatim.openstreetmap.org/reverse",
             params={"format": "jsonv2", "lat": lat, "lon": lon, "zoom": 3,
                     "addressdetails": 1},
-            headers={"User-Agent": "tesla-analyzer/0.1"}, timeout=4.0)
+            headers={"User-Agent": "ev-analyzer/0.1"}, timeout=4.0)
         resp.raise_for_status()
         code = ((resp.json().get("address") or {}).get("country_code") or "").upper()
     except Exception:  # noqa: BLE001 — a missing prefix, never a failed trip
@@ -1743,7 +1743,7 @@ def _forward_geocode(query: str) -> tuple[float, float, str] | None:
         resp = httpx.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": query, "format": "jsonv2", "limit": 1, "addressdetails": 0},
-            headers={"User-Agent": "tesla-analyzer/0.1"}, timeout=5.0)
+            headers={"User-Agent": "ev-analyzer/0.1"}, timeout=5.0)
         resp.raise_for_status()
         hits = resp.json()
         if hits:
@@ -3928,7 +3928,7 @@ def _process_vehicle(session: Session, data: dict, v_summary: dict, settings) ->
     vin = data.get("vin") or v_summary.get("vin") or "LINKED-UNKNOWN"
     vehicle = session.query(Vehicle).filter(Vehicle.vin == vin).first()
     if vehicle is None:
-        vehicle = Vehicle(vin=vin, name=data.get("display_name") or "My Tesla", model="Tesla")
+        vehicle = Vehicle(vin=vin, name=data.get("display_name") or "My EV", model="Tesla")
         session.add(vehicle)
         session.flush()
 
@@ -3951,7 +3951,7 @@ def _process_vehicle(session: Session, data: dict, v_summary: dict, settings) ->
     wheel = cfg.get("wheel_type") or ""
     if wheel and wheel.upper() not in vehicle.trim.upper():
         vehicle.trim = f"{vehicle.trim} {wheel}".strip()[:60]
-    if data.get("display_name") and vehicle.name in ("My Tesla", ""):
+    if data.get("display_name") and vehicle.name in ("My EV", "My Tesla", ""):
         vehicle.name = data["display_name"]
     # Seed usable capacity from the variant spec so the EMA starts from the
     # right pack size (an LR Model 3 is ~78 kWh, not the generic 75 default)
@@ -6839,7 +6839,7 @@ def export_csv(
         extras = {}
 
     zip_bytes = _build_export_zip(drives, charges, extras)
-    name = f"tesla-analyzer-{vehicle.vin[-6:]}-{label}.zip"
+    name = f"ev-analyzer-{vehicle.vin[-6:]}-{label}.zip"
     return Response(
         zip_bytes,
         media_type="application/zip",
@@ -6873,7 +6873,7 @@ def export_section(
     vehicle = _first_vehicle(session)
     window = ("current-drive" if current_drive else
               "since-charge" if since_charge else f"{days}d")
-    filename = f"tesla-analyzer-{vehicle.vin[-6:]}-{stem}-{window}.csv"
+    filename = f"ev-analyzer-{vehicle.vin[-6:]}-{stem}-{window}.csv"
     return Response(
         text,
         media_type="text/csv",
@@ -6912,7 +6912,7 @@ def backup_now(session: Session = Depends(get_session)):
         # backup at all, which is what raising here would produce.
         extras = {}
     zip_bytes = _build_export_zip(drives, charges, extras)
-    name = f"tesla-analyzer-{vehicle.vin[-6:]}-backup.zip"
+    name = f"ev-analyzer-{vehicle.vin[-6:]}-backup.zip"
 
     try:
         resp = httpx.post(
@@ -7284,7 +7284,7 @@ def push_test(session: Session = Depends(get_session)):
                  "and TELEGRAM_CHAT_ID, EVENT_WEBHOOK_URL, or the VAPID keys.")
     sent = notifications.notify(
         session,
-        "Tesla Analyzer",
+        "EV Analyzer",
         "Test notification — if you can see this, alerts are working. 🎉",
         "test",
     )

@@ -1,6 +1,6 @@
 {
-  "name": "Tesla Analyzer",
-  "short_name": "Tesla Analyzer",
+  "name": "EV Analyzer",
+  "short_name": "EV Analyzer",
   "description": "Driving, usage and charging analytics for your Tesla.",
   "start_url": "/",
   "scope": "/",

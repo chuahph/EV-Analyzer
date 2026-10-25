@@ -104,7 +104,7 @@
     const year = String(g("year") || "").trim();
     const model = titleCase(g("model"));   // "MODEL 3" -> "Model 3"
     const color = titleCase(g("color"));
-    const name = [year, model].filter(Boolean).join(" ") || "My Tesla";
+    const name = [year, model].filter(Boolean).join(" ") || "My EV";
     return { name, model: color, trim: "", vin: String(g("vin") || "").trim() };
   }
 

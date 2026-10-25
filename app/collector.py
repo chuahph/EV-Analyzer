@@ -74,7 +74,7 @@ def run_live(poll_interval: int | None = None) -> None:  # pragma: no cover - ne
             vehicle = _ensure_vehicle(
                 session,
                 data.get("vin", vehicles[0].get("vin", "UNKNOWN")),
-                data.get("display_name", "My Tesla"),
+                data.get("display_name", "My EV"),
                 (data.get("vehicle_config") or {}).get("car_type", "Model 3"),
             )
             drive_state, charge_state = _process_snapshot(

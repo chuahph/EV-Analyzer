@@ -514,6 +514,7 @@ body.view-home > footer { display: none; }
 .home-foot .clock.build { position: static; opacity: .9; }
 .home-foot .clock.build:empty { display: none; }
 .home-foot-app { margin: 4px 0 0; color: var(--muted); font-size: 11px; letter-spacing: .5px; }
+.home-foot-note { margin: 2px 0 0; color: var(--muted); font-size: 10px; opacity: .7; }
 
 main { padding: 24px 28px 60px; max-width: 1280px; margin: 0 auto; }
 

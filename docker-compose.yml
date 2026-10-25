@@ -1,7 +1,7 @@
 services:
-  tesla-analyzer:
+  ev-analyzer:
     build: .
-    container_name: tesla-analyzer
+    container_name: ev-analyzer
     ports:
       - "8000:8000"
     environment:

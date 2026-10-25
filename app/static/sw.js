@@ -1,12 +1,12 @@
-/* Tesla Analyzer service worker.
+/* EV Analyzer service worker.
  *
  * Uses runtime caching (no hard-coded precache list) so the same file works
- * whether the app is served from "/" (self-hosted) or "/Tesla-Analyzer/"
+ * whether the app is served from "/" (self-hosted) or "/EV-Analyzer/"
  * (GitHub Pages). Strategy:
  *   - navigations & data  -> network-first, fall back to cache when offline
  *   - other assets        -> cache-first, fall back to network
  */
-const CACHE = "tesla-analyzer-v417"; // bump to invalidate cached assets on update
+const CACHE = "ev-analyzer-v418"; // bump to invalidate cached assets on update
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -61,7 +61,7 @@ async function cacheFirst(request) {
 // Web push: show the notification the server's payload describes. The
 // payload shape is {title, body, tag} (see app/notifications.py).
 self.addEventListener("push", (event) => {
-  let data = { title: "Tesla Analyzer", body: "" };
+  let data = { title: "EV Analyzer", body: "" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch (err) {
@@ -70,7 +70,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      tag: data.tag || "tesla-analyzer",
+      tag: data.tag || "ev-analyzer",
       icon: "/static/icons/icon-192.png",
       badge: "/static/icons/icon-192.png",
     })

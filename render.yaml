@@ -1,4 +1,4 @@
-# Render.com Blueprint — deploy the Tesla Analyzer backend from a phone browser.
+# Render.com Blueprint — deploy the EV Analyzer backend from a phone browser.
 # In Render: New → Blueprint → connect this repo. Render reads this file and
 # builds the Dockerfile. Free plan; Singapore region (closest to Malaysia).
 services:

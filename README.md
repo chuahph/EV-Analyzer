@@ -1,4 +1,4 @@
-# ⚡ Tesla Analyzer
+# ⚡ EV Analyzer
 
 A self-hosted analytics app for your Tesla with its own clean dashboard design.
 It logs **drives** and **charging sessions**, analyses your **driving, usage and
@@ -17,7 +17,7 @@ explore the full dashboard immediately — no Tesla account or token required.
 
 ### 🔗 Live demo dashboard
 
-**▶ https://chuahph.github.io/Tesla-Analyzer/**
+**▶ https://chuahph.github.io/EV-Analyzer/**
 
 A static build of the dashboard (with baked-in demo data) is published to
 GitHub Pages automatically on every push to `main` by the
@@ -718,7 +718,7 @@ configured it's a safe no-op (nothing to deliver to).
 
 ## Generic event webhook
 
-Set `EVENT_WEBHOOK_URL` to have Tesla Analyzer POST a small JSON payload —
+Set `EVENT_WEBHOOK_URL` to have EV Analyzer POST a small JSON payload —
 `{"event", "title", "body", "timestamp"}` — whenever a **charge completes**,
 the **battery goes low**, or a **drive finishes**, for home automation (Home
 Assistant, IFTTT, Zapier, n8n, a webhook-triggered Shortcut, ...) to react to.
@@ -869,7 +869,7 @@ would wipe a live-linked account's synced data. Self-hosted only.
 
 ## Install on iPhone / iPad (PWA) — no computer needed
 
-Tesla Analyzer is an installable **Progressive Web App** — it adds to your home
+EV Analyzer is an installable **Progressive Web App** — it adds to your home
 screen, launches full-screen with its own icon, and works offline.
 
 **It runs entirely on the phone.** In the installed app / on the Pages site, the
@@ -883,12 +883,12 @@ browser's local storage (use **Use demo data** in the import dialog to clear it)
 > data from Tesla and use **📁 Load Tesla Data**.
 
 1. Open the dashboard in **Safari** on your iPhone/iPad:
-   - the live demo — **https://chuahph.github.io/Tesla-Analyzer/**, or
+   - the live demo — **https://chuahph.github.io/EV-Analyzer/**, or
    - your self-hosted app — `http://<your-computer-ip>:8000` (phone on the same
      Wi-Fi; start it with `python run.py serve`).
 2. Tap the **Share** button (the square with an ↑ arrow).
 3. Choose **Add to Home Screen**, then **Add**.
-4. Launch it from the new **⚡ Tesla Analyzer** icon — it opens like a native app.
+4. Launch it from the new **⚡ EV Analyzer** icon — it opens like a native app.
 
 > iOS only allows installing PWAs from **Safari** (not Chrome/Firefox on iOS).
 > The static demo works fully offline once opened; the self-hosted app caches the

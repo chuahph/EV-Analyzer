@@ -30,7 +30,7 @@ class Vehicle(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     vin: Mapped[str] = mapped_column(String(32), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(120), default="My Tesla")
+    name: Mapped[str] = mapped_column(String(120), default="My EV")
     model: Mapped[str] = mapped_column(String(40), default="Model 3")
     trim: Mapped[str] = mapped_column(String(60), default="")
     rated_range_km: Mapped[float] = mapped_column(Float, default=500.0)

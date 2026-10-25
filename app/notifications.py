@@ -152,7 +152,7 @@ def notify(session: Session, title: str, body: str, tag: str | None = None) -> i
         public_key=_pem(settings.vapid_public_key_pem),
         subscriber=settings.vapid_subject_email,
     )
-    payload = {"title": title, "body": body, "tag": tag or "tesla-analyzer"}
+    payload = {"title": title, "body": body, "tag": tag or "ev-analyzer"}
 
     sent = 0
     stale_ids: list[int] = []

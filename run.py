@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command-line entry point for Tesla Analyzer.
+"""Command-line entry point for EV Analyzer.
 
 Usage:
     python run.py serve              Start the web dashboard + API (default)
@@ -88,7 +88,7 @@ def cmd_push_keys(args):
 
 def _print_report(d):
     v = d["vehicle"]
-    print(f"\n=== Tesla Analyzer report — {v['name']} ({v['model']} {v['trim']}) ===")
+    print(f"\n=== EV Analyzer report — {v['name']} ({v['model']} {v['trim']}) ===")
     print(f"Window: last {d['window_days']} days · generated {d['generated_at']}\n")
 
     drv, chg, eff = d["driving"], d["charging"], d["efficiency"]
@@ -121,7 +121,7 @@ def _print_report(d):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Tesla Analyzer")
+    parser = argparse.ArgumentParser(description="EV Analyzer")
     sub = parser.add_subparsers(dest="command")
 
     p = sub.add_parser("serve", help="Run the web dashboard + API")
