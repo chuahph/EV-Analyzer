@@ -1687,6 +1687,11 @@ body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max
   .gl-mini { padding-inline: 5px; }
   .glance .gl-mini strong { font-size: clamp(11px, calc(3 * var(--gh)), 14px) !important; }
   .glance .gl-mini strong small { font-size: .5em !important; }
+  .glance .gl-ladder .gl-ltop { font-size: clamp(13px, calc(3.4 * var(--gh)), 17px); white-space: nowrap; }
+  .glance .gl-ladder .gl-ltop small { font-size: .6em; margin-left: 1px; }
+  .glance .gl-rmix-col .gl-hud-stat span { font-size: 8.5px !important; white-space: nowrap; }
+  .glance .gl-gearrow { font-size: 14px; }
+  .glance .gl-gearrow b { padding: 1px 6px; }
   .glance .gl-hud-stat span, .glance .gl-en-big > span, .glance .gl-big > span, .glance .gl-en-big span, .glance .gl-big span { font-size: 9.5px !important; letter-spacing: 0 !important; padding-left: 0 !important; }
   .gl-en-big strong, .gl-big strong { font-size: clamp(16px, calc(4.6 * var(--gh)), 26px); }
 }

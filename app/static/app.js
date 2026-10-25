@@ -5068,6 +5068,16 @@ function glGearAlign(root) {
   const gb = b.getBoundingClientRect(), db = d.getBoundingClientRect();
   const dy = (db.top + db.height / 2) - (gb.top + gb.height / 2);
   if (Math.abs(dy) > 0.2 && Math.abs(dy) < 40) g.style.transform = `translateX(-50%) translateY(${dy.toFixed(1)}px)`;
+  // On a narrow screen (a foldable's cover) the footer has no gap between
+  // Auto Dim and the dots: then the row sits just above the footer, under the dial.
+  const f = (root || document).querySelector(".glance .gl-foot");
+  const gr = g.getBoundingClientRect();
+  const hit = f && [...f.children].some((c) => { const r = c.getBoundingClientRect();
+    return r.width && r.left < gr.right + 6 && r.right > gr.left - 6 && r.top < gr.bottom && r.bottom > gr.top; });
+  if (!hit) return;
+  g.style.transform = "translateX(-50%)";
+  const g0 = g.getBoundingClientRect(), fb = f.getBoundingClientRect();
+  g.style.transform = `translateX(-50%) translateY(${(fb.top - 6 - g0.bottom).toFixed(1)}px)`;
 }
 function glKeyFit(root) {
   const f = (root || document).querySelector(".glance .gl-keybar");
