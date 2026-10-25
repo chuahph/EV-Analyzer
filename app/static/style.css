@@ -1629,6 +1629,12 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
    upright returns to exactly the scroll position it left. Shown by the
    landscape-phone media query below, or by body.glance-on (the Glance
    shortcut, offered on wide screens only). */
+/* Glance type is sized from the glance's own box. On a phone in landscape that is the screen (1vh, 1vw);
+   when Glance is opened as a pop-up on a tall screen (tablet, open foldable, desktop) it is the 500 px
+   by 1100 px stage (540 px tall), so the same sizes are worked out from that. */
+:root { --gh: 1vh; --gw: 1vw; }
+@media (orientation: landscape) and (min-height: 561px) { body.glance-on { --gh: 5.4px; --gw: min(.9vw, 10px); } }
+
 .glance {
   display: none; position: fixed; inset: 0; z-index: 60;
   background:
@@ -1661,7 +1667,28 @@ body.glance-on .glance { display: flex; justify-content: center; align-items: ce
    screen, in its page's own colour; the open one is filled and stands out
    further. On the right the chevrons are mirrored. */
 .glance { flex-direction: column; }
-body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(500px, 100%); }
+body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max-width: 1100px; align-self: center; }
+/* The cockpit's power and battery bars sit tighter in the pop-up, whose stage is a little shorter than a phone's uncompacted layout. */
+@media (orientation: landscape) and (min-height: 561px) {
+  body.glance-on .gl-power, body.glance-on .gl-battbar { padding-block: 5px; }
+  body.glance-on .gl-power-track { margin: 4px 0 2px; }
+  body.glance-on .gl-power-sub { margin-top: 1px; }
+  body.glance-on .gl-battbar-cell { margin-top: 4px; }
+  body.glance-on .gl-3 > .gl-side { gap: 6px; padding-block: 8px; }
+  body.glance-on .gl-3 > .gl-side:has(> .gl-power) { height: 92%; padding-block: 8px; }
+}
+/* Narrow tall-ish screens: a closed foldable's cover, a small pop-up. */
+@media (orientation: landscape) and (min-height: 430px) and (max-width: 780px) {
+  .gl-hud-stat strong { font-size: clamp(16px, calc(4.4 * var(--gh)), 24px); }
+  .gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong,
+  .gl-stk-trip .gl-hud-stat strong, .gl-rmix-col .gl-hud-stat strong { font-size: clamp(13px, calc(3.2 * var(--gh)), 17px); }
+  .gl-mini strong small { margin-left: 1px; }
+  .gl-mini { padding-inline: 5px; }
+  .glance .gl-mini strong { font-size: clamp(11px, calc(3 * var(--gh)), 14px) !important; }
+  .glance .gl-mini strong small { font-size: .5em !important; }
+  .glance .gl-hud-stat span, .glance .gl-en-big > span, .glance .gl-big > span, .glance .gl-en-big span, .glance .gl-big span { font-size: 9.5px !important; letter-spacing: 0 !important; padding-left: 0 !important; }
+  .gl-en-big strong, .gl-big strong { font-size: clamp(16px, calc(4.6 * var(--gh)), 26px); }
+}
 .gl-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 10px; align-items: center; }
 .gl-rail-right .gl-body { flex-direction: row-reverse; }
 .gl-body > .gl-page { flex: 1 1 auto; height: 100%; }
@@ -1706,7 +1733,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
    beside the dial rather than thin strips. */
 .gl-stack { display: flex; flex-direction: column; gap: 8px; }
 .gl-stack > .gl-box { flex: 0 0 76px; justify-content: center; gap: 3px; padding: 6px 12px; }
-.gl-stack > .gl-box .gl-box-v { font-size: clamp(18px, 5.6vh, 26px); }
+.gl-stack > .gl-box .gl-box-v { font-size: clamp(18px, calc(5.6 * var(--gh)), 26px); }
 .gl-stack > .gl-box .gl-box-l { font-size: 10.5px; }
 .gl-panel { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px;
   background: linear-gradient(180deg, #19202a, var(--panel)); border: 1px solid var(--border);
@@ -1725,7 +1752,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   box-shadow: var(--edge-hi); border-left: 3px solid var(--tc, var(--accent-2)); }
 .gl-box-l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gl-box-v { font-size: clamp(16px, 4.6vh, 24px); font-weight: 740; font-variant-numeric: tabular-nums;
+.gl-box-v { font-size: clamp(16px, calc(4.6 * var(--gh)), 24px); font-weight: 740; font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gl-box-v small { font-size: .55em; font-weight: 600; color: var(--muted); margin-left: 3px; }
 .gl-box.tone-good .gl-box-v { color: var(--green); }
@@ -2116,7 +2143,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   background: color-mix(in srgb, var(--rc) 18%, #0a0d12); box-shadow: 0 0 10px color-mix(in srgb, var(--rc) 35%, transparent); }
 .gl-rt i svg { width: 14px; height: 14px; fill: none; stroke: var(--rc); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .gl-rt span { font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gl-rt strong { grid-column: 1 / -1; align-self: end; font: 700 clamp(17px, 5vh, 24px) ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff;
+.gl-rt strong { grid-column: 1 / -1; align-self: end; font: 700 clamp(17px, calc(5 * var(--gh)), 24px) ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff;
   text-shadow: 0 0 10px color-mix(in srgb, var(--rc) 55%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .gl-rt strong small { font-size: .46em; color: var(--muted); margin-left: 3px; text-shadow: none; font-family: inherit; }
 /* Trace of speed and power over the last few minutes. */
@@ -2133,7 +2160,7 @@ body.glance-on .glance > .gl-main { flex: 0 1 1100px; width: 100%; height: min(5
   background: linear-gradient(180deg, #19202a, #10151c); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 22px rgba(0,0,0,.45); }
 .gl-power-top, .gl-battbar-top { display: flex; justify-content: space-between; align-items: baseline;
   font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-.gl-power-top strong, .gl-battbar-top strong { font-size: clamp(16px, 4.6vh, 22px); color: var(--text); letter-spacing: 0;
+.gl-power-top strong, .gl-battbar-top strong { font-size: clamp(16px, calc(4.6 * var(--gh)), 22px); color: var(--text); letter-spacing: 0;
   text-transform: none; font-variant-numeric: tabular-nums; }
 .gl-power-top strong.regen { color: var(--green); }
 .gl-power-top small, .gl-battbar-top small { font-size: .55em; color: var(--muted); margin-left: 3px; }
@@ -2266,7 +2293,7 @@ header::after {
 @media (max-width: 400px) {
   .controls #odo-badge, .controls #mode-badge { min-width: 0; padding: 0 8px; }
   .controls .btn { padding: 0 8px; }
-  .kpi .value { font-size: clamp(18px, 5.6vw, 22px); }
+  .kpi .value { font-size: clamp(18px, calc(5.6 * var(--gw)), 22px); }
   .score-ring { width: 74px; height: 74px; }
   .score-ring b { font-size: 24px; }
 }
@@ -2280,7 +2307,7 @@ main > .card { max-width: 100%; }
 /* One slim line under the trip tiles while driving: icon, label, reading. */
 .gl-odo { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 5px 10px;
   border-radius: 8px; background: #0a1017; border: 1px solid #1d2a38; white-space: nowrap;
-  min-width: 0; overflow: hidden; font-size: clamp(8px, 2.3vh, 10px); }
+  min-width: 0; overflow: hidden; font-size: clamp(8px, calc(2.3 * var(--gh)), 10px); }
 .gl-odo i { display: grid; place-items: center; width: 18px; height: 18px; }
 .gl-odo i svg { width: 14px; height: 14px; fill: none; stroke: #22d3ee; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .gl-odo span { font-size: 1em; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
@@ -2368,10 +2395,10 @@ main > .card { max-width: 100%; }
   #home-view { padding: max(14px, env(safe-area-inset-top)) max(26px, env(safe-area-inset-right))
                         max(14px, env(safe-area-inset-bottom)) max(26px, env(safe-area-inset-left)); }
   .home-inner { max-width: 960px; display: grid; grid-template-columns: minmax(200px, .8fr) minmax(0, 1.25fr);
-    gap: clamp(18px, 4vw, 44px); align-items: center; }
+    gap: clamp(18px, calc(4 * var(--gw)), 44px); align-items: center; }
   .home-hero { margin-bottom: 0; }
-  .home-emblem { width: clamp(70px, 24vh, 104px); height: clamp(70px, 24vh, 104px); }
-  .home-title { font-size: clamp(18px, 3.2vw, 26px); margin-top: 10px; letter-spacing: .08em; white-space: nowrap; }
+  .home-emblem { width: clamp(70px, calc(24 * var(--gh)), 104px); height: clamp(70px, calc(24 * var(--gh)), 104px); }
+  .home-title { font-size: clamp(18px, calc(3.2 * var(--gw)), 26px); margin-top: 10px; letter-spacing: .08em; white-space: nowrap; }
   .home-tagline { font-size: 9.5px; letter-spacing: .06em; }
   .home-meta { margin-top: 10px; }
   .home-h2 { margin-bottom: 8px; }
@@ -2393,7 +2420,7 @@ main > .card { max-width: 100%; }
 .gl-dial.gl-speedo { width: 100%; height: auto; max-height: 100%; aspect-ratio: 13 / 12; }
 /* Live tiles: long units (Wh/km) stay inside the tile. */
 .gl-rt { padding-right: 12px; }
-.gl-rt strong { font-size: clamp(16px, 4.6vh, 22px); padding-right: 2px; }
+.gl-rt strong { font-size: clamp(16px, calc(4.6 * var(--gh)), 22px); padding-right: 2px; }
 .gl-rt strong small { font-size: .4em; margin-left: 3px; }
 .gl-rt span { letter-spacing: .02em; font-size: 9px; }
 /* Top-edge dashes of the speed panel flow with acceleration. */
@@ -2447,7 +2474,7 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip .gl-rt { padding: 6px 7px; column-gap: 5px; }
   .gl-side > .gl-trip .gl-rt i { width: 18px; height: 18px; }
   .gl-side > .gl-trip .gl-rt i svg { width: 12px; height: 12px; }
-  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, 4.4vh, 18px); }
+  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(14px, calc(4.4 * var(--gh)), 18px); }
 }
 
 /* A little taller than compact: the trip panels grow to about 80% of the
@@ -2456,9 +2483,9 @@ main > .card { max-width: 100%; }
 /* Room for the odometer line under the tiles while driving. */
 .gl-side > .gl-trip:has(.gl-odo) { max-height: 78%; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
-.gl-side > .gl-trip .gl-rt strong { font-size: clamp(23px, 7.6vh, 35px); line-height: 1; }
+.gl-side > .gl-trip .gl-rt strong { font-size: clamp(23px, calc(7.6 * var(--gh)), 35px); line-height: 1; }
 @media (orientation: landscape) and (max-width: 740px) {
-  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(18px, 6vh, 25px); }
+  .gl-side > .gl-trip .gl-rt strong { font-size: clamp(18px, calc(6 * var(--gh)), 25px); }
   /* Narrow tiles: a smaller icon, so the label (the unit) still fits. */
   .gl-side > .gl-trip .gl-rt { column-gap: 3px; padding-left: 6px; padding-right: 6px; }
   .gl-side > .gl-trip .gl-rt i { width: 14px; height: 14px; }
@@ -2482,7 +2509,7 @@ main > .card { max-width: 100%; }
   border-left: 2px solid #22d3ee; display: grid; gap: 1px; white-space: nowrap; }
 .gl-mini.regen { border-left-color: var(--green); }
 .gl-mini span { font-size: 8.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; overflow: hidden; text-overflow: ellipsis; }
-.gl-mini strong { font: 700 clamp(13px, 3.9vh, 18px) ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff; }
+.gl-mini strong { font: 700 clamp(13px, calc(3.9 * var(--gh)), 18px) ui-monospace, "SF Mono", Menlo, monospace; color: #e8fbff; }
 .gl-mini strong small { font-size: .55em; color: var(--muted); margin-left: 3px; font-family: inherit; }
 .gl-mini em { font-style: normal; font-size: 9px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .gl-trace-h strong.good { color: var(--green); } .gl-trace-h strong.warn { color: var(--amber); }
@@ -2507,14 +2534,14 @@ main > .card { max-width: 100%; }
   .gl-3 > .gl-side:has(> .gl-power) { gap: 5px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-power-scale { display: none; }
   .gl-3 > .gl-side:has(> .gl-power) > .gl-power, .gl-3 > .gl-side:has(> .gl-power) > .gl-battbar { padding: 5px 8px; }
-  .gl-3 > .gl-side:has(> .gl-power) .gl-power-top strong, .gl-3 > .gl-side:has(> .gl-power) .gl-battbar-top strong { font-size: clamp(14px, 4.2vh, 18px); }
+  .gl-3 > .gl-side:has(> .gl-power) .gl-power-top strong, .gl-3 > .gl-side:has(> .gl-power) .gl-battbar-top strong { font-size: clamp(14px, calc(4.2 * var(--gh)), 18px); }
   .gl-3 > .gl-side:has(> .gl-power) .gl-power-sub { font-size: 9.5px; margin-top: 1px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-trace { padding: 4px 8px; }
 }
 /* Compact: label on one line, the figure and its note on the next. */
 .gl-mini { padding: 3px 7px; gap: 0; }
 .gl-mini > div { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-.gl-mini strong { font-size: clamp(11px, 3.1vh, 14px); }
+.gl-mini strong { font-size: clamp(11px, calc(3.1 * var(--gh)), 14px); }
 .gl-mini em { font-size: 8.5px; }
 .gl-minis { margin-top: 6px; gap: 6px; }
 @media (orientation: landscape) and (max-width: 740px) {
@@ -2531,7 +2558,7 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip:has(.gl-odo) { padding-top: 8px; padding-bottom: 8px; }
   .gl-side > .gl-trip:has(.gl-odo) .gl-rts { gap: 6px; padding-top: 6px; }
   .gl-side > .gl-trip:has(.gl-odo) .gl-rt { padding-top: 5px; padding-bottom: 5px; }
-  .gl-side > .gl-trip:has(.gl-odo) .gl-rt strong { font-size: clamp(20px, 6.8vh, 27px); }
+  .gl-side > .gl-trip:has(.gl-odo) .gl-rt strong { font-size: clamp(20px, calc(6.8 * var(--gh)), 27px); }
   .gl-side > .gl-trip:has(.gl-odo) .gl-odo { margin-top: 6px; padding-top: 3px; padding-bottom: 3px; }
 }
 /* Live page on screen (body.gl-eco): true black behind everything. On the
@@ -2575,11 +2602,11 @@ main > .card { max-width: 100%; }
 .gl-stale .gl-speedo .gl-spd { fill: #6f7f94; filter: none; }
 /* Est. range and Regen back: sized to be read at a glance while driving. */
 .gl-mini span { font-size: 9.5px; letter-spacing: .03em; color: #9fb0c3; }
-.gl-mini strong { font-size: clamp(15px, 4.6vh, 21px); }
+.gl-mini strong { font-size: clamp(15px, calc(4.6 * var(--gh)), 21px); }
 .gl-mini em { font-size: 10.5px; color: #9fb0c3; }
 @media (orientation: landscape) and (max-width: 740px) {
   .gl-mini span { font-size: 8.5px; letter-spacing: 0; }
-  .gl-mini strong { font-size: clamp(14px, 4.4vh, 18px); }
+  .gl-mini strong { font-size: clamp(14px, calc(4.4 * var(--gh)), 18px); }
 }
 /* The note sits at the right end of the figure's line. */
 .gl-mini > div em { margin-left: auto; overflow: visible; font-size: 10px; }
@@ -2644,7 +2671,7 @@ main > .card { max-width: 100%; }
 @media (orientation: landscape) and (max-height: 340px) {
   .gl-stack { gap: 5px; }
   .gl-stack > .gl-box { padding-top: 3px; padding-bottom: 3px; gap: 1px; }
-  .gl-stack > .gl-box .gl-box-v { font-size: clamp(14px, 6.4vh, 22px); }
+  .gl-stack > .gl-box .gl-box-v { font-size: clamp(14px, calc(6.4 * var(--gh)), 22px); }
   .gl-stack > .gl-box .gl-box-l { font-size: 9px; }
   .gl-segs { gap: 4px; padding-top: 6px; padding-bottom: 6px; }
   .gl-side > .gl-panel { gap: 3px; padding-top: 6px; padding-bottom: 6px; }
@@ -2718,46 +2745,46 @@ main > .card { max-width: 100%; }
 .gl-alt { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 /* HUD: the speed, as large as the screen allows. */
 .gl-hud-top { display: flex; justify-content: space-between; align-items: center; }
-.gl-hud-gear { display: inline-flex; gap: 12px; font: 700 clamp(14px, 4.2vh, 20px) system-ui, sans-serif; letter-spacing: .1em; }
+.gl-hud-gear { display: inline-flex; gap: 12px; font: 700 clamp(14px, calc(4.2 * var(--gh)), 20px) system-ui, sans-serif; letter-spacing: .1em; }
 .gl-hud-gear b { color: #3b4757; font-weight: 700; padding: 0 5px; border: 1px solid transparent; border-radius: 3px; }
 .gl-hud-gear b.on { color: #22d3ee; border-color: #22d3ee; text-shadow: 0 0 8px #22d3ee; }
-.gl-hud-batt { font: 700 clamp(18px, 6vh, 30px) ui-monospace, Menlo, monospace; color: var(--green); }
+.gl-hud-batt { font: 700 clamp(18px, calc(6 * var(--gh)), 30px) ui-monospace, Menlo, monospace; color: var(--green); }
 .gl-hud-batt.low { color: #ff6b70; }
 .gl-hud-batt small { font-size: .55em; margin-left: 2px; color: var(--muted); }
-.gl-hud-batt em { font: 600 clamp(12px, 3.6vh, 16px) system-ui, sans-serif; color: var(--muted); font-style: normal; margin-left: 10px; }
+.gl-hud-batt em { font: 600 clamp(12px, calc(3.6 * var(--gh)), 16px) system-ui, sans-serif; color: var(--muted); font-style: normal; margin-left: 10px; }
 .gl-hud-speed { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 10px;
-  font: 800 min(40vh, 24vw) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums;
+  font: 800 min(calc(40 * var(--gh)), calc(24 * var(--gw))) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums;
   text-shadow: 0 0 22px currentColor; }
-.gl-hud-speed small { font: 650 clamp(12px, 4vh, 20px) system-ui, sans-serif; letter-spacing: .18em; color: #7e93ab;
+.gl-hud-speed small { font: 650 clamp(12px, calc(4 * var(--gh)), 20px) system-ui, sans-serif; letter-spacing: .18em; color: #7e93ab;
   text-shadow: none; align-self: flex-end; margin-bottom: 8%; }
-.gl-hud-pw { display: flex; align-items: center; gap: 12px; font: 700 clamp(12px, 3.6vh, 16px) ui-monospace, Menlo, monospace; color: #cfe8ff; }
+.gl-hud-pw { display: flex; align-items: center; gap: 12px; font: 700 clamp(12px, calc(3.6 * var(--gh)), 16px) ui-monospace, Menlo, monospace; color: #cfe8ff; }
 .gl-hud-pw .gl-alt-bar { flex: 1 1 auto; }
 .gl-hud-pw span { min-width: 7.5em; text-align: right; }
 .gl-alt-bar { position: relative; height: 10px; border-radius: 6px; background: #0b121b; border: 1px solid #1d2a38; }
 .gl-hud-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .gl-hud-stat { background: #0a1017; border: 1px solid #1d2a38; border-radius: 10px; padding: 5px 8px; min-width: 0; text-align: center; }
-.gl-hud-stat span { display: block; font: 600 clamp(10px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.gl-hud-stat strong { display: block; font: 700 clamp(18px, min(6.8vh, 4.2vw), 34px) ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-hud-stat span { display: block; font: 600 clamp(10px, calc(2.8 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-hud-stat strong { display: block; font: 700 clamp(18px, min(calc(6.8 * var(--gh)), calc(4.2 * var(--gw))), 34px) ui-monospace, Menlo, monospace; color: #e8fbff; }
 .gl-hud-stat.warn strong { color: var(--amber); } .gl-hud-stat.good strong { color: var(--green); }
 /* Energy: power, Wh/km and the trace, large. */
 .gl-en-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .gl-en-big { background: #0a1017; border: 1px solid #1d2a38; border-radius: 10px; padding: 6px 10px; min-width: 0; }
-.gl-en-big span { display: block; font: 600 clamp(10px, 2.9vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-.gl-en-big strong { display: block; font: 800 clamp(18px, min(9vh, 4.3vw), 46px) ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-en-big span { display: block; font: 600 clamp(10px, calc(2.9 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.gl-en-big strong { display: block; font: 800 clamp(18px, min(calc(9 * var(--gh)), calc(4.3 * var(--gw))), 46px) ui-monospace, Menlo, monospace; color: #e8fbff; }
 .gl-en-big strong small { font-size: .38em; color: var(--muted); margin-left: 3px; }
 .gl-en-big.regen strong { color: var(--green); } .gl-en-big.warn strong { color: var(--amber); } .gl-en-big.good strong { color: var(--green); }
 .gl-en-trace { flex: 1 1 auto; min-height: 0; display: flex; }
 .gl-en-trace .gl-trace { flex: 1 1 auto; }
-.gl-en-bot { display: flex; justify-content: space-between; gap: 10px; font: 600 clamp(12px, 3.6vh, 16px) system-ui, sans-serif; color: var(--muted); white-space: nowrap; }
+.gl-en-bot { display: flex; justify-content: space-between; gap: 10px; font: 600 clamp(12px, calc(3.6 * var(--gh)), 16px) system-ui, sans-serif; color: var(--muted); white-space: nowrap; }
 .gl-en-bot strong { color: #e8fbff; font-family: ui-monospace, Menlo, monospace; margin-left: 4px; }
 /* Trip: six big figures. */
-.gl-bigs-h { display: flex; justify-content: space-between; font: 700 clamp(12px, 3.6vh, 16px) system-ui, sans-serif; color: #22d3ee; letter-spacing: .1em; text-transform: uppercase; }
+.gl-bigs-h { display: flex; justify-content: space-between; font: 700 clamp(12px, calc(3.6 * var(--gh)), 16px) system-ui, sans-serif; color: #22d3ee; letter-spacing: .1em; text-transform: uppercase; }
 .gl-bigs-h em { color: var(--muted); font-style: normal; text-transform: none; letter-spacing: 0; }
 .gl-bigs-g { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 8px; }
 .gl-big { background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; padding: 8px 12px; min-width: 0; min-height: 0;
   display: flex; flex-direction: column; justify-content: center; }
-.gl-big span { font: 600 clamp(10px, 3vh, 14px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.gl-big strong { font: 800 clamp(20px, min(13vh, 5.2vw), 64px) / 1.05 ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-big span { font: 600 clamp(10px, calc(3 * var(--gh)), 14px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-big strong { font: 800 clamp(20px, min(calc(13 * var(--gh)), calc(5.2 * var(--gw))), 64px) / 1.05 ui-monospace, Menlo, monospace; color: #e8fbff; }
 .gl-big strong { white-space: nowrap; overflow: hidden; }
 .gl-big.warn strong { color: var(--amber); } .gl-big.good strong { color: var(--green); }
 /* Dimmed: the same deep dim as the Cockpit — furniture low, the key numbers kept. */
@@ -2770,29 +2797,29 @@ main > .card { max-width: 100%; }
 /* Narrow phones: a regen figure like 1.88 kWh (or more) has to fit its box. */
 @media (orientation: landscape) and (max-width: 700px) {
   .gl-mini > div { gap: 2px; }
-  .gl-mini strong { font-size: clamp(11px, min(4.2vh, 2.3vw), 16px); }
+  .gl-mini strong { font-size: clamp(11px, min(calc(4.2 * var(--gh)), calc(2.3 * var(--gw))), 16px); }
   .gl-mini strong small { margin-left: 1px; font-size: .5em; }
 }
 
 /* ---- More designs: Night, Dial, Range, Mix ------------------------------- */
 /* Night: only the speed, soft, on true black. */
 .gl-night { justify-content: space-between; align-items: stretch; }
-.gl-night-top { display: flex; justify-content: space-between; font: 700 clamp(14px, 4.6vh, 22px) ui-monospace, Menlo, monospace; color: #566478; }
+.gl-night-top { display: flex; justify-content: space-between; font: 700 clamp(14px, calc(4.6 * var(--gh)), 22px) ui-monospace, Menlo, monospace; color: #566478; }
 .gl-night-speed { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center;
-  font: 800 min(52vh, 30vw) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; opacity: .92; }
-.gl-night-row { display: flex; justify-content: center; gap: clamp(16px, 6vw, 48px); font: 650 clamp(14px, 4.6vh, 22px) ui-monospace, Menlo, monospace; color: #6f7f94; }
+  font: 800 min(calc(52 * var(--gh)), calc(30 * var(--gw))) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; opacity: .92; }
+.gl-night-row { display: flex; justify-content: center; gap: clamp(16px, calc(6 * var(--gw)), 48px); font: 650 clamp(14px, calc(4.6 * var(--gh)), 22px) ui-monospace, Menlo, monospace; color: #6f7f94; }
 /* Dial: analogue speedometer between two vertical bars. */
 .gl-dialpage { flex-direction: row; align-items: stretch; gap: 10px; }
 .gl-dialbox { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .gl-dialbox svg { height: 100%; width: auto; max-width: 100%; }
-.gl-pbar { flex: 0 0 clamp(64px, 15vw, 120px); min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+.gl-pbar { flex: 0 0 clamp(64px, calc(15 * var(--gw)), 120px); min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
   background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; padding: 6px 6px 8px; }
-.gl-pbar span { font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-pbar span { font: 600 clamp(9px, calc(2.8 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
 .gl-pbar > div { flex: 1 1 auto; min-height: 0; width: 34%; background: #0b121b; border-radius: 8px; border: 1px solid #1d2a38;
   display: flex; align-items: flex-end; overflow: hidden; position: relative; }
 .gl-pbar > div i { display: block; width: 100%; border-radius: 6px; }
 .gl-pbar.mid > div::after { content: ""; position: absolute; left: 0; right: 0; bottom: 28%; border-top: 1px dashed #cfe8ff88; }
-.gl-pbar strong { font: 800 clamp(16px, 5.4vh, 26px) ui-monospace, Menlo, monospace; color: #e8fbff; white-space: nowrap; }
+.gl-pbar strong { font: 800 clamp(16px, calc(5.4 * var(--gh)), 26px) ui-monospace, Menlo, monospace; color: #e8fbff; white-space: nowrap; }
 .gl-pbar strong small { font-size: .5em; color: var(--muted); margin-left: 2px; }
 /* Range: the battery, big, with four figures. */
 .gl-rangepage { flex-direction: row; align-items: stretch; gap: 10px; }
@@ -2804,22 +2831,22 @@ main > .card { max-width: 100%; }
 /* Mix: speed, power, trace, trip. */
 .gl-mixpage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
 .gl-mix-speed { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0;
-  font: 800 min(26vh, 15vw) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px currentColor;
+  font: 800 min(calc(26 * var(--gh)), calc(15 * var(--gw))) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px currentColor;
   background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; }
-.gl-mix-speed small { font: 650 clamp(10px, 3vh, 14px) system-ui, sans-serif; letter-spacing: .14em; color: #7e93ab; text-shadow: none; margin-top: 2px; }
+.gl-mix-speed small { font: 650 clamp(10px, calc(3 * var(--gh)), 14px) system-ui, sans-serif; letter-spacing: .14em; color: #7e93ab; text-shadow: none; margin-top: 2px; }
 .gl-mix-pw { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 0;
   background: #0a1017; border: 1px solid #1d2a38; border-radius: 12px; padding: 8px 12px; }
 .gl-mix-kw { display: flex; justify-content: space-between; align-items: baseline; }
-.gl-mix-kw span, .gl-mix-batt span { font: 600 clamp(10px, 2.9vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.gl-mix-kw strong { font: 800 clamp(20px, 7vh, 34px) ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-mix-kw span, .gl-mix-batt span { font: 600 clamp(10px, calc(2.9 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-mix-kw strong { font: 800 clamp(20px, calc(7 * var(--gh)), 34px) ui-monospace, Menlo, monospace; color: #e8fbff; }
 .gl-mix-kw.regen strong { color: var(--green); }
 .gl-mix-kw strong small, .gl-mix-batt em { font-size: .45em; color: var(--muted); margin-left: 3px; font-style: normal; font-family: system-ui, sans-serif; }
 .gl-mix-batt { display: flex; justify-content: space-between; align-items: baseline; }
-.gl-mix-batt strong { font: 800 clamp(16px, 5.4vh, 26px) ui-monospace, Menlo, monospace; color: var(--green); }
+.gl-mix-batt strong { font: 800 clamp(16px, calc(5.4 * var(--gh)), 26px) ui-monospace, Menlo, monospace; color: var(--green); }
 .gl-mix-trace { min-height: 0; display: flex; grid-column: 1; }
 .gl-mix-trace .gl-trace { flex: 1 1 auto; }
 .gl-mix-trip { grid-column: 2; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; align-items: stretch; }
-.gl-mix-trip .gl-hud-stat strong { font-size: clamp(16px, min(5.4vh, 3.4vw), 26px); }
+.gl-mix-trip .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.4 * var(--gh)), calc(3.4 * var(--gw))), 26px); }
 .gl-dim .gl-night-speed, .gl-dim .gl-mix-speed { opacity: .8; }
 .gl-dim .gl-pbar, .gl-dim .gl-mix-pw { border-color: #12181f; }
 .gl-dim .gl-dialbox svg { opacity: .55; }
@@ -2836,19 +2863,19 @@ main > .card { max-width: 100%; }
 .gl-rmix { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
 .gl-rmix-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .gl-rmix-col .gl-hud-stat { flex: 1 1 0; display: flex; flex-direction: column; justify-content: center; }
-.gl-rmix-col .gl-hud-stat strong { font-size: clamp(18px, min(7vh, 4.4vw), 34px); }
+.gl-rmix-col .gl-hud-stat strong { font-size: clamp(18px, min(calc(7 * var(--gh)), calc(4.4 * var(--gw))), 34px); }
 .gl-rmix-mid { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .gl-rmix-mid svg { height: 100%; width: auto; max-width: 100%; }
 /* Stack */
 .gl-stackpage { gap: 6px; }
 .gl-stk-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.gl-stk-top .gl-hud-stat strong { font-size: clamp(16px, min(5.6vh, 3.6vw), 28px); }
-.gl-stackpage .gl-hud-speed { font-size: min(30vh, 18vw); }
-.gl-stk-bot { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; min-height: 0; height: clamp(54px, 26vh, 120px); }
+.gl-stk-top .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.6 * var(--gh)), calc(3.6 * var(--gw))), 28px); }
+.gl-stackpage .gl-hud-speed { font-size: min(calc(30 * var(--gh)), calc(18 * var(--gw))); }
+.gl-stk-bot { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; min-height: 0; height: clamp(54px, calc(26 * var(--gh)), 120px); }
 .gl-stk-trace { min-height: 0; display: flex; } .gl-stk-trace .gl-trace { flex: 1 1 auto; }
 .gl-stk-trip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gl-stk-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; padding: 3px 4px; }
-.gl-stk-trip .gl-hud-stat strong { font-size: clamp(15px, min(5vh, 3vw), 24px); }
+.gl-stk-trip .gl-hud-stat strong { font-size: clamp(15px, min(calc(5 * var(--gh)), calc(3 * var(--gw))), 24px); }
 .gl-dim .gl-rmix-mid svg { opacity: .6; } .gl-dim .gl-stk-trace { opacity: .35; }
 
 /* ---- 3D surfaces for the swipeable designs ------------------------------ */
@@ -2907,18 +2934,18 @@ main > .card { max-width: 100%; }
 .gl-kb { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border-radius: 999px;
   background: linear-gradient(180deg, #1a2533, #0b121b); border: 1px solid #243244; border-top-color: #3c5068;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 3px 6px rgba(0,0,0,.5); }
-.gl-kb em { font: 600 clamp(9px, 2.6vh, 12px) system-ui, sans-serif; font-style: normal; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.gl-kb b { font: 700 clamp(12px, 3.8vh, 17px) ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-kb em { font: 600 clamp(9px, calc(2.6 * var(--gh)), 12px) system-ui, sans-serif; font-style: normal; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-kb b { font: 700 clamp(12px, calc(3.8 * var(--gh)), 17px) ui-monospace, Menlo, monospace; color: #e8fbff; }
 .gl-dim .gl-kb { box-shadow: none; border-color: #12181f; opacity: .7; }
 
 /* The round gauge takes the middle; the trip and power cards beside it are slimmer. */
 .gl-rmix { grid-template-columns: minmax(0, .62fr) minmax(0, 1.76fr) minmax(0, .62fr); grid-template-rows: minmax(0, 1fr); }
 .gl-rmix-mid { min-height: 0; }
 .gl-rmix-mid svg { width: 100%; height: 100%; }
-.gl-rmix-col .gl-hud-stat strong { font-size: clamp(16px, min(5.6vh, 3.4vw), 28px); }
-.gl-rmix-col .gl-hud-stat span { font-size: clamp(9px, 2.5vh, 12px); }
+.gl-rmix-col .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.6 * var(--gh)), calc(3.4 * var(--gw))), 28px); }
+.gl-rmix-col .gl-hud-stat span { font-size: clamp(9px, calc(2.5 * var(--gh)), 12px); }
 .gl-dialbox svg { width: 100%; height: 100%; }
-.gl-pbar { flex-basis: clamp(54px, 11vw, 92px); }
+.gl-pbar { flex-basis: clamp(54px, calc(11 * var(--gw)), 92px); }
 
 /* Colour for the tiles: each takes an accent, glows with it, and has a lit strip along its base. */
 .gl-hud-stat, .gl-big, .gl-en-big { --ac: #22d3ee; position: relative; overflow: hidden;
@@ -2947,11 +2974,11 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-hud-stat strong, .gl-dim .gl-big strong, .gl-dim .gl-en-big strong { text-shadow: none; }
 
 /* Dial: digital LED bars with a lit readout. */
-.gl-ledcol { flex: 0 0 clamp(70px, 13vw, 108px); min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 6px 8px;
+.gl-ledcol { flex: 0 0 clamp(70px, calc(13 * var(--gw)), 108px); min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 6px 8px;
   border-radius: 12px; background: linear-gradient(165deg, #1b2736 0%, #0d1520 42%, #070c13 100%);
   border: 1px solid #243244; border-top-color: #41566f; border-bottom-color: #16222f;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -12px 20px rgba(0,0,0,.5), 0 9px 18px rgba(0,0,0,.6), 0 2px 3px rgba(0,0,0,.7); }
-.gl-ledcol > span { text-align: center; font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-ledcol > span { text-align: center; font: 600 clamp(9px, calc(2.8 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
 .gl-dim .gl-ledcol { box-shadow: none; border-color: #12181f; }
 .gl-led-bar { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; gap: 4px; align-items: stretch; justify-content: center; }
 .gl-led-segs { width: 46%; display: flex; flex-direction: column-reverse; gap: 2.5px; padding: 3px; border-radius: 7px;
@@ -2960,14 +2987,14 @@ main > .card { max-width: 100%; }
 .gl-led-segs i.on { background: var(--c); box-shadow: 0 0 9px var(--c), inset 0 1px 0 rgba(255,255,255,.4); }
 .gl-led-segs i.zero { margin-bottom: 2px; }
 .gl-led-scale { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
-  font: 600 clamp(7px, 2vh, 10px) ui-monospace, Menlo, monospace; color: #6f7f94; padding: 2px 0; }
+  font: 600 clamp(7px, calc(2 * var(--gh)), 10px) ui-monospace, Menlo, monospace; color: #6f7f94; padding: 2px 0; }
 .gl-led-scale em { font-style: normal; }
 .gl-digi { position: relative; width: 100%; text-align: center; padding: 3px 4px; border-radius: 7px; background: #02050a; border: 1px solid #1d2a38;
   box-shadow: inset 0 0 10px #000; white-space: nowrap; line-height: 1.1; }
-.gl-digi i, .gl-digi b { font: 800 clamp(18px, 6vh, 30px) ui-monospace, Menlo, monospace; letter-spacing: .04em; }
+.gl-digi i, .gl-digi b { font: 800 clamp(18px, calc(6 * var(--gh)), 30px) ui-monospace, Menlo, monospace; letter-spacing: .04em; }
 .gl-digi i { position: absolute; left: 0; right: 0; top: 3px; font-style: normal; color: var(--c); opacity: .06; }
 .gl-digi b { position: relative; color: var(--c); text-shadow: 0 0 12px var(--c); }
-.gl-digi small { font: 700 clamp(9px, 2.6vh, 13px) system-ui, sans-serif; color: var(--muted); margin-left: 3px; }
+.gl-digi small { font: 700 clamp(9px, calc(2.6 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); margin-left: 3px; }
 .gl-dim .gl-led-segs i.on, .gl-dim .gl-digi b { box-shadow: none; text-shadow: none; }
 
 /* Colour by speed: the page takes the speed's colour (--spd) and carries a speed line along the top. */
@@ -2992,33 +3019,33 @@ main > .card { max-width: 100%; }
 .gl-ln-st.l { align-items: flex-end; } .gl-ln-st.r { align-items: flex-start; }
 .gl-ln-st i { display: block; height: 3px; border-radius: 3px; min-width: 3%; filter: drop-shadow(0 0 5px currentColor); }
 .gl-ln-num { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font: 800 min(40vh, 22vw) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums;
+  font: 800 min(calc(40 * var(--gh)), calc(22 * var(--gw))) / 1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums;
   color: transparent; -webkit-text-stroke: clamp(2px, .5vh, 4px) var(--c); text-shadow: 0 0 26px var(--c); }
-.gl-ln-num small { font: 650 clamp(10px, 3.2vh, 15px) system-ui, sans-serif; letter-spacing: .16em; color: #7e93ab; -webkit-text-stroke: 0; text-shadow: none; margin-top: 2px; }
+.gl-ln-num small { font: 650 clamp(10px, calc(3.2 * var(--gh)), 15px) system-ui, sans-serif; letter-spacing: .16em; color: #7e93ab; -webkit-text-stroke: 0; text-shadow: none; margin-top: 2px; }
 .gl-ln-row { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid color-mix(in srgb, var(--spd, #22d3ee) 55%, #1d2a38);
   border-bottom: 1px solid color-mix(in srgb, var(--spd, #22d3ee) 30%, #1d2a38); }
 .gl-ln-c { padding: 5px 4px; text-align: center; border-left: 1px solid #1d2a38; min-width: 0; }
 .gl-ln-c:first-child { border-left: 0; }
-.gl-ln-c span { display: block; font: 600 clamp(8px, 2.4vh, 12px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-.gl-ln-c strong { display: block; font: 700 clamp(15px, min(5.4vh, 3.4vw), 26px) ui-monospace, Menlo, monospace; color: #e8fbff; }
+.gl-ln-c span { display: block; font: 600 clamp(8px, calc(2.4 * var(--gh)), 12px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.gl-ln-c strong { display: block; font: 700 clamp(15px, min(calc(5.4 * var(--gh)), calc(3.4 * var(--gw))), 26px) ui-monospace, Menlo, monospace; color: #e8fbff; }
 .gl-ln-c.warn strong { color: var(--amber); } .gl-ln-c.good strong { color: var(--green); }
 /* Graph: two lines over three minutes. */
 .gl-graph { gap: 6px; }
 .gl-gr-box { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; padding: 4px 10px 6px; border-radius: 12px;
   background: linear-gradient(165deg, #131c28, #080d14); border: 1px solid #243244; border-top-color: color-mix(in srgb, var(--spd, #22d3ee) 60%, #41566f);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 6px 14px rgba(0,0,0,.55); }
-.gl-gr-h { display: flex; justify-content: space-between; align-items: baseline; font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.gl-gr-h strong { font: 800 clamp(18px, 6vh, 30px) ui-monospace, Menlo, monospace; text-shadow: 0 0 12px currentColor; }
-.gl-gr-h small { font: 700 clamp(9px, 2.6vh, 13px) system-ui, sans-serif; color: var(--muted); margin-left: 3px; text-shadow: none; }
+.gl-gr-h { display: flex; justify-content: space-between; align-items: baseline; font: 600 clamp(9px, calc(2.8 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.gl-gr-h strong { font: 800 clamp(18px, calc(6 * var(--gh)), 30px) ui-monospace, Menlo, monospace; text-shadow: 0 0 12px currentColor; }
+.gl-gr-h small { font: 700 clamp(9px, calc(2.6 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); margin-left: 3px; text-shadow: none; }
 .gl-gr-box svg { flex: 1 1 auto; min-height: 0; width: 100%; filter: drop-shadow(0 0 4px rgba(34,211,238,.25)); }
 .gl-gr-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: 0 0 auto; }
 .gl-gr-row .gl-hud-stat { padding: 3px 6px; }
-.gl-gr-row .gl-hud-stat strong { font-size: clamp(15px, min(5vh, 3vw), 24px); }
+.gl-gr-row .gl-hud-stat strong { font-size: clamp(15px, min(calc(5 * var(--gh)), calc(3 * var(--gw))), 24px); }
 .gl-dim .gl-ln-st, .gl-dim .gl-gr-box svg { opacity: .55; filter: none; }
 
 /* Speed rails either side of the round gauges. */
 .gl-rmix-mid, .gl-dialbox { gap: 10px; }
-.gl-spdrail { flex: 0 0 clamp(18px, 4.2vw, 36px); height: 62%; display: flex; flex-direction: column-reverse; gap: 3px; }
+.gl-spdrail { flex: 0 0 clamp(18px, calc(4.2 * var(--gw)), 36px); height: 62%; display: flex; flex-direction: column-reverse; gap: 3px; }
 .gl-spdrail.l { align-items: flex-end; } .gl-spdrail.r { align-items: flex-start; }
 .gl-spdrail i { display: block; flex: 1 1 0; width: 100%; border-radius: 3px; background: var(--c); opacity: .18; }
 .gl-spdrail.l i { transform-origin: right; } .gl-spdrail.r i { transform-origin: left; }
@@ -3030,11 +3057,11 @@ main > .card { max-width: 100%; }
 
 /* LED ladders in the space beside the round gauges. */
 .gl-ladder { flex: 1 1 0; min-width: 0; max-width: 92px; height: 88%; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
-.gl-ladder > span { text-align: center; font: 600 clamp(8px, 2.4vh, 12px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.gl-ladder > span { text-align: center; font: 600 clamp(8px, calc(2.4 * var(--gh)), 12px) system-ui, sans-serif; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 .gl-ladder .gl-led-bar { flex: 1 1 auto; min-height: 0; justify-content: center; }
 .gl-ladder .gl-led-segs { width: 52%; }
-.gl-ladder b { display: block; text-align: center; font: 800 clamp(15px, 4.8vh, 24px) ui-monospace, Menlo, monospace; color: #e8fbff; text-shadow: 0 0 10px rgba(34,211,238,.4); white-space: nowrap; }
-.gl-ladder b small { font: 700 clamp(8px, 2.2vh, 11px) system-ui, sans-serif; color: var(--muted); margin-left: 2px; text-shadow: none; }
+.gl-ladder b { display: block; text-align: center; font: 800 clamp(15px, calc(4.8 * var(--gh)), 24px) ui-monospace, Menlo, monospace; color: #e8fbff; text-shadow: 0 0 10px rgba(34,211,238,.4); white-space: nowrap; }
+.gl-ladder b small { font: 700 clamp(8px, calc(2.2 * var(--gh)), 11px) system-ui, sans-serif; color: var(--muted); margin-left: 2px; text-shadow: none; }
 .gl-ladder .gl-led-scale { align-items: flex-end; }
 .gl-ladder:nth-last-child(1) .gl-led-bar, .gl-ladder:nth-last-child(2) .gl-led-bar { flex-direction: row-reverse; } .gl-ladder:nth-last-child(1) .gl-led-scale, .gl-ladder:nth-last-child(2) .gl-led-scale { align-items: flex-start; }
 .gl-dim .gl-ladder b { text-shadow: none; }
@@ -3044,46 +3071,46 @@ main > .card { max-width: 100%; }
 
 /* ---- Odometer drums, Digital Mix, and the one-reading designs ------------- */
 .gl-drum { display: inline-flex; gap: 2px; padding: 2px; border-radius: 5px; background: #02050a; border: 1px solid #3a4a5e; box-shadow: inset 0 0 6px #000; }
-.gl-drum b { display: block; min-width: 1.05em; text-align: center; padding: 0 2px; border-radius: 3px; font: 700 clamp(12px, 3.6vh, 17px) ui-monospace, Menlo, monospace; color: #f1f7ff;
+.gl-drum b { display: block; min-width: 1.05em; text-align: center; padding: 0 2px; border-radius: 3px; font: 700 clamp(12px, calc(3.6 * var(--gh)), 17px) ui-monospace, Menlo, monospace; color: #f1f7ff;
   background: linear-gradient(180deg, #05080c, #1a2330 28%, #34455a 50%, #1a2330 72%, #05080c); text-shadow: 0 1px 1px #000; }
 .gl-kodo { gap: 8px; align-items: center; }
-.gl-drum.big b { font-size: clamp(18px, 6.4vh, 32px); padding: 1px 4px; min-width: 1.15em; }
+.gl-drum.big b { font-size: clamp(18px, calc(6.4 * var(--gh)), 32px); padding: 1px 4px; min-width: 1.15em; }
 .gl-dmix { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 10px; align-items: stretch; }
 .gl-dm-main { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .gl-dm-speed { flex: 1 1 auto; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; border-radius: 14px;
   background: linear-gradient(165deg, #131c28, #04070b); border: 1px solid #243244; border-top-color: color-mix(in srgb, var(--c) 60%, #41566f);
   box-shadow: inset 0 2px 14px #000, 0 8px 18px rgba(0,0,0,.6); }
-.gl-dm-speed i, .gl-dm-speed b { font: 800 min(36vh, 19vw) / 1 ui-monospace, Menlo, monospace; letter-spacing: .02em; }
+.gl-dm-speed i, .gl-dm-speed b { font: 800 min(calc(36 * var(--gh)), calc(19 * var(--gw))) / 1 ui-monospace, Menlo, monospace; letter-spacing: .02em; }
 .gl-dm-speed i { position: absolute; font-style: normal; color: var(--c); opacity: .07; }
 .gl-dm-speed b { position: relative; color: var(--c); text-shadow: 0 0 22px var(--c), 0 3px 0 rgba(0,0,0,.7); }
-.gl-dm-speed small { position: absolute; right: 14px; bottom: 8px; font: 650 clamp(10px, 3vh, 14px) system-ui, sans-serif; letter-spacing: .14em; color: #7e93ab; }
+.gl-dm-speed small { position: absolute; right: 14px; bottom: 8px; font: 650 clamp(10px, calc(3 * var(--gh)), 14px) system-ui, sans-serif; letter-spacing: .14em; color: #7e93ab; }
 .gl-dm-odo { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-radius: 12px;
   background: linear-gradient(165deg, #1b2736, #070c13); border: 1px solid #243244; border-top-color: #41566f; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 6px 12px rgba(0,0,0,.5); }
-.gl-dm-odo span { font: 600 clamp(9px, 2.8vh, 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .1em; }
+.gl-dm-odo span { font: 600 clamp(9px, calc(2.8 * var(--gh)), 13px) system-ui, sans-serif; color: var(--muted); letter-spacing: .1em; }
 .gl-dm-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 0; }
 .gl-dm-grid .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; }
 .gl-dm-grid .gl-hud-stat:nth-child(5) { --ac: #f59e0b; } .gl-dm-grid .gl-hud-stat:nth-child(6) { --ac: #22c55e; }
 /* One reading, whole page. */
 .gl-power1, .gl-eff1 { justify-content: center; gap: 10px; }
-.gl-p1-top { text-align: center; font: 600 clamp(11px, 3.4vh, 16px) system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.gl-p1-num { text-align: center; font: 800 min(34vh, 20vw) / 1 ui-monospace, Menlo, monospace; color: var(--c); text-shadow: 0 0 24px var(--c), 0 4px 0 rgba(0,0,0,.7); }
-.gl-p1-num small { font: 700 clamp(14px, 5vh, 26px) system-ui, sans-serif; color: var(--muted); margin-left: 8px; text-shadow: none; }
+.gl-p1-top { text-align: center; font: 600 clamp(11px, calc(3.4 * var(--gh)), 16px) system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.gl-p1-num { text-align: center; font: 800 min(calc(34 * var(--gh)), calc(20 * var(--gw))) / 1 ui-monospace, Menlo, monospace; color: var(--c); text-shadow: 0 0 24px var(--c), 0 4px 0 rgba(0,0,0,.7); }
+.gl-p1-num small { font: 700 clamp(14px, calc(5 * var(--gh)), 26px) system-ui, sans-serif; color: var(--muted); margin-left: 8px; text-shadow: none; }
 .gl-p1-bar { padding: 0 6px; }
-.gl-p1-segs { display: flex; gap: 3px; padding: 4px; border-radius: 8px; background: #04070b; box-shadow: inset 0 0 8px #000; height: clamp(22px, 8vh, 42px); }
+.gl-p1-segs { display: flex; gap: 3px; padding: 4px; border-radius: 8px; background: #04070b; box-shadow: inset 0 0 8px #000; height: clamp(22px, calc(8 * var(--gh)), 42px); }
 .gl-p1-segs i { flex: 1 1 0; border-radius: 2.5px; background: #0d1620; }
 .gl-p1-segs i.on { background: var(--c); box-shadow: 0 0 9px var(--c), inset 0 1px 0 rgba(255,255,255,.4); }
-.gl-p1-scale { display: flex; justify-content: space-between; margin-top: 4px; font: 600 clamp(9px, 2.6vh, 12px) ui-monospace, Menlo, monospace; color: #6f7f94; }
+.gl-p1-scale { display: flex; justify-content: space-between; margin-top: 4px; font: 600 clamp(9px, calc(2.6 * var(--gh)), 12px) ui-monospace, Menlo, monospace; color: #6f7f94; }
 .gl-p1-scale em { font-style: normal; }
-.gl-ef-bar { position: relative; height: clamp(20px, 7vh, 34px); margin: 8px 6px 18px; border-radius: 8px; background: #04070b; box-shadow: inset 0 0 8px #000; }
+.gl-ef-bar { position: relative; height: clamp(20px, calc(7 * var(--gh)), 34px); margin: 8px 6px 18px; border-radius: 8px; background: #04070b; box-shadow: inset 0 0 8px #000; }
 .gl-ef-bar .fill { position: absolute; left: 0; top: 3px; bottom: 3px; border-radius: 6px; box-shadow: 0 0 14px currentColor; }
 .gl-ef-bar b { position: absolute; top: -6px; bottom: -6px; width: 2px; background: #fff; box-shadow: 0 0 8px #fff; }
-.gl-ef-bar b em { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; font: 600 clamp(9px, 2.6vh, 12px) system-ui, sans-serif; font-style: normal; color: #cfe8ff; white-space: nowrap; }
-.gl-ef-note { text-align: center; font: 700 clamp(14px, 4.4vh, 22px) system-ui, sans-serif; }
+.gl-ef-bar b em { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; font: 600 clamp(9px, calc(2.6 * var(--gh)), 12px) system-ui, sans-serif; font-style: normal; color: #cfe8ff; white-space: nowrap; }
+.gl-ef-note { text-align: center; font: 700 clamp(14px, calc(4.4 * var(--gh)), 22px) system-ui, sans-serif; }
 .gl-dim .gl-p1-num, .gl-dim .gl-dm-speed b { text-shadow: none; }
 .gl-dim .gl-p1-segs i.on { box-shadow: none; }
 @media (orientation: landscape) and (max-height: 300px) {
   .gl-power1, .gl-eff1 { gap: 3px; }
-  .gl-p1-num { font-size: min(26vh, 16vw); }
+  .gl-p1-num { font-size: min(calc(26 * var(--gh)), calc(16 * var(--gw))); }
   .gl-p1-segs { height: 18px; padding: 3px; }
   .gl-ef-bar { height: 18px; margin: 4px 6px 14px; }
   .gl-ef-note { font-size: 13px; }
@@ -3093,69 +3120,69 @@ main > .card { max-width: 100%; }
 /* Tiles: an icon in front of the label, and larger figures. */
 .gl-ic { width: 1.35em; height: 1.35em; margin-right: .4em; vertical-align: -.3em; fill: none; stroke: var(--ac, #22d3ee); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   filter: drop-shadow(0 0 4px var(--ac, #22d3ee)); }
-.gl-hud-stat span { font-size: clamp(10px, 3vh, 15px); font-weight: 700; }
-.gl-hud-stat strong { font-size: clamp(22px, min(8.4vh, 5vw), 44px); }
-.gl-rmix-col .gl-hud-stat strong { font-size: clamp(22px, min(8.6vh, 5vw), 42px); }
-.gl-rmix-col .gl-hud-stat span { font-size: clamp(10px, 3.1vh, 15px); }
-.gl-dm-grid .gl-hud-stat strong { font-size: clamp(22px, min(8vh, 4.6vw), 40px); }
-.gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong, .gl-stk-trip .gl-hud-stat strong { font-size: clamp(16px, min(5.8vh, 3.6vw), 28px); }
-.gl-stk-top .gl-hud-stat span, .gl-mix-trip .gl-hud-stat span, .gl-gr-row .gl-hud-stat span, .gl-stk-trip .gl-hud-stat span { font-size: clamp(8px, 2.5vh, 12px); }
-.gl-big span, .gl-en-big span { font-size: clamp(10px, 3.1vh, 15px); font-weight: 700; }
-.gl-lsub { text-align: center; font: 600 clamp(8px, 2.3vh, 11px) system-ui, sans-serif; font-style: normal; color: #7fe3b0; white-space: nowrap; }
+.gl-hud-stat span { font-size: clamp(10px, calc(3 * var(--gh)), 15px); font-weight: 700; }
+.gl-hud-stat strong { font-size: clamp(22px, min(calc(8.4 * var(--gh)), calc(5 * var(--gw))), 44px); }
+.gl-rmix-col .gl-hud-stat strong { font-size: clamp(22px, min(calc(8.6 * var(--gh)), calc(5 * var(--gw))), 42px); }
+.gl-rmix-col .gl-hud-stat span { font-size: clamp(10px, calc(3.1 * var(--gh)), 15px); }
+.gl-dm-grid .gl-hud-stat strong { font-size: clamp(22px, min(calc(8 * var(--gh)), calc(4.6 * var(--gw))), 40px); }
+.gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong, .gl-stk-trip .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.8 * var(--gh)), calc(3.6 * var(--gw))), 28px); }
+.gl-stk-top .gl-hud-stat span, .gl-mix-trip .gl-hud-stat span, .gl-gr-row .gl-hud-stat span, .gl-stk-trip .gl-hud-stat span { font-size: clamp(8px, calc(2.5 * var(--gh)), 12px); }
+.gl-big span, .gl-en-big span { font-size: clamp(10px, calc(3.1 * var(--gh)), 15px); font-weight: 700; }
+.gl-lsub { text-align: center; font: 600 clamp(8px, calc(2.3 * var(--gh)), 11px) system-ui, sans-serif; font-style: normal; color: #7fe3b0; white-space: nowrap; }
 @media (orientation: landscape) and (max-height: 300px) {
-  .gl-hud-stat strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(16px, 7vh, 22px); }
+  .gl-hud-stat strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(16px, calc(7 * var(--gh)), 22px); }
   .gl-ic { width: 1.1em; height: 1.1em; margin-right: .25em; }
 }
 
 /* The one-reading designs: bigger type, icons, a lit frame. */
 .gl-big { --ac: #22d3ee; }
-.gl-big span { display: flex; align-items: center; font-size: clamp(11px, 3.6vh, 18px); }
-.gl-big strong { font-size: clamp(26px, min(16vh, 7.4vw), 78px); }
+.gl-big span { display: flex; align-items: center; font-size: clamp(11px, calc(3.6 * var(--gh)), 18px); }
+.gl-big strong { font-size: clamp(26px, min(calc(16 * var(--gh)), calc(7.4 * var(--gw))), 78px); }
 .gl-p1-top { display: flex; justify-content: center; }
-.gl-p1-top span { display: inline-flex; align-items: center; padding: 5px 18px; border-radius: 999px; font-size: clamp(12px, 4vh, 19px); font-weight: 700; color: #cfe8ff;
+.gl-p1-top span { display: inline-flex; align-items: center; padding: 5px 18px; border-radius: 999px; font-size: clamp(12px, calc(4 * var(--gh)), 19px); font-weight: 700; color: #cfe8ff;
   background: linear-gradient(180deg, #1a2533, #0b121b); border: 1px solid #243244; border-top-color: var(--c, #3c5068); box-shadow: 0 0 18px color-mix(in srgb, var(--c, #22d3ee) 25%, transparent); }
 .gl-p1-top .gl-ic { width: 1.5em; height: 1.5em; stroke: #22d3ee; }
 .gl-power1, .gl-eff1 { background: radial-gradient(60% 55% at 50% 45%, color-mix(in srgb, var(--spd, #22d3ee) 12%, transparent), transparent 70%); }
 .gl-p1-num { text-shadow: 0 0 36px var(--c), 0 0 8px var(--c), 0 4px 0 rgba(0,0,0,.7); }
-.gl-p1-segs { height: clamp(26px, 9vh, 48px); }
-.gl-p1-num { font-size: min(27vh, 17vw); }
-.gl-p1-top span { padding: 3px 16px; font-size: clamp(12px, 3.6vh, 18px); }
-.gl-p1-segs { height: clamp(22px, 7vh, 40px); }
+.gl-p1-segs { height: clamp(26px, calc(9 * var(--gh)), 48px); }
+.gl-p1-num { font-size: min(calc(27 * var(--gh)), calc(17 * var(--gw))); }
+.gl-p1-top span { padding: 3px 16px; font-size: clamp(12px, calc(3.6 * var(--gh)), 18px); }
+.gl-p1-segs { height: clamp(22px, calc(7 * var(--gh)), 40px); }
 .gl-power1, .gl-eff1 { gap: 6px; }
 .gl-ef-bar { margin-bottom: 16px; }
 @media (orientation: landscape) and (max-width: 640px) {
-  .gl-rng-side .gl-big strong { font-size: clamp(20px, 11vh, 40px); }
-  .gl-big span { font-size: clamp(9px, 3vh, 13px); }
+  .gl-rng-side .gl-big strong { font-size: clamp(20px, calc(11 * var(--gh)), 40px); }
+  .gl-big span { font-size: clamp(9px, calc(3 * var(--gh)), 13px); }
 }
 
 /* Range design: calmer type, the figures no longer crowd their boxes. */
-.gl-rng-side .gl-big span { font-size: clamp(9px, 2.6vh, 13px); letter-spacing: .05em; white-space: nowrap; }
-.gl-rng-side .gl-big strong { font-size: clamp(22px, min(10vh, 5vw), 46px); }
+.gl-rng-side .gl-big span { font-size: clamp(9px, calc(2.6 * var(--gh)), 13px); letter-spacing: .05em; white-space: nowrap; }
+.gl-rng-side .gl-big strong { font-size: clamp(22px, min(calc(10 * var(--gh)), calc(5 * var(--gw))), 46px); }
 .gl-rng-side .gl-big .gl-ic { width: 1.2em; height: 1.2em; }
-.gl-big strong { font-size: clamp(22px, min(12vh, 6vw), 56px); }
-.gl-big span { font-size: clamp(10px, 3vh, 15px); }
+.gl-big strong { font-size: clamp(22px, min(calc(12 * var(--gh)), calc(6 * var(--gw))), 56px); }
+.gl-big span { font-size: clamp(10px, calc(3 * var(--gh)), 15px); }
 
 /* One size smaller across the tiles; Wh/km (up to 5 characters, "1,705") a little smaller again. */
-.gl-hud-stat strong { font-size: clamp(18px, min(7vh, 4.2vw), 36px); }
-.gl-rmix-col .gl-hud-stat strong { font-size: clamp(18px, min(7.2vh, 4.2vw), 34px); }
-.gl-dm-grid .gl-hud-stat strong { font-size: clamp(18px, min(6.8vh, 3.9vw), 33px); }
-.gl-hud-stat span { font-size: clamp(9px, 2.6vh, 13px); }
-.gl-rmix-col .gl-hud-stat span { font-size: clamp(9px, 2.7vh, 13px); }
-.gl-hud-stat.gl-whkm strong { font-size: clamp(16px, min(5.8vh, 3.4vw), 29px); }
-.gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong, .gl-stk-trip .gl-hud-stat strong { font-size: clamp(14px, min(5vh, 3.1vw), 24px); }
-.gl-big strong { font-size: clamp(20px, min(10.5vh, 5.4vw), 50px); }
+.gl-hud-stat strong { font-size: clamp(18px, min(calc(7 * var(--gh)), calc(4.2 * var(--gw))), 36px); }
+.gl-rmix-col .gl-hud-stat strong { font-size: clamp(18px, min(calc(7.2 * var(--gh)), calc(4.2 * var(--gw))), 34px); }
+.gl-dm-grid .gl-hud-stat strong { font-size: clamp(18px, min(calc(6.8 * var(--gh)), calc(3.9 * var(--gw))), 33px); }
+.gl-hud-stat span { font-size: clamp(9px, calc(2.6 * var(--gh)), 13px); }
+.gl-rmix-col .gl-hud-stat span { font-size: clamp(9px, calc(2.7 * var(--gh)), 13px); }
+.gl-hud-stat.gl-whkm strong { font-size: clamp(16px, min(calc(5.8 * var(--gh)), calc(3.4 * var(--gw))), 29px); }
+.gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong, .gl-stk-trip .gl-hud-stat strong { font-size: clamp(14px, min(calc(5 * var(--gh)), calc(3.1 * var(--gw))), 24px); }
+.gl-big strong { font-size: clamp(20px, min(calc(10.5 * var(--gh)), calc(5.4 * var(--gw))), 50px); }
 @media (orientation: landscape) and (max-height: 300px) {
-  .gl-hud-stat strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(14px, 6vh, 19px); }
-  .gl-hud-stat.gl-whkm strong { font-size: clamp(13px, 5vh, 17px); }
+  .gl-hud-stat strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(14px, calc(6 * var(--gh)), 19px); }
+  .gl-hud-stat.gl-whkm strong { font-size: clamp(13px, calc(5 * var(--gh)), 17px); }
 }
 
 /* One size for every tile figure on the mix designs, the size Wh/km uses, so the boxes look even. */
 .gl-hud-stat strong, .gl-hud-stat.gl-whkm strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong {
-  font-size: clamp(16px, min(5.8vh, 3.4vw), 29px); }
+  font-size: clamp(16px, min(calc(5.8 * var(--gh)), calc(3.4 * var(--gw))), 29px); }
 .gl-stk-top .gl-hud-stat strong, .gl-mix-trip .gl-hud-stat strong, .gl-gr-row .gl-hud-stat strong, .gl-stk-trip .gl-hud-stat strong {
-  font-size: clamp(14px, min(5vh, 3.1vw), 24px); }
+  font-size: clamp(14px, min(calc(5 * var(--gh)), calc(3.1 * var(--gw))), 24px); }
 @media (orientation: landscape) and (max-height: 300px) {
-  .gl-hud-stat strong, .gl-hud-stat.gl-whkm strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(13px, 5vh, 17px); }
+  .gl-hud-stat strong, .gl-hud-stat.gl-whkm strong, .gl-rmix-col .gl-hud-stat strong, .gl-dm-grid .gl-hud-stat strong { font-size: clamp(13px, calc(5 * var(--gh)), 17px); }
 }
 /* Half-and-half power / regen bar: unlit segments keep their colour, dim; the centre line is bright. */
 .gl-led-segs i:not(.on):not(.mid) { background: color-mix(in srgb, var(--c, #123) 26%, #070b11); }
@@ -3165,7 +3192,7 @@ main > .card { max-width: 100%; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(1) { --ac: #22d3ee; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(2) { --ac: #a78bfa; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(3) { --ac: #f59e0b; }
-.gl-ladder .gl-ltop { font-size: clamp(14px, 4.4vh, 21px); }
+.gl-ladder .gl-ltop { font-size: clamp(14px, calc(4.4 * var(--gh)), 21px); }
 
 /* Wh/km as a bar of LED dots (Cockpit): low on the left, high on the right. */
 .gl-whbar { flex: 1 1 auto; min-height: 14px; display: flex; gap: 2px; align-items: stretch; margin-top: 4px; }
@@ -3178,36 +3205,36 @@ main > .card { max-width: 100%; }
 /* Under the round gauge: gear and a colour speed strip. */
 .gl-rmix-mid { position: relative; }
 .gl-under { position: absolute; left: 24%; right: 24%; bottom: 0; display: flex; flex-direction: column; align-items: stretch; gap: 3px; pointer-events: none; }
-.gl-under-g { display: flex; justify-content: center; gap: 14px; font: 700 clamp(11px, 3.2vh, 16px) system-ui, sans-serif; letter-spacing: .1em; }
+.gl-under-g { display: flex; justify-content: center; gap: 14px; font: 700 clamp(11px, calc(3.2 * var(--gh)), 16px) system-ui, sans-serif; letter-spacing: .1em; }
 .gl-under-g b { color: #3b4757; padding: 0 5px; border: 1px solid transparent; border-radius: 3px; }
 .gl-under-g b.on { color: #22d3ee; border-color: #22d3ee; text-shadow: 0 0 8px #22d3ee; }
-.gl-under-bar { display: flex; gap: 2px; height: clamp(8px, 2.6vh, 13px); }
+.gl-under-bar { display: flex; gap: 2px; height: clamp(8px, calc(2.6 * var(--gh)), 13px); }
 .gl-under-bar i { flex: 1 1 0; border-radius: 2px; background: var(--c); opacity: .2; }
 .gl-under-bar i.on { opacity: 1; box-shadow: 0 0 6px var(--c); }
 .gl-under-bar i.top { opacity: 1; background: #fff; box-shadow: 0 0 6px #fff; }
-.gl-under-s { display: flex; justify-content: space-between; font: 600 clamp(7px, 2vh, 10px) ui-monospace, Menlo, monospace; color: #6f7f94; }
+.gl-under-s { display: flex; justify-content: space-between; font: 600 clamp(7px, calc(2 * var(--gh)), 10px) ui-monospace, Menlo, monospace; color: #6f7f94; }
 .gl-under-s em { font-style: normal; }
 .gl-dim .gl-under-bar i.on { box-shadow: none; }
-.gl-rmix-mid { padding-bottom: clamp(34px, 10vh, 50px); }
+.gl-rmix-mid { padding-bottom: clamp(34px, calc(10 * var(--gh)), 50px); }
 .gl-ladder:first-child .gl-led-bar { flex-direction: row; } .gl-ladder:first-child .gl-led-scale { align-items: flex-end; }
 .gl-under { left: 14%; right: 14%; flex-direction: row; align-items: center; gap: 10px; }
 .gl-under-g { gap: 4px; flex: 0 0 auto; }
 .gl-under-g b { padding: 0 3px; }
 .gl-under-bar { flex: 1 1 auto; }
-.gl-rmix-mid { padding-bottom: clamp(18px, 5.6vh, 28px); }
+.gl-rmix-mid { padding-bottom: clamp(18px, calc(5.6 * var(--gh)), 28px); }
 .gl-rmix-mid { padding-bottom: 0; }
 /* P R N D under the round gauge, in the free space (no change to the gauge's size). */
-.gl-gearrow { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: clamp(10px, 3vw, 22px); pointer-events: none;
-  font: 700 clamp(12px, 3.4vh, 17px) system-ui, sans-serif; letter-spacing: .1em; line-height: 1; }
+.gl-gearrow { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; gap: clamp(10px, calc(3 * var(--gw)), 22px); pointer-events: none;
+  font: 700 clamp(12px, calc(3.4 * var(--gh)), 17px) system-ui, sans-serif; letter-spacing: .1em; line-height: 1; }
 .gl-gearrow b { color: #3b4757; padding: 2px 6px; border: 1px solid transparent; border-radius: 4px; }
 .gl-gearrow b.on { color: #22d3ee; border-color: #22d3ee; text-shadow: 0 0 8px #22d3ee; box-shadow: 0 0 8px rgba(34,211,238,.4); }
 .gl-dim .gl-gearrow b.on { box-shadow: none; text-shadow: none; }
-.gl-gearrow { bottom: -3px; gap: clamp(4px, 1.1vw, 9px); font-size: clamp(11px, 3vh, 15px); }
+.gl-gearrow { bottom: -3px; gap: clamp(4px, calc(1.1 * var(--gw)), 9px); font-size: clamp(11px, calc(3 * var(--gh)), 15px); }
 .gl-gearrow b { padding: 1px 5px; }
 .gl-gearrow { bottom: -11px; }
-.gl-gearrow { bottom: -17px; gap: clamp(8px, 1.9vw, 16px); font-size: clamp(15px, 4.4vh, 22px); }
+.gl-gearrow { bottom: -17px; gap: clamp(8px, calc(1.9 * var(--gw)), 16px); font-size: clamp(15px, calc(4.4 * var(--gh)), 22px); }
 .gl-gearrow b { padding: 2px 8px; }
-.gl-gearrow { gap: clamp(5px, 1.2vw, 11px); }
+.gl-gearrow { gap: clamp(5px, calc(1.2 * var(--gw)), 11px); }
 /* Key-info strip a little lower, clear of the speed line above it; P R N D level with the footer dots. */
 .gl-keybar { margin-top: 6px; }
 .gl-gearrow { bottom: -29px; }
