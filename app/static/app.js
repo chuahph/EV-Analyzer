@@ -5225,7 +5225,9 @@ function glLadder(kind, c) {
     // Half and half: Wh/km fills upward in the top half (green under rated,
     // amber, red); the battery fills DOWNWARD from the middle line: red near
     // the line when low, green at the far end when full.
-    const H = 12, R = c.rated || 150, w = c.nowWh != null ? c.nowWh : c.whk, pc = c.pct;
+    // The trip's Wh/km, as the digital tiles and the car's own trip card show
+    // it, so it moves at the car's pace rather than with every throttle change.
+    const H = 12, R = c.rated || 150, w = c.whk != null ? c.whk : c.nowWh, pc = c.pct;
     title = "Wh/km";
     const up = w != null ? Math.max(1, Math.min(H, Math.round(Math.max(0, w) / 300 * H))) : 0;
     const bt = pc != null ? Math.max(0, Math.min(H, Math.round(pc / 100 * H))) : 0;
@@ -5280,7 +5282,7 @@ function glLadder(kind, c) {
     read = kw != null ? `${c.n(Math.abs(kw), 1)}<small>kW</small>` : "—";
   } else {
     title = "Wh/km";
-    const w = c.nowWh != null ? c.nowWh : c.whk, R = c.rated || 150;
+    const w = c.whk != null ? c.whk : c.nowWh, R = c.rated || 150;   // the trip's, as above
     const lit = w != null ? Math.max(1, Math.min(N, Math.round(Math.max(0, w) / 300 * N))) : 0;
     for (let i = 0; i < N; i++) {
       const v = (i + 0.5) / N * 300;
