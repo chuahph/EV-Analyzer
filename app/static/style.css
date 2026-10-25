@@ -2887,7 +2887,8 @@ main > .card { max-width: 100%; }
 .gl-stackpage { gap: 6px; }
 .gl-stk-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .gl-stk-top .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.6 * var(--gh)), calc(3.6 * var(--gw))), 28px); }
-.gl-stackpage .gl-hud-speed { font-size: min(calc(30 * var(--gh)), calc(18 * var(--gw))); }
+/* Sized to leave clear space above and below, between the boxes. */
+.gl-stackpage .gl-hud-speed { font-size: min(calc(22 * var(--gh)), calc(14 * var(--gw))); line-height: 1; padding-block: 4px; }
 .gl-stk-bot { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; min-height: 0; height: clamp(54px, calc(26 * var(--gh)), 120px); }
 .gl-stk-trace { min-height: 0; display: flex; } .gl-stk-trace .gl-trace { flex: 1 1 auto; }
 .gl-stk-trip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
