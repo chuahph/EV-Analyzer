@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 

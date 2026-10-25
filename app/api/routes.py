@@ -1,6 +1,7 @@
 """REST API endpoints."""
 from __future__ import annotations
 
+import copy
 import hmac
 import json as _json_mod
 import math
@@ -12653,7 +12654,6 @@ def summary(
             # shares chargeRowHtml with that list, so it needs the field.
             "location_raw": last_charge.location,
             "payable_kwh": round(last_charge.payable_kwh or 0.0, 3) or None,
-            "billed_kwh": round(last_charge.billed_kwh or 0.0, 3) or None,
             "rate_per_kwh": (
                 round(last_charge.cost / (last_charge.payable_kwh or last_charge.energy_added_kwh), 3)
                 if last_charge.energy_added_kwh else None
@@ -13719,6 +13719,10 @@ def _telemetry_ingest(payload: dict, session: Session):
     records = payload.get("records")
     if not isinstance(records, list):
         raise HTTPException(400, "Expected {'records': [...]}.")
+    # One malformed record (a VIN that is not text) failed the whole batch,
+    # and the bridge would resend it, failing again: skip it instead.
+    records = [r for r in records
+               if isinstance(r, dict) and (r.get("vin") is None or isinstance(r.get("vin"), str))]
 
     # One query for every store this batch reads, and none for re-reading
     # them — see state.enable_cache. Safe here because this is a short request
@@ -15160,6 +15164,12 @@ def _live_snapshot(car: dict, ts: float) -> dict:
     snap = sync_mod.snapshot_from_telemetry(car, ts)
     if car.get("Odometer") is None:
         snap["odo_km"] = None
+    # The same for charge and range: 0 here read as "0% · 0 km" on the garage
+    # line and the Range page after a restart, until the car next sent them.
+    if car.get("Soc") is None:
+        snap["soc"] = None
+    if car.get("RatedRange") is None:
+        snap["range_km"] = None
     # A car in Park is not moving, whatever the last speed it sent was: Tesla
     # may follow the last non-zero reading with an invalid one, which the fold
     # ignores, and the old speed would then hold the drive open and the dial up.
@@ -15274,8 +15284,6 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
         after = _LIVE_MEM.get(vin) or {}
         learned = int(after.get("_sign") or 0)
         g1, o1 = after.get("Gear"), "_go" in after
-        if abs(learned) >= 8:
-            _live_sign_save(vin, 1 if learned > 0 else -1)
         if g0 != g1 or o0 != o1:
             # Only on a change of gear or of the drive being open: a line or
             # two per journey, so a Live page that disagrees with the car can
@@ -15284,6 +15292,10 @@ def _live_mem_fold(vin: str | None, created_at, fields: dict) -> None:
             print(f"[live] {vin[-6:]} gear {g0}->{g1} speed {after.get('VehicleSpeed')} "
                   f"drive {'open' if o1 else 'closed'} record_age {time.time() - t:.0f}s "
                   f"keys {','.join(sorted(fields))[:80]}", flush=True)
+    # Outside the lock: it may write the database, and the live streams wait
+    # on this lock for every frame.
+    if abs(learned) >= 8:
+        _live_sign_save(vin, 1 if learned > 0 else -1)
 
 
 def _live_align_to_shadows(shadows: dict) -> None:
@@ -15468,6 +15480,7 @@ def telemetry_live_push(payload: dict = Body(...)):
     records = payload.get("records")
     if not isinstance(records, list):
         raise HTTPException(400, "Expected {'records': [...]}.")
+    records = [r for r in records if isinstance(r, dict) and isinstance(r.get("vin"), str)]
     # One log line when the fast lane falls quiet for a while and resumes —
     # enough to tell, after a stall on the Live page, whether the car's
     # records stopped coming (lag ~0, a long gap: the car or the relay) or
@@ -15508,7 +15521,12 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     if not vin:
         vin = _live_latest_vin()
     cap = capacity_kwh or 75.0
-    car = _LIVE_MEM.get(vin) if vin else None
+    # A copy taken under the lock: a record folding in on another thread
+    # meanwhile could otherwise change the drive mid-read (energy summed to
+    # one second, power still from the one before) or fail the whole frame,
+    # which the page then shows as "not driving" for a moment.
+    with _LIVE_LOCK:
+        car = copy.deepcopy(_LIVE_MEM.get(vin)) if vin else None
     ts = _telemetry_ts(car.get("_ts")) if car else None
     if not car or not ts:
         return {"driving": False, "vin": vin, "trip": None, "now": None,

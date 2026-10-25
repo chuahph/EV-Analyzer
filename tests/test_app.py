@@ -12720,6 +12720,41 @@ def test_live_memory_survives_malformed_readings():
         routes_mod._LIVE_MEM.pop(vin, None)
 
 
+def test_live_charge_and_range_stay_unknown_until_the_car_sends_them():
+    """After a restart the car may send its gear before its charge or range.
+    Those must read as unknown, not 0, or the garage line and the Range page
+    show "0% · 0 km" until the next reading."""
+    from app.api import routes as routes_mod
+
+    vin = "LIVEUNKNOWN00001"
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        routes_mod._live_mem_fold(vin, "2026-10-12T10:00:00Z", {"Gear": "ShiftStateP"})
+        now = routes_mod._live_payload(vin, 68.3)["now"]
+        assert now["soc"] is None and now["range_km"] is None
+        routes_mod._live_mem_fold(vin, "2026-10-12T10:00:01Z", {"Soc": 71.5, "RatedRange": 200.0})
+        now = routes_mod._live_payload(vin, 68.3)["now"]
+        assert now["soc"] == 71.5 and now["range_km"] > 300
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_a_record_with_a_malformed_vin_does_not_fail_its_batch():
+    """One record whose VIN is not text was a 500 for the whole batch, which
+    the bridge then resent; it is skipped instead, on both lanes."""
+    settings = get_settings()
+    old_pc, old_sk = settings.app_passcode, settings.sync_key
+    settings.app_passcode, settings.sync_key = "pc", "k"
+    try:
+        with TestClient(app) as client:
+            bad = {"records": [{"vin": ["x"], "createdAt": "2026-10-12T00:10:00Z", "data": []}]}
+            for path in ("/api/telemetry/live", "/api/telemetry"):
+                r = client.post(path, json=bad, headers={"x-sync-key": "k"})
+                assert r.status_code == 200, (path, r.text)
+    finally:
+        settings.app_passcode, settings.sync_key = old_pc, old_sk
+
+
 def test_the_live_fast_lane_stays_in_memory():
     """/api/telemetry/live folds records into memory for the live page and
     writes nothing; pack power comes from voltage x current; and the same

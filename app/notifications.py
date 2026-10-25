@@ -10,7 +10,6 @@ enabled" itself.
 from __future__ import annotations
 
 import html
-from datetime import datetime
 
 import httpx
 from sqlalchemy import select

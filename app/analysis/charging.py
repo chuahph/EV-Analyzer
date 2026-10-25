@@ -155,7 +155,6 @@ def analyze(charges: list[Charge], drives: list[Drive] | None = None) -> dict[st
             # that more than the car's figure), so the rate shown is the rate
             # the charger's tariff actually is.
             "payable_kwh": round(getattr(c, "payable_kwh", 0.0) or 0.0, 3) or None,
-            "billed_kwh": round(getattr(c, "billed_kwh", 0.0) or 0.0, 3) or None,
             "rate_per_kwh": (
                 round(c.cost / (getattr(c, "payable_kwh", 0.0) or c.energy_added_kwh), 3)
                 if c.energy_added_kwh else None

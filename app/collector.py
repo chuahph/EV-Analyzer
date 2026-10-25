@@ -12,7 +12,6 @@ but this captures everything the analytics need.
 from __future__ import annotations
 
 import time
-from datetime import datetime
 
 from sqlalchemy import func, select
 

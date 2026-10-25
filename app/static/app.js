@@ -5731,7 +5731,7 @@ function renderGlance(d) {
       const odoNow = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
       return page(
         `<div class="gl-trip">
-          <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(tripWhen(t.start_time).split(" ").pop())}</em></div>
+          <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
           <div class="gl-rts">
             ${tile("dist", "km", n(t.distance_km, 1))}
             ${tile("time", "min", n(t.duration_min))}
