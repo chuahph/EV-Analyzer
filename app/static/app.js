@@ -4573,7 +4573,9 @@ function glTrace(hist) {
 // Wh/km as a bar of LED dots: low on the left, high on the right, green up to
 // the rated figure, amber to one and a half times it, red beyond. The lit
 // part is the figure now; a white tick marks the drive's highest.
-function glWhBar(now, rated, max) {
+// The cockpit's Wh/km dots. On a drive it is the trip's Wh/km, as the car's
+// trip card shows it; the instant figure stands in only before there is one.
+function glWhBar(now, rated, max, label = "now") {
   const R = rated || 150, N = 36, TOP = R * 2.5;
   const lit = now != null ? Math.max(0, Math.min(N, Math.round(Math.max(0, now) / TOP * N))) : 0;
   const mk = max != null ? Math.max(0, Math.min(N - 1, Math.round(max / TOP * N) - 1)) : -1;
@@ -4585,7 +4587,7 @@ function glWhBar(now, rated, max) {
   }
   const n0 = (v) => Math.round(v).toLocaleString("en-US");
   return `<div class="gl-trace"><div class="gl-trace-h"><span>Wh/km<i data-opt="1"> · low to high</i></span>
-    <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${n0(now)}</strong><i data-opt="2"> now</i> · ` : ""}<i data-opt="3">rated </i>${n0(R)}</span></div>
+    <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${n0(now)}</strong><i data-opt="2"> ${label}</i> · ` : ""}<i data-opt="3">rated </i>${n0(R)}</span></div>
     <div class="gl-whbar">${dots}</div></div>`;
 }
 
@@ -5726,7 +5728,7 @@ function renderGlance(d) {
         </div>`,
         glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
         `${powerBar}
-         ${glWhBar(inst && inst.whkm != null ? inst.whkm : null, rated, glLiveState.maxWh)}
+         ${tw != null ? glWhBar(tw, rated, glLiveState.maxWh, "trip") : glWhBar(inst && inst.whkm != null ? inst.whkm : null, rated, glLiveState.maxWh)}
          ${battBar}`,
         foot);
     },
