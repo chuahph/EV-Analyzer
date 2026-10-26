@@ -1011,6 +1011,83 @@ export default {
           <div id="plan-result" class="planner-result"></div>
         </div>
       </div>
+      <!-- Highway trip: Penang → KL by default. Arrival % with a 10% buffer,
+           and a Bukit Gantang top-up when that buffer isn't there. The maths
+           and every assumption behind it live in /static/highway_trip.js. -->
+      <div class="card" id="highway-card">
+        <h2>🛣️ Highway Trip · Penang → KL
+          <button class="info-btn" data-info="info-highway">!</button></h2>
+        <div id="info-highway" class="info-pop hidden">
+          An <strong>estimate</strong>, not Tesla's own data or trip planner. Starts from your car's
+          own measured highway Wh/km when it has one, otherwise a published figure for the
+          Model 3 Highland RWD (138 Wh/km at 110 km/h), then adjusts for speed, load, A/C and
+          weather (Hot &amp; sunny = 32 °C+ in full sun). Aims to arrive with at least 10%; when it can't, it suggests a top-up at
+          Bukit Gantang R&amp;R (~110 km in) and how long to charge. Save a trip and fill in
+          what you actually arrived with to see how close it gets.
+        </div>
+        <div class="planner">
+          <div class="planner-inputs">
+            <label class="planner-grow">Start battery
+              <span class="planner-field"><input id="hw-soc" type="number" min="0" max="100" step="1" inputmode="decimal" value="80"><span class="planner-unit">%</span></span>
+            </label>
+            <label class="planner-grow">Speed
+              <span class="planner-field"><input id="hw-speed" type="number" min="40" max="160" step="5" inputmode="decimal" value="110"><span class="planner-unit">km/h</span></span>
+            </label>
+            <label class="planner-grow">Route
+              <span class="planner-field"><input id="hw-km" type="number" min="1" step="1" inputmode="decimal" value="357"><span class="planner-unit">km</span></span>
+            </label>
+          </div>
+          <div class="planner-inputs">
+            <label class="planner-grow">People
+              <select id="hw-pax">
+                <option value="1">1 (driver)</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+            <label class="planner-grow">Luggage
+              <select id="hw-luggage">
+                <option value="none">None</option>
+                <option value="light">Light (~20 kg)</option>
+                <option value="full">Full boot (~60 kg)</option>
+              </select>
+            </label>
+          </div>
+          <div class="planner-inputs">
+            <label class="planner-grow">Aircon
+              <select id="hw-aircon">
+                <option value="normal">Normal</option>
+                <option value="eco">Eco / mild</option>
+                <option value="max">Max / cold</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <label class="planner-grow">Weather
+              <select id="hw-weather">
+                <option value="mild">Warm</option>
+                <option value="hot">Hot &amp; sunny</option>
+                <option value="rain">Rain</option>
+                <option value="heavy_rain">Heavy rain</option>
+              </select>
+            </label>
+            <!-- Blank = automatic (measured or default). A figure here is
+                 used as-is, without the factors above. -->
+            <label>Wh/km
+              <span class="planner-field"><input id="hw-wh" type="number" min="1" step="1" inputmode="decimal" placeholder="auto"></span>
+            </label>
+          </div>
+          <div id="hw-result" class="planner-result" aria-live="polite"></div>
+          <div id="hw-history" class="hw-history hidden">
+            <div class="hw-history-head">
+              <button id="hw-save" class="btn btn-mini" type="button">💾 Save this trip</button>
+              <span id="hw-save-note" class="plan-hint"></span>
+            </div>
+            <ul id="hw-trips" class="hw-trips"></ul>
+          </div>
+        </div>
+      </div>
       <div class="card full" id="recommendations-card" data-export="tips">
         <h2>💡 Assessment &amp; recommendations</h2>
         <div id="assessment-scorecard"></div>
@@ -1347,6 +1424,7 @@ export default {
   <script src="/static/vendor/jszip.min.js"></script>
   <script src="/static/analysis.js"></script>
   <script src="/static/importer.js"></script>
+  <script src="/static/highway_trip.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

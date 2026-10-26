@@ -56,6 +56,7 @@ def build(out_dir: Path) -> None:
     shutil.copy(STATIC / "sw.js", out_dir / "sw.js")
     shutil.copy(STATIC / "analysis.js", out_dir / "analysis.js")
     shutil.copy(STATIC / "importer.js", out_dir / "importer.js")
+    shutil.copy(STATIC / "highway_trip.js", out_dir / "highway_trip.js")
     (out_dir / "vendor").mkdir(exist_ok=True)
     shutil.copy(STATIC / "vendor" / "chart.umd.js", out_dir / "vendor" / "chart.umd.js")
     shutil.copy(STATIC / "vendor" / "jszip.min.js", out_dir / "vendor" / "jszip.min.js")
@@ -76,6 +77,7 @@ def build(out_dir: Path) -> None:
     index = index.replace('src="/static/vendor/jszip.min.js"', 'src="vendor/jszip.min.js"')
     index = index.replace('src="/static/analysis.js"', 'src="analysis.js"')
     index = index.replace('src="/static/importer.js"', 'src="importer.js"')
+    index = index.replace('src="/static/highway_trip.js"', 'src="highway_trip.js"')
     index = index.replace('src="/static/app.js"', 'src="app.js"')
     # PWA assets: rewrite root-absolute paths to relative for the Pages subpath.
     index = index.replace('href="/manifest.webmanifest"', 'href="manifest.webmanifest"')

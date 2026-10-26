@@ -89,6 +89,17 @@ Turns the analysis into actionable advice with estimated savings, e.g.:
   Purely a suggestion in the recommendation feed — it never sets a schedule
   or sends any command to the car.
 
+**🛣️ Highway Trip (Penang → KL)** — a card that estimates arrival battery %
+for a long highway run (357 km by default) from start charge, speed, people,
+luggage, A/C and weather, aiming to arrive with at least 10%. When that
+buffer isn't there it says **Top-up** and suggests a stop at Bukit Gantang
+R&R with the minutes to charge; otherwise **Go**. Consumption comes from, in
+order: a Wh/km you type in (used as-is), this car's own measured highway
+average, or a published Model 3 Highland RWD figure. Every assumption is a
+named, sourced constant in `app/static/highway_trip.js`. Save a trip and fill
+in what you actually arrived with to track how close the estimate gets
+(self-hosted app only). An estimate — not Tesla's data or trip planner.
+
 **Dashboard**
 A dark, responsive single-page dashboard (Chart.js) with KPI cards, six charts
 and the recommendation feed. Installs on iOS/Android as a **PWA** (home-screen

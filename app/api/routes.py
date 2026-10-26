@@ -40,7 +40,7 @@ from .. import database as db
 from ..database import engine, get_session
 from ..importer import ImportError_, parse_upload
 from ..models import (ArrivalTailSample, BatteryReading, Charge, Drive, Place,
-                      SecurityEvent, ServiceRecord, Vehicle)
+                      SecurityEvent, ServiceRecord, TripPlan, Vehicle)
 from ..schemas import ChargeOut, DriveOut, VehicleOut
 
 # Held by the telemetry ingest and by _settle_shadows, the two writers of the
@@ -3475,6 +3475,130 @@ def delete_service(record_id: int, session: Session = Depends(get_session)):
     if record is None:
         raise HTTPException(404, "Record not found.")
     session.delete(record)
+    session.commit()
+    return {"deleted": True}
+
+
+# --- Highway trip planner: saved estimates vs actual ------------------------
+#
+# The estimate is computed in the browser (app/static/highway_trip.js); these
+# routes only keep it, so a saved trip can later be set beside what actually
+# happened. Values are range-checked rather than trusted, since anything
+# posted here is shown back on the dashboard.
+
+TRIP_PLAN_ENUMS = {
+    "luggage": ("none", "light", "full"),
+    "aircon": ("off", "eco", "normal", "max"),
+    "weather": ("mild", "hot", "rain", "heavy_rain"),
+    "basis": ("manual", "measured", "default"),
+    "verdict": ("go", "topup", "charge_first"),
+}
+TRIP_PLAN_LIST_LIMIT = 50
+
+
+def _trip_plan_num(payload: dict, key: str, lo: float, hi: float, *, required: bool = True):
+    raw = payload.get(key)
+    if raw is None or raw == "":
+        if required:
+            raise HTTPException(400, f"Missing '{key}'.")
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"Invalid '{key}'.")
+    if not math.isfinite(value) or not lo <= value <= hi:
+        raise HTTPException(400, f"'{key}' must be between {lo:g} and {hi:g}.")
+    return value
+
+
+def _trip_plan_out(p: TripPlan) -> dict:
+    # Positive error = arrived with MORE than estimated.
+    error = (round(p.actual_arrival_pct - p.est_arrival_pct, 1)
+             if p.actual_arrival_pct is not None else None)
+    return {
+        "id": p.id, "created_at": p.created_at.isoformat(), "label": p.label,
+        "route_km": p.route_km, "start_pct": p.start_pct, "speed_kmh": p.speed_kmh,
+        "passengers": p.passengers, "luggage": p.luggage, "aircon": p.aircon,
+        "weather": p.weather, "wh_per_km": p.wh_per_km, "basis": p.basis,
+        "est_arrival_pct": p.est_arrival_pct, "verdict": p.verdict,
+        "stop_minutes": p.stop_minutes, "actual_arrival_pct": p.actual_arrival_pct,
+        "actual_stop_minutes": p.actual_stop_minutes, "error_pct": error,
+    }
+
+
+@router.get("/trip-plans")
+def list_trip_plans(session: Session = Depends(get_session)):
+    """Saved highway estimates, newest first, with the estimate-vs-actual
+    error for those whose actual arrival has been filled in."""
+    vehicle = _first_vehicle(session)
+    plans = session.scalars(
+        select(TripPlan).where(TripPlan.vehicle_id == vehicle.id)
+        .order_by(TripPlan.created_at.desc(), TripPlan.id.desc())
+        .limit(TRIP_PLAN_LIST_LIMIT)
+    ).all()
+    errors = [p.actual_arrival_pct - p.est_arrival_pct
+              for p in plans if p.actual_arrival_pct is not None]
+    return {
+        "plans": [_trip_plan_out(p) for p in plans],
+        # Mean signed error over the compared trips: a steady + or − here
+        # says the model runs pessimistic or optimistic for this car.
+        "mean_error_pct": round(sum(errors) / len(errors), 1) if errors else None,
+        "n_compared": len(errors),
+    }
+
+
+@router.post("/trip-plans")
+def add_trip_plan(payload: dict = Body(...), session: Session = Depends(get_session)):
+    """Save one estimate as shown on the card."""
+    vehicle = _first_vehicle(session)
+    fields = {}
+    for key, allowed in TRIP_PLAN_ENUMS.items():
+        value = str(payload.get(key) or "")
+        if value not in allowed:
+            raise HTTPException(400, f"Invalid '{key}'.")
+        fields[key] = value
+    plan = TripPlan(
+        vehicle_id=vehicle.id,
+        created_at=sync_mod.now_local(),
+        label=str(payload.get("label") or "")[:80],
+        route_km=_trip_plan_num(payload, "route_km", 1, 1500),
+        start_pct=_trip_plan_num(payload, "start_pct", 0, 100),
+        speed_kmh=_trip_plan_num(payload, "speed_kmh", 40, 160),
+        passengers=int(_trip_plan_num(payload, "passengers", 1, 7)),
+        wh_per_km=_trip_plan_num(payload, "wh_per_km", 1, 1000),
+        # Can be well below zero: that's the "you won't make it" case.
+        est_arrival_pct=_trip_plan_num(payload, "est_arrival_pct", -500, 100),
+        stop_minutes=int(_trip_plan_num(payload, "stop_minutes", 0, 600, required=False) or 0),
+        **fields,
+    )
+    session.add(plan)
+    session.commit()
+    return _trip_plan_out(plan)
+
+
+@router.patch("/trip-plans/{plan_id}")
+def update_trip_plan(plan_id: int, payload: dict = Body(...),
+                     session: Session = Depends(get_session)):
+    """Record how the drive actually went. Send a blank to clear a value."""
+    plan = session.get(TripPlan, plan_id)
+    if plan is None:
+        raise HTTPException(404, "Trip not found.")
+    if "actual_arrival_pct" in payload:
+        plan.actual_arrival_pct = _trip_plan_num(payload, "actual_arrival_pct", 0, 100,
+                                                 required=False)
+    if "actual_stop_minutes" in payload:
+        minutes = _trip_plan_num(payload, "actual_stop_minutes", 0, 600, required=False)
+        plan.actual_stop_minutes = int(minutes) if minutes is not None else None
+    session.commit()
+    return _trip_plan_out(plan)
+
+
+@router.delete("/trip-plans/{plan_id}")
+def delete_trip_plan(plan_id: int, session: Session = Depends(get_session)):
+    plan = session.get(TripPlan, plan_id)
+    if plan is None:
+        raise HTTPException(404, "Trip not found.")
+    session.delete(plan)
     session.commit()
     return {"deleted": True}
 

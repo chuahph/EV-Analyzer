@@ -6,13 +6,14 @@ from sqlalchemy import delete, update
 from . import pricing_prefs, state
 from .config import get_settings
 from .models import (ArrivalTailSample, BatteryReading, Charge, Drive,
-                     SecurityEvent, ServiceRecord, Vehicle)
+                     SecurityEvent, ServiceRecord, TripPlan, Vehicle)
 
 # Every table keyed by vehicle_id, cleared before the cars they belong to. One
 # list for both _wipe and purge_demo: purge_demo kept its own and missed the
 # last two, which Postgres refuses (a row still points at the car), so linking
 # a real car on a fresh install failed while the demo still held them.
-CAR_TABLES = (Drive, Charge, BatteryReading, ServiceRecord, SecurityEvent, ArrivalTailSample)
+CAR_TABLES = (Drive, Charge, BatteryReading, ServiceRecord, SecurityEvent, ArrivalTailSample,
+              TripPlan)
 
 
 def _wipe(session) -> None:

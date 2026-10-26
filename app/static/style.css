@@ -353,6 +353,32 @@ header {
 /* An estimate averaged over routes that aren't this one — flagged so it reads
    as a rough guide rather than a measurement of the planned drive. */
 .plan-basis.approx { color: var(--amber); }
+/* Highway trip card (Penang → KL) */
+.hw-verdict { color: var(--text); }
+.hw-badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .4px;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-right: 6px;
+  vertical-align: 1px; color: #0e1116; }
+.hw-badge.good { background: var(--green); }
+.hw-badge.warn { background: var(--amber); }
+.hw-badge.bad  { background: #ff6b70; }
+.hw-history { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+.hw-history-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.hw-trips { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.hw-trips li { display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.hw-trips li.plan-hint, .hw-trips li.hw-trips-summary { background: none; border: 0; padding: 0; }
+.hw-trips-summary { color: var(--muted); }
+.hw-trip-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hw-trip-main .muted { color: var(--muted); font-size: 11.5px; }
+.hw-actual { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; color: var(--muted);
+  font-size: 11.5px; white-space: nowrap; }
+.hw-actual input { width: 48px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 6px; font-size: 13px; }
+.hw-err { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+.hw-err.good { color: var(--green); }
+.hw-err.bad { color: #ff6b70; }
+.hw-del { background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
+.hw-del:hover { color: var(--text); }
 .bat-note { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 6px 0; }
 
 /* Brand grows to fill the row (min-width:0 lets the VIN subtitle ellipsis
@@ -3281,3 +3307,9 @@ main > .card { max-width: 100%; }
 /* Round Mix's two bars: their four labels in ordinary capitals (Power, Regen,
    Efficiency, Battery), not all capitals. */
 .gl-lad-flow > span, .gl-lad-whbat > span { text-transform: none; letter-spacing: .03em; }
+
+/* Highway card: its selects share rows two or three abreast, so let them
+   shrink with the row instead of the planner's 150px floor, and give the
+   wider "km/h" unit room to sit beside its input. */
+#highway-card .planner-inputs select { min-width: 0; width: 100%; }
+#highway-card .planner-inputs .planner-unit { flex: 0 0 auto; }

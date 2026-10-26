@@ -3569,6 +3569,180 @@ document.addEventListener("keydown", (e) => {
   if (e.target && e.target.id === "plan-dest" && e.key === "Enter") { e.preventDefault(); lookupPlanDest(); }
 });
 
+// Highway trip card (Penang → KL by default). The maths is in
+// highway_trip.js; this only gathers the inputs, renders the result and keeps
+// the saved-trip history. Context from the payload: this car's own measured
+// "Highway (90+)" Wh/km and its usable pack size, when the app knows them.
+let highwayCtx = {};
+let highwayLast = null;   // the estimate on screen, for "Save this trip"
+
+const HW_VERDICT_LABEL = { go: "Go", topup: "Top-up", charge_first: "Charge first" };
+const HW_BASIS_LABEL = {
+  manual: "the Wh/km you entered (used as-is, no adjustments)",
+  measured: "your car's own measured highway average",
+  default: "published Model 3 Highland RWD figure (no measured highway drives yet)",
+};
+
+function computeHighway() {
+  const out = document.getElementById("hw-result");
+  if (!out || !window.HighwayTrip) return;
+  const val = (id) => document.getElementById(id)?.value;
+  const r = window.HighwayTrip.estimate({
+    routeKm: val("hw-km"), startPct: val("hw-soc"), speedKmh: val("hw-speed"),
+    passengers: val("hw-pax"), luggage: val("hw-luggage"), aircon: val("hw-aircon"),
+    weather: val("hw-weather"), manualWhPerKm: val("hw-wh"),
+  }, highwayCtx);
+  highwayLast = r.ok ? r : null;
+  const save = document.getElementById("hw-save");
+  if (save) save.disabled = !r.ok;
+  if (!r.ok) {
+    out.innerHTML = `<div class="plan-hint">${h(r.error)}</div>`;
+    return;
+  }
+  // Card colour + headline. "Go" only when the 10% buffer survives the whole
+  // run without stopping; anything else is a warning.
+  const go = r.verdict === "go";
+  let verdict;
+  if (go) {
+    verdict = `<span class="hw-badge good">Go</span> Arrive with about <strong>${fmt(r.arrivalPct, 0)}%</strong> — no stop needed.`;
+  } else if (r.verdict === "topup") {
+    const s = r.stop;
+    verdict = `<span class="hw-badge warn">Top-up</span> Without a stop you'd arrive on
+      <strong>${fmt(r.arrivalPct, 0)}%</strong>. Stop at <strong>${h(s.name)}</strong>
+      (~${fmt(s.kmFromStart, 0)} km in, arriving ~${fmt(s.arrivePct, 0)}%) and charge
+      <strong>~${fmt(s.minutes, 0)} min</strong> to ${fmt(s.leavePct, 0)}%,
+      to reach KL with ~${fmt(r.arrivalWithStopPct, 0)}%.${s.enough ? ""
+        : " Even 100% there leaves less than the buffer — slow down or plan a second stop."}`;
+  } else {
+    verdict = `<span class="hw-badge bad">Charge first</span> You'd reach Bukit Gantang
+      with under ${window.HighwayTrip.constants.STOP_ARRIVAL_MIN_PCT}%. Charge to about
+      <strong>${fmt(Math.ceil(r.chargeBeforePct), 0)}%</strong> before leaving${
+        r.chargeBeforeThenStop ? ", then top up at Bukit Gantang" : " and you can skip the stop"}.`;
+  }
+  const basisWh = r.basis === "manual" ? ""
+    : ` (${fmt(r.baseWhPerKm, 0)} Wh/km base, adjusted for speed, load, A/C and weather)`;
+  out.innerHTML = `
+    <div class="plan-verdict hw-verdict ${go ? "good" : r.verdict === "topup" ? "warn" : "bad"}">${verdict}</div>
+    <div class="plan-grid">
+      <div><span class="k">Arrival (no stop)</span><span class="v">${fmt(r.arrivalPct, 0)}%</span></div>
+      <div><span class="k">Uses</span><span class="v">${fmt(r.tripPct, 0)}% · ${fmt(r.energyKwh, 1)} kWh</span></div>
+      <div><span class="k">At</span><span class="v">${fmt(r.whPerKm, 0)} Wh/km</span></div>
+      <div><span class="k">Drive</span><span class="v">~${Math.floor(r.driveMin / 60)} h ${r.driveMin % 60} min</span></div>
+    </div>
+    <div class="plan-basis">Consumption: ${HW_BASIS_LABEL[r.basis]}${basisWh}.
+      Pack: ${fmt(r.usableKwh, 1)} kWh usable (${r.usableKwhSource === "car"
+        ? "this car" : "Highland RWD default"}). Leave with ${fmt(Math.ceil(r.startNeededPct), 0)}%
+      to skip the stop. <strong>Estimate only — not Tesla data.</strong></div>`;
+}
+
+function renderHighwayTrip(d) {
+  const card = document.getElementById("highway-card");
+  if (!card || !window.HighwayTrip) return;
+  const bands = (d.driving && d.driving.efficiency_by_speed_band) || {};
+  const measured = bands["Highway (90+)"];
+  // "default" capacity is the app's generic 75 kWh guess, not this car — let
+  // the planner fall back to its own documented Highland RWD figure instead.
+  const v = d.vehicle || {};
+  const usable = v.capacity_source && v.capacity_source !== "default" ? v.usable_capacity_kwh : null;
+  highwayCtx = { measuredHighwayWhPerKm: measured || null, usableKwh: usable || null };
+  computeHighway();
+  if (!STATIC_MODE) {
+    document.getElementById("hw-history")?.classList.remove("hidden");
+    loadHighwayTrips();
+  }
+}
+
+async function loadHighwayTrips() {
+  const list = document.getElementById("hw-trips");
+  if (!list) return;
+  let data;
+  try {
+    data = await (await fetch("/api/trip-plans")).json();
+  } catch (e) {
+    list.innerHTML = '<li class="plan-hint">Couldn’t load saved trips.</li>';
+    return;
+  }
+  const plans = data.plans || [];
+  if (!plans.length) {
+    list.innerHTML = '<li class="plan-hint">No saved trips yet. Save one before you drive, then fill in your actual arrival %.</li>';
+    return;
+  }
+  const summary = data.n_compared
+    ? `<li class="hw-trips-summary">Across ${data.n_compared} compared trip${data.n_compared > 1 ? "s" : ""}
+       you arrived ${data.mean_error_pct >= 0 ? "+" : ""}${fmt(data.mean_error_pct, 1)} points vs the estimate on average.</li>`
+    : "";
+  list.innerHTML = summary + plans.map((p) => {
+    const when = new Date(p.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const err = p.error_pct == null ? ""
+      : `<span class="hw-err ${p.error_pct >= 0 ? "good" : "bad"}">${p.error_pct >= 0 ? "+" : ""}${fmt(p.error_pct, 1)}</span>`;
+    return `<li data-id="${p.id}">
+      <div class="hw-trip-main">
+        <span>${h(when)} · ${fmt(p.route_km, 0)} km · ${fmt(p.start_pct, 0)}% @ ${fmt(p.speed_kmh, 0)} km/h</span>
+        <span class="muted">${HW_VERDICT_LABEL[p.verdict] || ""} · est. ${fmt(p.est_arrival_pct, 0)}%${p.stop_minutes ? ` after a ${p.stop_minutes} min stop` : ""} · ${fmt(p.wh_per_km, 0)} Wh/km (${h(p.basis)})</span>
+      </div>
+      <label class="hw-actual">
+        <input type="number" min="0" max="100" step="1" inputmode="decimal" value="${p.actual_arrival_pct ?? ""}" data-actual="${p.id}" aria-label="Actual arrival %" placeholder="actual">%
+      </label>
+      ${err}
+      <button class="hw-del" data-del="${p.id}" type="button" title="Delete" aria-label="Delete trip">×</button>
+    </li>`;
+  }).join("");
+}
+
+async function saveHighwayTrip() {
+  const r = highwayLast;
+  const note = document.getElementById("hw-save-note");
+  if (!r) return;
+  const i = r.input;
+  try {
+    const resp = await fetch("/api/trip-plans", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        route_km: i.routeKm, start_pct: i.startPct, speed_kmh: i.speedKmh,
+        passengers: i.passengers, luggage: i.luggage, aircon: i.aircon, weather: i.weather,
+        wh_per_km: Math.round(r.whPerKm * 10) / 10, basis: r.basis,
+        // The arrival to hold the drive against later: for a top-up, the
+        // planned arrival after the Bukit Gantang stop (comparing an actual
+        // that included a charge with a no-stop figure would read as the
+        // estimate being 15+ points off when it wasn't).
+        est_arrival_pct: Math.round((r.verdict === "topup" ? r.arrivalWithStopPct : r.arrivalPct) * 10) / 10,
+        verdict: r.verdict,
+        stop_minutes: r.stop ? r.stop.minutes : 0,
+      }),
+    });
+    if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || "Save failed");
+    if (note) note.textContent = "Saved.";
+    loadHighwayTrips();
+  } catch (e) {
+    if (note) note.textContent = "⚠️ " + e.message;
+  }
+}
+
+document.addEventListener("input", (e) => {
+  if (e.target && e.target.id && e.target.id.startsWith("hw-")) computeHighway();
+});
+document.addEventListener("click", async (e) => {
+  const t = e.target;
+  if (!t || !t.closest) return;
+  if (t.closest("#hw-save")) saveHighwayTrip();
+  const del = t.closest("#hw-trips [data-del]");
+  if (del) {
+    await fetch(`/api/trip-plans/${del.dataset.del}`, { method: "DELETE" });
+    loadHighwayTrips();
+  }
+});
+// Saved on change (blur/enter), not every keystroke.
+document.addEventListener("change", async (e) => {
+  const t = e.target;
+  if (t && t.id && t.id.startsWith("hw-")) computeHighway();
+  if (!t || !t.dataset || t.dataset.actual == null) return;
+  await fetch(`/api/trip-plans/${t.dataset.actual}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ actual_arrival_pct: t.value === "" ? null : Number(t.value) }),
+  });
+  loadHighwayTrips();
+});
+
 // Measured usable kWh against the same pack when new (VIN spec): a second
 // reading of health beside the rated-range one, in kWh rather than km.
 function capHtml(c) {
@@ -3981,6 +4155,7 @@ async function load() {
     renderInsights(d);
     renderNarrative(d);
     renderPlanner(d);
+    renderHighwayTrip(d);
     renderAssessment(d.assessment, d.currency);
     renderRecommendations(d.recommendations, d.currency);
     renderQuickNav();

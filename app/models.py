@@ -632,6 +632,43 @@ class ServiceRecord(Base):
     notes: Mapped[str] = mapped_column(String(200), default="")
 
 
+class TripPlan(Base):
+    """A saved highway trip estimate (the Penang → KL planner), kept so the
+    estimate can be compared with how the drive actually went.
+
+    The estimate itself is computed in the browser (app/static/highway_trip.js)
+    and stored as shown, inputs alongside, so a later change to the model's
+    constants never rewrites what was predicted at the time.
+    """
+
+    __tablename__ = "trip_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    label: Mapped[str] = mapped_column(String(80), default="")
+    route_km: Mapped[float] = mapped_column(Float)
+    start_pct: Mapped[float] = mapped_column(Float)
+    speed_kmh: Mapped[float] = mapped_column(Float)
+    passengers: Mapped[int] = mapped_column(Integer, default=1)
+    luggage: Mapped[str] = mapped_column(String(12), default="none")
+    aircon: Mapped[str] = mapped_column(String(12), default="normal")
+    weather: Mapped[str] = mapped_column(String(12), default="mild")
+    # The consumption the estimate used and where it came from
+    # (manual / measured / default).
+    wh_per_km: Mapped[float] = mapped_column(Float)
+    basis: Mapped[str] = mapped_column(String(12), default="default")
+    # The planned arrival: after the suggested stop for a top-up, otherwise
+    # the straight-through figure (negative = wouldn't make it).
+    est_arrival_pct: Mapped[float] = mapped_column(Float)
+    # go / topup / charge_first
+    verdict: Mapped[str] = mapped_column(String(12), default="go")
+    stop_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    # Filled in after the drive. None until then.
+    actual_arrival_pct: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    actual_stop_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+
+
 class PushSubscription(Base):
     """A browser's Web Push subscription (one row per device/browser that
     tapped "Enable notifications"). Not per-vehicle — a device gets notified
