@@ -13453,3 +13453,51 @@ def test_a_restore_keeps_free_charges_and_their_temperatures(session):
         back = session.query(Charge).order_by(Charge.start_time).first()
         assert back.is_free and back.cost == 0.0, name
         assert back.outside_temp_c == 31.5, name
+
+
+def test_a_speed_newer_than_the_gear_outranks_a_gear_stuck_on_park():
+    """Gear is sent only when it changes. On 27 October the car's move to Drive
+    never arrived, so the composite stayed on Park for a 16-minute drive: Live
+    showed "parked" throughout and each stored trip closed a second after it
+    opened (a 0.9 km trip at 3,538 km/h)."""
+    from app import sync as sync_mod
+
+    base = {"Gear": "ShiftStateP", "VehicleSpeed": 49.1, "Odometer": 20533.6,
+            "_kt": {"Gear": 1000.0, "VehicleSpeed": 1978.0}}
+    assert sync_mod.snapshot_from_telemetry(base, 1978.0)["shift"] == "D"
+    # Park selected AFTER the last speed: the gear is current, not stale.
+    parked = {**base, "_kt": {"Gear": 1980.0, "VehicleSpeed": 1978.0}}
+    assert sync_mod.snapshot_from_telemetry(parked, 1980.0)["shift"] == "P"
+    # A trailing creep a moment after Park, or no speed: still Park.
+    creep = {**base, "VehicleSpeed": 0.4, "_kt": {"Gear": 1000.0, "VehicleSpeed": 1978.0}}
+    assert sync_mod.snapshot_from_telemetry(creep, 1978.0)["shift"] == "P"
+    near = {**base, "_kt": {"Gear": 1975.0, "VehicleSpeed": 1978.0}}
+    assert sync_mod.snapshot_from_telemetry(near, 1978.0)["shift"] == "P"
+    # No per-field times (an older composite): the gear is taken as it stands.
+    old = {"Gear": "ShiftStateP", "VehicleSpeed": 49.1, "Odometer": 20533.6}
+    assert sync_mod.snapshot_from_telemetry(old, 1978.0)["shift"] == "P"
+    # Moving with no gear ever heard is not parked.
+    nogear = {"VehicleSpeed": 49.1, "Odometer": 20533.6}
+    assert sync_mod.snapshot_from_telemetry(nogear, 1978.0)["shift"] == "D"
+
+
+def test_live_opens_a_drive_when_the_gear_message_was_lost():
+    from app.api import routes as routes_mod
+
+    vin = "LIVELOSTGEAR0001"
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        routes_mod._live_mem_fold(vin, "2026-10-27T00:10:00Z", {"Gear": "ShiftStateP", "VehicleSpeed": 0.0, "Odometer": 20533.0, "EnergyRemaining": 70.0})
+        # Drive selected, but that one message never reaches the page.
+        for k in range(1, 6):
+            routes_mod._live_mem_fold(vin, "2026-10-27T00:10:%02dZ" % (k * 10),
+                                      {"VehicleSpeed": 30.0, "Odometer": 20533.0 + k * 0.1, "EnergyRemaining": 70.0 - k * 0.05})
+        out = routes_mod._live_payload(vin, 68.3)
+        assert out["now"]["shift"] == "D" and out["now"]["speed_kmh"] > 40
+        assert "_go" in routes_mod._LIVE_MEM[vin]
+        # And Park, when it really is selected, still stops the drive's speed.
+        routes_mod._live_mem_fold(vin, "2026-10-27T00:11:00Z", {"VehicleSpeed": 0.0})
+        routes_mod._live_mem_fold(vin, "2026-10-27T00:11:01Z", {"Gear": "ShiftStateP"})
+        assert routes_mod._live_payload(vin, 68.3)["now"]["shift"] == "P"
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)

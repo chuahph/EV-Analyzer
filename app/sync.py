@@ -1052,6 +1052,37 @@ def _any_window_open(fields: dict[str, Any]) -> bool | None:
     return any(v.endswith(("Opened", "PartiallyOpen")) for v in seen)
 
 
+# A speed reading this many seconds NEWER than the Gear reading, at this speed or
+# more, means the car is moving and the gear we hold is stale.
+GEAR_STALE_SEC = 5.0
+GEAR_STALE_KMH = 3.0
+
+
+def _shift_of(fields: dict[str, Any], speed_kmh: float | None) -> str:
+    """The shift state, corrected when the gear we hold cannot be true.
+
+    Gear is sent only when it changes, so one message lost on the way (the
+    relay's fast lane drops a batch it cannot deliver in four seconds) leaves
+    the composite on Park for as long as the car then drives: seen on
+    27 October, Gear heard 978 s before a speed of 79 km/h. Park read as
+    "stopped" ended each stored trip a second after it opened, and kept the
+    Live page parked for the whole drive. You cannot be moving in Park, and a
+    speed reading stamped after the last Gear one is the evidence the car left
+    it, so that reading wins. Without per-field times (an older composite)
+    the gear is taken as it stands.
+    """
+    shift = _TELEMETRY_SHIFT.get(str(fields.get("Gear") or ""), "P")
+    if shift != "P" or not speed_kmh or speed_kmh < GEAR_STALE_KMH:
+        return shift
+    kt = fields.get("_kt") if isinstance(fields.get("_kt"), dict) else {}
+    g_t, s_t = kt.get("Gear"), kt.get("VehicleSpeed")
+    if fields.get("Gear") is None:
+        return "D"        # never heard a gear, yet moving: not parked
+    if g_t and s_t and float(s_t) - float(g_t) > GEAR_STALE_SEC:
+        return "D"
+    return shift
+
+
 def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]:
     """Flatten accumulated telemetry field values into a sync snapshot.
 
@@ -1199,7 +1230,7 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         "charge_state_raw": charge_state or None,
         "fast": charge_state.startswith("DetailedChargeStateDC"),
         "out_temp": num("OutsideTemp") if num("OutsideTemp") is not None else 20.0,
-        "shift": _TELEMETRY_SHIFT.get(str(fields.get("Gear") or ""), "P"),
+        "shift": _shift_of(fields, speed * MILES_TO_KM if speed is not None else None),
         "speed_kmh": (speed * MILES_TO_KM) if speed is not None else 0.0,
         "locked": bool(fields.get("Locked")),
         "lat": location.get("latitude") if isinstance(location, dict) else None,

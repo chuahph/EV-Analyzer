@@ -13963,6 +13963,14 @@ def _telemetry_ingest(payload: dict, session: Session):
                     **({"stale": True} if stale else {}),
                 })
         car.update(fields)
+        # When the car last said its gear and its speed, so a gear that cannot
+        # be true any more (see sync._shift_of) can be told from a current one.
+        if ts and not stale and ("Gear" in fields or "VehicleSpeed" in fields):
+            kt = car.get("_kt") if isinstance(car.get("_kt"), dict) else {}
+            for k in ("Gear", "VehicleSpeed"):
+                if k in fields:
+                    kt[k] = ts
+            car["_kt"] = kt
         if ts >= composite_ts and record.get("created_at"):
             car["_ts"] = record["created_at"]
         # Step the shadow machine on every record, not once per batch: the

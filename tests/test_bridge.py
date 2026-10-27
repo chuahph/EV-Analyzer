@@ -196,3 +196,45 @@ def test_after_a_failed_round_batches_spool_without_waiting(monkeypatch, _spool_
     monkeypatch.setattr(bridge, "_down_until", 0.0)
     assert bridge.post([{"vin": "C"}]) is False
     assert len(calls) == 2 * bridge.POST_RETRIES  # tried again once it ended
+
+
+def test_a_fast_lane_batch_the_app_missed_is_sent_again_in_order(monkeypatch):
+    """Gear is sent only when it changes, so a fast-lane batch lost with "now
+    in Drive" in it left the Live page parked for a whole drive. The failed
+    records go back in front of newer ones and are retried, oldest first."""
+    sent = []
+    outcomes = [False, True]          # first post fails, the retry succeeds
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+    class Session:
+        def post(self, url, json=None, headers=None, timeout=None):
+            sent.append([r["n"] for r in json["records"]])
+            if not outcomes.pop(0):
+                raise bridge.requests.ConnectionError("down")
+            return Resp()
+
+    class Ev:
+        def __init__(self):
+            self.n = 0
+
+        def wait(self):
+            self.n += 1
+            if self.n > 2:
+                raise SystemExit
+
+        def clear(self):
+            pass
+
+        def set(self):
+            pass
+
+    box = {"pending": [{"n": 1}, {"n": 2}], "event": Ev()}
+    monkeypatch.setattr(bridge.requests, "Session", Session)
+    monkeypatch.setattr(bridge.time, "sleep", lambda s: None)
+    monkeypatch.setattr(bridge, "APP_URL", "http://app")
+    with pytest.raises(SystemExit):
+        bridge._live_worker(box)
+    assert sent == [[1, 2], [1, 2]] and box["pending"] == []

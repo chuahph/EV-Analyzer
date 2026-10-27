@@ -83,6 +83,8 @@ SPOOL_DRAIN_MAX = int(os.environ.get("SPOOL_DRAIN_MAX", "5"))
 # car's records pile up unread in ZMQ, which drops them once its queue is full.
 DOWN_PAUSE_SECONDS = float(os.environ.get("DOWN_PAUSE_SECONDS", "30"))
 _down_until = 0.0
+# Records the fast lane keeps for a retry when the app does not answer.
+LIVE_RETRY_KEEP = int(os.environ.get("LIVE_RETRY_KEEP", "200"))
 # Drain even when the car is silent: a backlog written during an outage would
 # otherwise sit there until the next record arrives, which for a sleeping car
 # is the next morning.
@@ -225,8 +227,9 @@ def parse(frames: list) -> dict | None:
 # memory only — so the live view is a second or two behind the car instead of
 # a batch behind. The normal batches below are untouched and remain the only
 # path to the database. Best effort on purpose: a short timeout, never
-# retried or spooled (a stale live value is worthless), and sent from its own
-# thread with a queue of one, so a slow app can never hold up the batches.
+# spooled (a stale live value is worthless; a short in-memory retry holds a
+# few seconds of them, for the fields that are sent only on change), and sent
+# from its own thread, so a slow app can never hold up the batches.
 LIVE_PUSH = os.environ.get("LIVE_PUSH", "1") != "0"
 LIVE_FIELDS = {"VehicleSpeed", "Gear", "Odometer", "EnergyRemaining", "BatteryLevel",
                "Soc", "PackVoltage", "PackCurrent", "RatedRange", "BrakePedal"}
@@ -242,11 +245,25 @@ def _live_worker(box: dict) -> None:
         records, box["pending"] = box["pending"], []
         if not records:
             continue
-        try:
-            session.post(f"{APP_URL}/api/telemetry/live", json={"records": records[-20:]},
-                         headers={"x-sync-key": SYNC_KEY}, timeout=4)
-        except requests.RequestException:
-            pass
+        # In order, 50 at a time (the most the app takes in one post): the
+        # oldest first, so a "now in Drive" that was waiting is not cut off by
+        # the newer speeds behind it.
+        for i in range(0, len(records), 50):
+            try:
+                session.post(f"{APP_URL}/api/telemetry/live", json={"records": records[i:i + 50]},
+                             headers={"x-sync-key": SYNC_KEY}, timeout=4).raise_for_status()
+            except requests.RequestException:
+                # Not dropped: Gear and a few other fields are sent only when
+                # they change, so a lost batch holding "now in Drive" left the
+                # Live page parked for a whole 16-minute drive (27 October).
+                # Put the rest back in front of anything newer, bounded, and
+                # try again shortly.
+                # In place, so a record the main loop appended meanwhile stays.
+                box["pending"][0:0] = records[i:]
+                del box["pending"][:-LIVE_RETRY_KEEP]
+                time.sleep(1.0)
+                box["event"].set()
+                break
 
 
 def _keys(record: dict) -> set:
