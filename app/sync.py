@@ -1078,7 +1078,9 @@ def _shift_of(fields: dict[str, Any], speed_kmh: float | None) -> str:
     g_t, s_t = kt.get("Gear"), kt.get("VehicleSpeed")
     if fields.get("Gear") is None:
         return "D"        # never heard a gear, yet moving: not parked
-    if g_t and s_t and float(s_t) - float(g_t) > GEAR_STALE_SEC:
+    # No gear time but a speed time: the gear was heard before times were kept
+    # (a composite saved by an earlier version), the speed since.
+    if s_t and (not g_t or float(s_t) - float(g_t) > GEAR_STALE_SEC):
         return "D"
     return shift
 

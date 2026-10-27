@@ -15336,9 +15336,18 @@ def _live_align_to_shadows(shadows: dict) -> None:
                     g_ts = float(go.get("ts") or 0.0)
                 except (TypeError, ValueError):
                     continue
-                if g_ts < o_ts - 120.0:
+                # Either way round. Live older than the stored trip: it carried
+                # on from an earlier stop. Live NEWER: this process restarted
+                # (a deploy, a crash) mid-drive and opened its drive at the
+                # first record it heard, so the page showed "drive since 09:04,
+                # 2 km, 1 min" for a drive that began at 08:20 and the figures
+                # started again from nothing. The stored trip survives a
+                # restart, so the page takes its start from there.
+                if abs(g_ts - o_ts) > 120.0:
+                    stored_max = float(shadow.get("max_speed_kmh") or 0.0)
                     car["_go"] = {**{k: opened.get(k) for k in _LIVE_KEYS},
-                                  "ts": o_ts, "max_speed": float(go.get("max_speed") or 0.0)}
+                                  "ts": o_ts,
+                                  "max_speed": max(float(go.get("max_speed") or 0.0), stored_max)}
                     car.pop("_stop", None)
                     print(f"[live] {vin[-6:]} drive realigned to the stored trip: "
                           f"live began {time.time() - g_ts:.0f}s ago, stored trip {time.time() - o_ts:.0f}s ago",

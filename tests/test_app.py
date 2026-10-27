@@ -13342,6 +13342,13 @@ def test_live_drive_follows_the_stored_trip():
         # Already in step: left alone.
         routes._live_align_to_shadows({vin: {"open": opened}})
         assert routes._LIVE_MEM[vin]["_go"]["ts"] == after["ts"]
+        # The process restarted mid-drive, so live opened LATER than the stored
+        # trip: the page takes the stored start, and its top speed.
+        opened2 = {**opened, "ts": _t.time() - 1500, "odo_km": 90.0 * 1.609344}
+        routes._live_align_to_shadows({vin: {"open": opened2, "max_speed_kmh": 131.0}})
+        again = routes._LIVE_MEM[vin]["_go"]
+        assert abs(again["ts"] - opened2["ts"]) < 1 and again["max_speed"] == 131.0
+        routes._LIVE_MEM[vin]["_go"] = after
         # Standing in Park with no stored trip open: closed.
         routes._LIVE_MEM[vin]["_stop"] = _t.time()
         routes._live_align_to_shadows({vin: {}})
@@ -13473,6 +13480,9 @@ def test_a_speed_newer_than_the_gear_outranks_a_gear_stuck_on_park():
     assert sync_mod.snapshot_from_telemetry(creep, 1978.0)["shift"] == "P"
     near = {**base, "_kt": {"Gear": 1975.0, "VehicleSpeed": 1978.0}}
     assert sync_mod.snapshot_from_telemetry(near, 1978.0)["shift"] == "P"
+    # A gear with no time but a speed with one: the gear predates the times.
+    legacy = {**base, "_kt": {"VehicleSpeed": 1978.0}}
+    assert sync_mod.snapshot_from_telemetry(legacy, 1978.0)["shift"] == "D"
     # No per-field times (an older composite): the gear is taken as it stands.
     old = {"Gear": "ShiftStateP", "VehicleSpeed": 49.1, "Odometer": 20533.6}
     assert sync_mod.snapshot_from_telemetry(old, 1978.0)["shift"] == "P"
