@@ -5337,6 +5337,48 @@ def test_drop_trips_previews_before_it_deletes():
         settings.app_passcode = old_pc
 
 
+def test_drop_trips_can_stop_at_an_until_time():
+    """The ghost trips deleted from the history by hand stay in the stored
+    trips, and the promoter would add them back (and refuse the whole run,
+    newer trips included, past its cap). They are dropped by a window that
+    leaves the afternoon's real trips alone."""
+    import json as _json
+
+    from app.database import SessionLocal
+    from app import state, sync as sync_mod
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_TRIPS_KEY)
+    try:
+        def trip(hh, mm, km):
+            at = datetime(2026, 10, 27, hh, mm)
+            ts = at.replace(tzinfo=sync_mod.MYT).timestamp()   # the app's own clock
+            return {"start_ts": ts, "end_ts": ts + 60,
+                    "start_time": at.isoformat(timespec="seconds"),
+                    "end_time": at.isoformat(timespec="seconds"),
+                    "distance_km": km, "duration_min": 1.0}
+
+        before, ghost, real, later = trip(7, 50, 5.0), trip(8, 23, 0.9), trip(9, 7, 298.0), trip(15, 12, 4.0)
+        state.put(sess, state.TELEMETRY_TRIPS_KEY, _json.dumps([before, ghost, real, later]))
+        sess.commit()
+        q = "since=2026-10-27T08:20&until=2026-10-27T12:34"
+        with TestClient(app) as client:
+            body = client.get(f"/api/telemetry/drop-trips?{q}").json()
+            assert body["would_drop"] == 2 and body["would_keep"] == 2
+            assert client.get(f"/api/telemetry/drop-trips?{q}&apply=true").json()["dropped"] == 2
+            assert client.get("/api/telemetry/drop-trips?since=2026-10-27T08:20&until=nope").status_code == 422
+        left = _json.loads(state.get(SessionLocal(), state.TELEMETRY_TRIPS_KEY))
+        assert [t["distance_km"] for t in left] == [5.0, 4.0]
+    finally:
+        state.put(sess, state.TELEMETRY_TRIPS_KEY, prev or "[]")
+        sess.commit()
+        sess.close()
+        settings.app_passcode = old_pc
+
+
 def test_no_trip_without_a_real_odometer():
     """A composite that has not yet seen an Odometer record reads 0.0.
 

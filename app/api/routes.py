@@ -14828,11 +14828,18 @@ def _compare_row(t: dict, d, t_start, car_by_drive: dict, pct) -> dict:
 @_holding_shadow_lock
 def telemetry_drop_trips(
     since: str = Query(..., description="Local ISO datetime, e.g. 2026-09-08T19:00"),
+    until: str | None = Query(None, description="Keep trips starting at or after this, e.g. 2026-09-08T21:00"),
     apply: bool = Query(False),
     session: Session = Depends(get_session),
 ):
-    """Delete shadow trips recorded from ``since`` onwards.
+    """Delete shadow trips recorded from ``since`` onwards (and, with ``until``,
+    only those starting before it).
 
+    ``until`` exists for a hand repair: the trips deleted from the history by
+    hand are still here, and the promoter reads that as trips it has yet to
+    write — it would add them back, and the cap on unattended additions
+    refuses the whole run, newer trips included.
+    
     Shadow trips are a derived record, rebuilt from what the car streams, and
     a bug in the code that closes them can therefore write a batch of trips
     that never happened — as one did: a clock eight hours out closed the open
@@ -14850,8 +14857,9 @@ def telemetry_drop_trips(
 
     try:
         cutoff = datetime.fromisoformat(since)
+        stop = datetime.fromisoformat(until) if until else None
     except ValueError:
-        raise HTTPException(422, f"{since!r} is not an ISO datetime "
+        raise HTTPException(422, f"{since!r} / {until!r} must be ISO datetimes "
                                  f"like 2026-09-08T19:00") from None
 
     try:
@@ -14871,7 +14879,8 @@ def telemetry_drop_trips(
         # A trip whose start cannot be read is kept: this deletes by a
         # boundary, and one that cannot be placed against that boundary has
         # not been shown to be on the wrong side of it.
-        (doomed if at is not None and at >= cutoff else kept).append(trip)
+        hit = at is not None and at >= cutoff and (stop is None or at < stop)
+        (doomed if hit else kept).append(trip)
 
     listing = [{"start": t.get("start_time"), "end": t.get("end_time"),
                 "km": t.get("distance_km"), "min": t.get("duration_min")}
