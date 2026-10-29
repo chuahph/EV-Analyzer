@@ -13553,3 +13553,48 @@ def test_live_opens_a_drive_when_the_gear_message_was_lost():
         assert routes_mod._live_payload(vin, 68.3)["now"]["shift"] == "P"
     finally:
         routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_repair_charge_types_refiles_fast_sessions_as_dc(session):
+    """Sessions already saved as AC that averaged 32 kW are put right, repriced
+    at the DC rate without the AC loss; an ordinary AC session and a hand-set
+    rate are left alone."""
+    from datetime import datetime as _dt
+
+    from fastapi.testclient import TestClient as _TC
+
+    from app.database import SessionLocal
+    from app.models import Charge, Vehicle
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    s2 = SessionLocal()
+    try:
+        veh = s2.query(Vehicle).first() or Vehicle(vin="REPAIRDC0000001", name="x", model="3")
+        s2.add(veh); s2.flush()
+        def mk(day, kwh, minutes, **kw):
+            c = Charge(vehicle_id=veh.id, start_time=_dt(2026, 10, day, 20, 0),
+                       end_time=_dt(2026, 10, day, 21, 0), duration_min=minutes,
+                       start_soc=50.0, end_soc=100.0, energy_added_kwh=kwh,
+                       charge_type="AC", max_power_kw=kw.pop("peak", 0.0), location="x",
+                       cost=kw.pop("cost", 30.0), payable_kwh=kwh * 1.05,
+                       price_source=kw.pop("source", "home"), is_free=False)
+            s2.add(c); s2.flush(); return c.id
+        fast, slow, custom = mk(1, 34.4, 65), mk(2, 20.0, 150), mk(3, 34.4, 65, source="custom", cost=45.0)
+        s2.commit()
+        with _TC(app) as client:
+            body = client.get("/api/repair-charge-types").json()
+            ids = [c["id"] for c in body["charges"]]
+            assert fast in ids and custom in ids and slow not in ids
+            assert client.get("/api/repair-charge-types").json()["would_change"] >= 2
+            assert s2.get(Charge, fast).charge_type == "AC"          # a preview writes nothing
+            assert client.get("/api/repair-charge-types?apply=true").json()["changed"] >= 2
+        s2.expire_all()
+        f, c, sl = s2.get(Charge, fast), s2.get(Charge, custom), s2.get(Charge, slow)
+        assert f.charge_type == "DC" and abs(f.payable_kwh - 34.4) < 0.01   # no AC loss any more
+        assert c.charge_type == "DC" and c.cost == 45.0                      # a hand-set rate is kept
+        assert sl.charge_type == "AC"
+    finally:
+        s2.close()
+        settings.app_passcode = old_pc

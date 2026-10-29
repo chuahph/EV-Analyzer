@@ -16,6 +16,7 @@ with the dashboard's MYT clock regardless of the server's timezone.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -2206,6 +2207,17 @@ def amend_closed_trip(trip: dict[str, Any], snap: dict[str, Any]) -> bool:
 # A plug-in that moved less than this was somebody testing the cable, not a
 # charge. Well above the 0.02 kWh step EnergyRemaining moves in.
 CHARGE_MIN_KWH = 0.05
+# The most this car can draw on AC (its onboard charger: 11 kW; the highest
+# AC reading logged here was 11.8). A session that averaged more than
+# AC_MAX_KW, or peaked above AC_MAX_PEAK_KW, cannot have been AC. It exists
+# because the streamed charge state never says AC or DC (it reads Charging,
+# Starting, Complete...), so every session was filed AC: a 34 kWh stop that
+# averaged 32 kW showed as AC, priced at the home AC rate with the AC loss
+# added. Raise AC_MAX_KW for a car with a 16.5 or 22 kW onboard charger.
+AC_MAX_KW = float(os.environ.get("AC_MAX_KW", "12.5"))
+AC_MAX_PEAK_KW = float(os.environ.get("AC_MAX_PEAK_KW", str(AC_MAX_KW + 1.5)))
+# Too short a session says nothing about its average (the first minutes ramp).
+AC_CLASSIFY_MIN_MIN = 5.0
 # Silence longer than this ends a charge at the last thing the car said. A
 # charging car is awake and talking every thirty seconds; ten minutes of
 # nothing means the session is over and the car went to sleep, not that it is
@@ -2469,6 +2481,9 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
                                kwh_lifetime) if v is not None), default=0.0)
     if biggest < CHARGE_MIN_KWH or minutes <= 0:
         return None
+    if not fast and minutes >= AC_CLASSIFY_MIN_MIN and (
+            peak > AC_MAX_PEAK_KW or biggest / (minutes / 60.0) > AC_MAX_KW):
+        fast = True
     soc_start, soc_end, soc_via = _charge_end_levels(start, end, level_first, level_last)
 
     return {

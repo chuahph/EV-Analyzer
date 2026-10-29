@@ -12256,6 +12256,69 @@ def repair_lost_departure(
     return plan
 
 
+@router.api_route("/repair-charge-types", methods=["GET", "POST"])
+def repair_charge_types(
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Re-file as DC the sessions saved as AC that this car cannot have
+    charged on AC.
+
+    The streamed charge state never says AC or DC (it reads Charging,
+    Starting, Complete), and the code that looked for DC in it never matched,
+    so every streamed session was filed AC: a 34.4 kWh stop that averaged
+    32 kW showed as AC, was priced at the AC rate and had the AC charger loss
+    added on top. New sessions are now told apart by their power (see
+    sync.AC_MAX_KW); this puts the sessions already saved right.
+
+    A session qualifies when it averaged more than AC_MAX_KW over at least
+    five minutes, or peaked above AC_MAX_PEAK_KW. The type changes; the cost is
+    re-priced at the DC rate of the session's own price source and without the
+    AC loss, unless the session is free, has a receipt's kWh, or carries a
+    hand-set rate (those keep their cost). Dry run by default.
+    """
+    settings = get_settings()
+    rows = session.scalars(
+        select(Charge).where(Charge.charge_type != "DC").order_by(Charge.start_time)
+    ).all()
+    plan = []
+    for c in rows:
+        minutes = float(c.duration_min or 0.0)
+        kwh = float(c.energy_added_kwh or 0.0)
+        avg = kwh / (minutes / 60.0) if minutes >= sync_mod.AC_CLASSIFY_MIN_MIN else 0.0
+        peak = float(c.max_power_kw or 0.0)
+        if not (avg > sync_mod.AC_MAX_KW or peak > sync_mod.AC_MAX_PEAK_KW):
+            continue
+        keep_cost = bool(c.is_free) or (c.price_source or "") == "custom"
+        new_payable = pricing_prefs.payable_kwh(kwh, "DC", settings, c.billed_kwh or 0.0)
+        new_cost = c.cost
+        if not keep_cost:
+            source = (c.price_source or "") or pricing_prefs.get_default_source(session)
+            rate = pricing_prefs.rate_for_source(session, settings, source, True, c.start_time)
+            new_cost = round(new_payable * rate, 2)
+        plan.append((c, new_payable, new_cost, keep_cost, {
+            "id": c.id, "start": c.start_time.isoformat(timespec="minutes"),
+            "location": c.location, "kwh": round(kwh, 2), "minutes": round(minutes),
+            "avg_kw": round(avg, 1), "peak_kw": round(peak, 1),
+            "type": [c.charge_type, "DC"],
+            "cost": [c.cost, new_cost],
+            "payable_kwh": [c.payable_kwh, round(new_payable, 3)],
+            "cost_kept": keep_cost,
+        }))
+    if apply:
+        for c, new_payable, new_cost, keep_cost, _ in plan:
+            c.charge_type = "DC"
+            if not keep_cost:
+                c.payable_kwh = round(new_payable, 3)
+                c.cost = new_cost
+        if plan:
+            session.commit()
+    return {"changed" if apply else "would_change": len(plan),
+            "limits": {"avg_kw": sync_mod.AC_MAX_KW, "peak_kw": sync_mod.AC_MAX_PEAK_KW},
+            "charges": [p[4] for p in plan],
+            **({} if apply else {"how": "Add &apply=true to this URL to apply them."})}
+
+
 # GET as well as POST: these are hand-run repair tools, and the person
 # running them is on a phone where the only way to issue a request is the
 # address bar — which sends GET. POST-only made them look like they had

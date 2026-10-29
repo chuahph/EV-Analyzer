@@ -155,14 +155,20 @@ def resolve_source_and_rate(
     later by comparing the stored cost to whatever rates happen to be
     configured *then* — rates change over time, so that comparison quietly
     stops matching for anything already logged."""
-    rates = get_rates(session, settings)
     source = match_source(location_or_coords, session) or get_default_source(session)
+    return source, rate_for_source(session, settings, source, dc, dt)
+
+
+def rate_for_source(session: Session, settings, source: str, dc: bool, dt: datetime) -> float:
+    """The rate per kWh for a named source (home / office / public) and current
+    type, as resolve_source_and_rate prices a new charge."""
+    rates = get_rates(session, settings)
     if source != "public":
-        return source, rates[f"{source}_{'dc' if dc else 'ac'}"]
+        return rates[f"{source}_{'dc' if dc else 'ac'}"]
     override = rates["public_dc"] if dc else rates["public_ac"]
     if override > 0:
-        return "public", override
-    return "public", tariff.price_at(
+        return override
+    return tariff.price_at(
         dt, settings.energy_price_per_kwh,
         settings.energy_price_peak_kwh, settings.energy_price_offpeak_kwh,
         settings.tariff_peak_start_hour, settings.tariff_peak_end_hour,

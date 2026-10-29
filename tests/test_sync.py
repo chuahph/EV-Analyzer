@@ -2554,3 +2554,25 @@ def test_an_unseen_arrival_is_priced_as_a_crawl_not_as_more_road():
            "energy_kwh": 1.4, "wh_per_km": 280.0, "ended_on": "stream_lost"}
     assert recover_sleep_gap(hot, {"start_odo_km": 105.2}, rested_odo_km=105.2)
     assert hot["recovered_kwh"] == pytest.approx(0.056, abs=0.001)
+
+
+def test_a_session_this_car_cannot_have_charged_on_ac_is_filed_dc():
+    """The streamed charge state never says AC or DC, so every session was
+    filed AC: 34.4 kWh in 65 minutes (32 kW on average) showed as AC."""
+    shadow: dict = {}
+    t = 0
+    energy = 40.0
+    for minute in range(0, 66, 5):
+        t = minute * 60
+        # Energy rises 0.53 kWh a minute; a DC session reports DCChargingPower.
+        snap = _charge_tel(t, 0.0 + minute * 0.5, minute * 0.5, energy + minute * 0.53, kw=7.5)
+        shadow_snap = snap
+        advance_charge(shadow, shadow_snap)
+    charge = advance_charge(shadow, _charge_tel(66 * 60, 0, 0, energy + 66 * 0.53, charging=False))
+    assert charge is not None and charge["fast"] is True
+    # A plain 7.5 kW AC session of the same length stays AC.
+    ac: dict = {}
+    for minute in range(0, 66, 5):
+        advance_charge(ac, _charge_tel(minute * 60, minute * 0.125, minute * 0.12, 40.0 + minute * 0.12))
+    done = advance_charge(ac, _charge_tel(66 * 60, 0, 0, 48.0, charging=False))
+    assert done is not None and done["fast"] is False
