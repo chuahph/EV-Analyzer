@@ -13272,6 +13272,11 @@ def summary(
         # because a page that is only slow sometimes cannot be profiled by
         # asking it to be slow on demand.
         "timing_ms": dict(_marks),
+        # An unattended promotion refused (see _warn_promote_refused): trips or
+        # charges are waiting that only a person can add. Said on the page as
+        # well, because the only other signal was a push notification, and on
+        # 27 October four trips waited unseen behind one.
+        "promote_waiting": state.get(session, state.PROMOTE_REFUSED_KEY) == "1",
         "vehicle": vehicle_out,
         "active_vin": vehicle.vin,
         "garage": garage,

@@ -3920,6 +3920,7 @@ async function load() {
     // already in the database — before any fresh Tesla call of our own even
     // starts. With an external cron pinging every minute or so, this is
     // near-live without the page itself having to reach Tesla first.
+    document.getElementById("promote-waiting").classList.toggle("hidden", STATIC_MODE || !d.promote_waiting);
     if (!STATIC_MODE && mode === "live") {
       if (d.last_status) {
         renderLastStatus(d.last_status);
@@ -7365,3 +7366,39 @@ showHome();
   document.addEventListener("pointerup", clear, { passive: true });
   document.addEventListener("pointercancel", clear, { passive: true });
 }
+
+
+// Trips or charges an unattended run would not add (see promote_waiting in the
+// summary). The previews say exactly what would be written; nothing is added
+// until that list has been shown and confirmed.
+document.getElementById("promote-review").addEventListener("click", async () => {
+  const btn = document.getElementById("promote-review");
+  btn.disabled = true;
+  try {
+    const [t, c] = await Promise.all([
+      fetch("/api/telemetry/promote").then((r) => r.json()),
+      fetch("/api/telemetry/promote-charges").then((r) => r.json()),
+    ]);
+    const trips = (t.trips || []).filter((x) => x.action === "add");
+    const chList = Array.isArray(c) ? c : (c.charges || c.sessions || []);
+    const charges = chList.filter((x) => x && x.action === "add");
+    if (!trips.length && !charges.length) {
+      alert("Nothing is waiting any more.");
+      load();
+      return;
+    }
+    const day = (s) => String(s || "").replace("T", " ").slice(0, 16);
+    const lines = [
+      ...trips.map((x) => `Trip ${day(x.start)} · ${fmt((x.now || {}).km, 1)} km`),
+      ...charges.map((x) => `Charge ${day(x.start)} · ${fmt(x.kwh, 1)} kWh`),
+    ];
+    if (!confirm(`Add these to your history?\n\n${lines.join("\n")}`)) return;
+    if (trips.length) await fetch("/api/telemetry/promote?apply=true", { method: "POST" });
+    if (charges.length) await fetch("/api/telemetry/promote-charges?apply=true", { method: "POST" });
+    load();
+  } catch (e) {
+    alert("Could not reach the app. Try again in a moment.");
+  } finally {
+    btn.disabled = false;
+  }
+});

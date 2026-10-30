@@ -3281,3 +3281,9 @@ main > .card { max-width: 100%; }
 /* Round Mix's two bars: their four labels in ordinary capitals (Power, Regen,
    Efficiency, Battery), not all capitals. */
 .gl-lad-flow > span, .gl-lad-whbat > span { text-transform: none; letter-spacing: .03em; }
+
+/* Something an unattended run would not add (see promote_waiting). */
+.promote-waiting { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 2px;
+  padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(245, 158, 11, .45);
+  background: rgba(245, 158, 11, .1); color: var(--text, #e6e9ef); font-size: 13px; }
+.promote-waiting.hidden { display: none; }

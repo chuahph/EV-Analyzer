@@ -13712,3 +13712,50 @@ def test_deleting_a_charge_does_not_make_promotion_add_it_back():
         sess.commit()
         sess.close()
         settings.app_passcode = old_pc
+
+
+def test_the_dashboard_is_told_when_a_promotion_was_refused():
+    """The only other signal was a push notification; on 27 October four trips
+    waited unseen behind a refused run."""
+    import json as _json
+
+    from app import state, sync as sync_mod
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+    from app.models import Drive, Vehicle
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_TRIPS_KEY)
+    prev_flag = state.get(sess, state.PROMOTE_REFUSED_KEY)
+    try:
+        vin = sess.scalars(select(Vehicle.vin)).first()
+        base = sync_mod.now_local().replace(microsecond=0) - timedelta(days=3, hours=2)
+        trips = []
+        for i in range(routes_mod.PROMOTE_AUTO_MAX_ADD + 2):
+            at = base + timedelta(minutes=25 * i)
+            ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
+            trips.append({"vin": vin, "start_ts": ts, "end_ts": ts + 600,
+                          "start_time": at.isoformat(timespec="seconds"),
+                          "end_time": (at + timedelta(minutes=10)).isoformat(timespec="seconds"),
+                          "distance_km": 3.0 + i, "duration_min": 10.0, "energy_kwh": 0.5})
+        routes_mod._put_trips(sess, trips)
+        state.put(sess, state.PROMOTE_REFUSED_KEY, "")
+        sess.commit()
+        with TestClient(app) as client:
+            assert client.get("/api/summary?days=7").json()["promote_waiting"] is True
+            routes_mod._promote_shadow_trips(SessionLocal(), apply=True)      # a person adds them
+            assert client.get("/api/summary?days=7").json()["promote_waiting"] is False
+    finally:
+        with SessionLocal() as s2:
+            for d in s2.query(Drive).filter(Drive.start_time >= base,
+                                            Drive.start_time <= base + timedelta(hours=3)).all():
+                s2.delete(d)
+            s2.commit()
+        routes_mod._put_trips(sess, _json.loads(prev or "[]"))
+        state.put(sess, state.PROMOTE_REFUSED_KEY, prev_flag or "")
+        sess.commit()
+        sess.close()
+        settings.app_passcode = old_pc
