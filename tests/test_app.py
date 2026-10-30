@@ -13598,3 +13598,117 @@ def test_repair_charge_types_refiles_fast_sessions_as_dc(session):
     finally:
         s2.close()
         settings.app_passcode = old_pc
+
+
+def test_deleting_or_repairing_a_trip_does_not_make_promotion_add_it_back():
+    """27 October: thirteen ghost trips deleted by hand stayed in the stored
+    streamed trips, and a trip whose start a repair moved lost its identity.
+    The promoter read both as trips still to write, so it would have added
+    them back, and its cap on unattended additions refused the whole run, so
+    the afternoon's four real trips never reached the history."""
+    import json as _json
+
+    from app import state, sync as sync_mod
+    from app.database import SessionLocal
+    from app.models import Drive, Vehicle
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_TRIPS_KEY)
+    made: list[int] = []
+    try:
+        vin = sess.scalars(select(Vehicle.vin)).first()
+        base = sync_mod.now_local().replace(microsecond=0) - timedelta(hours=30)
+
+        def trip(minutes_after, km):
+            at = base + timedelta(minutes=minutes_after)
+            end = at + timedelta(minutes=20)
+            ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
+            return {"vin": vin, "start_ts": ts, "end_ts": ts + 1200,
+                    "start_time": at.isoformat(timespec="seconds"),
+                    "end_time": end.isoformat(timespec="seconds"),
+                    "distance_km": km, "duration_min": 20.0, "energy_kwh": km * 0.14,
+                    "start_odo_km": 90000.0 + minutes_after, "end_odo_km": 90000.0 + minutes_after + km,
+                    "soc_start": 80.0, "soc_end": 78.0}
+
+        ghost, repaired, later = trip(0, 0.9), trip(60, 30.0), trip(180, 5.0)
+        _put = __import__("app.api.routes", fromlist=["_put_trips"])._put_trips
+        _put(sess, [ghost, repaired, later])
+        sess.commit()
+        with TestClient(app) as client:
+            client.post("/api/telemetry/promote?apply=true")
+            with SessionLocal() as s:
+                rows = {r.distance_km: r for r in s.scalars(
+                    select(Drive).where(Drive.start_time >= base,
+                                        Drive.start_time <= base + timedelta(hours=4)))}
+                made = [r.id for r in rows.values()]
+                assert set(rows) >= {0.9, 30.0, 5.0}
+                ghost_id, rep = rows[0.9].id, rows[30.0]
+                # The repair: the trip's start moves 40 minutes earlier, distance up.
+                rep.start_time = rep.start_time - timedelta(minutes=40)
+                rep.distance_km = 55.0
+                s.commit()
+                rep_id = rep.id
+            assert client.post("/api/data/delete-drives", json={"ids": [ghost_id]}).status_code == 200
+            made.remove(ghost_id)
+            preview = client.get("/api/telemetry/promote").json()
+            assert preview["would_add"] == 0, preview
+            client.post("/api/telemetry/promote?apply=true")
+        with SessionLocal() as s:
+            assert s.get(Drive, rep_id).distance_km == 55.0      # the repair is kept
+            assert s.get(Drive, ghost_id) is None                # the deleted trip stays deleted
+    finally:
+        with SessionLocal() as s:
+            for i in made:
+                r = s.get(Drive, i)
+                if r is not None:
+                    s.delete(r)
+            s.commit()
+        state.put(sess, state.TELEMETRY_TRIPS_KEY, prev or "[]")
+        sess.commit()
+        sess.close()
+        settings.app_passcode = old_pc
+
+
+def test_deleting_a_charge_does_not_make_promotion_add_it_back():
+    import json as _json
+
+    from app import state, sync as sync_mod
+    from app.database import SessionLocal
+    from app.models import Charge, Vehicle
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_CHARGES_KEY)
+    try:
+        vin = sess.scalars(select(Vehicle.vin)).first()
+        at = sync_mod.now_local().replace(microsecond=0) - timedelta(hours=50)
+        ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
+        state.put(sess, state.TELEMETRY_CHARGES_KEY, _json.dumps([{
+            "vin": vin, "start_ts": ts, "end_ts": ts + 3600,
+            "start_time": at.isoformat(timespec="seconds"),
+            "end_time": (at + timedelta(hours=1)).isoformat(timespec="seconds"),
+            "duration_min": 60.0, "kwh_pack_level": 7.0, "kwh_pack_meter": 7.2,
+            "kwh_wall": 7.5, "soc_start": 50.0, "soc_end": 60.0, "peak_kw": 7.5, "fast": False}]))
+        sess.commit()
+        with TestClient(app) as client:
+            client.post("/api/telemetry/promote-charges?apply=true")
+            with SessionLocal() as s:
+                row = s.scalars(select(Charge).where(Charge.start_time == at)).first()
+                assert row is not None
+                cid = row.id
+            assert client.post("/api/data/delete-charges", json={"ids": [cid]}).status_code == 200
+            again = client.get("/api/telemetry/promote-charges").json()
+            adds = [c for c in (again.get("charges") or again if isinstance(again, list) else again.get("charges", []))
+                    if isinstance(c, dict) and c.get("action") == "add"]
+            assert adds == [], again
+        assert _json.loads(state.get(SessionLocal(), state.TELEMETRY_CHARGES_KEY)) == []
+    finally:
+        state.put(sess, state.TELEMETRY_CHARGES_KEY, prev or "[]")
+        sess.commit()
+        sess.close()
+        settings.app_passcode = old_pc

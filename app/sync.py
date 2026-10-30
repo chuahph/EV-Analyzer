@@ -2524,8 +2524,13 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
         return None
     if net in ("Tesla", "CCS", "CHAdeMO", "GB"):
         fast = True       # the car named a DC charger: no need to infer it from power
+    # Only the counters known to be in kWh: the lifetime one is still unverified
+    # (see lifetime_charged_raw), and in any other unit it would make every
+    # session look far too fast for AC.
+    in_kwh = max((v for v in (kwh_wall, kwh_pack_meter, kwh_pack_level) if v is not None),
+                 default=0.0)
     if not fast and minutes >= AC_CLASSIFY_MIN_MIN and (
-            peak > AC_MAX_PEAK_KW or biggest / (minutes / 60.0) > AC_MAX_KW):
+            peak > AC_MAX_PEAK_KW or in_kwh / (minutes / 60.0) > AC_MAX_KW):
         fast = True
     soc_start, soc_end, soc_via = _charge_end_levels(start, end, level_first, level_last)
 

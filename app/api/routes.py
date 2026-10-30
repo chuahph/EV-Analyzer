@@ -2073,6 +2073,11 @@ def clear_drives(session: Session = Depends(get_session)):
     Sits behind the passcode gate like every other endpoint.
     """
     deleted = services.clear_drives(session)
+    # The streamed trips go too: left behind, the promoter reads them as trips
+    # still to write and would put the history back (see _drop_shadow_trips).
+    with _SHADOW_LOCK:
+        _put_trips(session, [])
+        session.commit()
     return {"deleted_drives": deleted}
 
 
@@ -2090,8 +2095,58 @@ def _payload_ids(payload: dict) -> list[int]:
 def delete_drives(payload: dict = Body(...), session: Session = Depends(get_session)):
     """Delete only the selected trips (by id); charges/battery kept."""
     ids = _payload_ids(payload)
+    rows = session.scalars(select(Drive).where(Drive.id.in_(ids))).all() if ids else []
+    gone = [(r.vehicle_id, r.start_time, r.end_time, r.shadow_start_ts) for r in rows]
     deleted = services.delete_drives(session, ids)
+    _drop_shadow_trips(session, gone)
     return {"deleted_drives": deleted}
+
+
+# A row's shadow_start_ts is a float near 1.8e9, which a database float column
+# holds only to within about a minute; this is the window that still finds it.
+SHADOW_TS_SLACK_SEC = 130.0
+
+
+def _shadow_row_match(t: dict, start, end, shadow_ts) -> bool:
+    """Whether streamed trip ``t`` is the one a Drive row was written from:
+    the same start to the second (the promoter's own identity), or, for a row
+    whose start a repair has since moved, its recorded stream start within
+    the float's slack and the two still overlapping in time."""
+    try:
+        t_start = sync_mod._dt(float(t["start_ts"])).replace(microsecond=0)
+        t_end = sync_mod._dt(float(t["end_ts"]))
+    except (KeyError, TypeError, ValueError, OSError):
+        return False
+    if start is not None and t_start == start.replace(microsecond=0):
+        return True
+    if shadow_ts is None or start is None or end is None:
+        return False
+    return (abs(float(t["start_ts"]) - float(shadow_ts)) <= SHADOW_TS_SLACK_SEC
+            and t_start <= end and start <= t_end)
+
+
+def _drop_shadow_trips(session: Session, gone: list[tuple]) -> int:
+    """Remove the streamed trips the deleted rows were written from.
+
+    Left in the store they look like trips the history has yet to receive:
+    on 27 October thirteen deleted ghost trips would have been added back, and
+    the cap on unattended additions refused the whole run instead, so four
+    real trips that afternoon never reached the history."""
+    import json as _json
+
+    if not gone:
+        return 0
+    with _SHADOW_LOCK:
+        try:
+            trips = _json.loads(state.get(session, state.TELEMETRY_TRIPS_KEY) or "[]") or []
+        except ValueError:
+            return 0
+        kept = [t for t in trips
+                if not any(_shadow_row_match(t, s, e, ts) for _v, s, e, ts in gone)]
+        if len(kept) != len(trips):
+            _put_trips(session, kept)
+            session.commit()
+        return len(trips) - len(kept)
 
 
 def _drive_row_dict(d: Drive) -> dict:
@@ -3046,6 +3101,10 @@ def clear_charges(session: Session = Depends(get_session)):
     Sits behind the passcode gate like every other endpoint.
     """
     deleted = services.clear_charges(session)
+    # The streamed sessions too, for the reason _drop_shadow_trips gives.
+    with _SHADOW_LOCK:
+        state.put(session, state.TELEMETRY_CHARGES_KEY, "[]")
+        session.commit()
     return {"deleted_charges": deleted}
 
 
@@ -3053,8 +3112,41 @@ def clear_charges(session: Session = Depends(get_session)):
 def delete_charges(payload: dict = Body(...), session: Session = Depends(get_session)):
     """Delete only the selected charges (by id); trips/battery kept."""
     ids = _payload_ids(payload)
+    rows = session.scalars(select(Charge).where(Charge.id.in_(ids))).all() if ids else []
+    gone = [(r.start_time, r.end_time) for r in rows if r.start_time and r.end_time]
     deleted = services.delete_charges(session, ids)
+    _drop_shadow_charges(session, gone)
     return {"deleted_charges": deleted}
+
+
+def _drop_shadow_charges(session: Session, gone: list[tuple]) -> int:
+    """Remove the streamed sessions behind deleted charges: two charging
+    sessions cannot overlap, so a streamed one overlapping a deleted row is
+    the one it was written from (or the same session polling recorded).
+    Left behind, the promoter would add it back."""
+    import json as _json
+
+    if not gone:
+        return 0
+    with _SHADOW_LOCK:
+        try:
+            charges = _json.loads(state.get(session, state.TELEMETRY_CHARGES_KEY) or "[]") or []
+        except ValueError:
+            return 0
+
+        def hit(c: dict) -> bool:
+            try:
+                c_start = sync_mod._dt(float(c["start_ts"]))
+                c_end = sync_mod._dt(float(c["end_ts"]))
+            except (KeyError, TypeError, ValueError, OSError):
+                return False
+            return any(c_start <= e and s <= c_end for s, e in gone)
+
+        kept = [c for c in charges if not hit(c)]
+        if len(kept) != len(charges):
+            state.put(session, state.TELEMETRY_CHARGES_KEY, _json.dumps(kept))
+            session.commit()
+        return len(charges) - len(kept)
 
 
 @router.post("/data/tag-drive")
@@ -4530,6 +4622,7 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
                  if (d.source or "") == "telemetry" and d.start_time}
     claimed: set[int] = set()
     changed: list[dict] = []
+    kept_repaired: list[dict] = []   # outside `changed`, which pairs with `plan`
     plan: list[tuple] = []
 
     # Oldest first. Trips arrive in that order already, but the matching
@@ -4556,6 +4649,27 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
 
         row = by_shadow.get((vehicle_id, t_start.replace(microsecond=0)))
         if row is None:
+            # A row this trip was written into whose start has since been moved
+            # by a hand repair (repair-lost-departure moved one 44 minutes on
+            # 27 October). Its identity is gone, so without this the trip reads
+            # as new and would be added again beside it. Kept as the repair
+            # left it: correcting it from the stream would undo the repair.
+            repaired = min(
+                (d for d in drives
+                 if d.vehicle_id == vehicle_id and d.id not in claimed
+                 and (d.source or "") == "telemetry" and d.start_time and d.end_time
+                 and _shadow_row_match(t, d.start_time, d.end_time, d.shadow_start_ts)),
+                key=lambda d: abs(float(d.shadow_start_ts or 0.0) - start_ts), default=None)
+            if repaired is not None:
+                claimed.add(repaired.id)
+                kept_repaired.append({"start": t.get("start_time"),
+                                "was": {"id": repaired.id, "km": round(repaired.distance_km or 0.0, 3),
+                                        "kwh": round(repaired.energy_used_kwh or 0.0, 3),
+                                        "source": repaired.source},
+                                "now": {"km": t.get("distance_km"), "kwh": t.get("energy_kwh")},
+                                "action": "kept",
+                                "why": "this trip was repaired by hand; left as the repair made it"})
+                continue
             # The polled trip covering the same ground, if there is one —
             # the one that overlaps MOST, and only if nothing else has taken
             # it. Both rules are copied from the comparison, which has been
@@ -4617,7 +4731,7 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
         changed.append(entry)
 
     if not apply:
-        return changed
+        return changed + kept_repaired
 
     # Refuse the whole run rather than write a wall of duplicates. Checked
     # after planning and before touching anything, because a cap that fires
@@ -4677,7 +4791,7 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
     for entry, (row, *_rest) in zip(changed, plan):
         if entry.get("was", {}).get("id") is None and row is not None:
             entry["id"] = row.id
-    return changed
+    return changed + kept_repaired
 
 
 # Which of the car's three counters energy_added_kwh is taken from.
