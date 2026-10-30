@@ -365,6 +365,7 @@ def init_db() -> None:
     _ensure_column("charges", "shadow_start_ts", "FLOAT", "NULL")
     _ensure_column("charges", "polled_kwh", "FLOAT", "NULL")
     _ensure_column("charges", "energy_source", "VARCHAR(16)", "''")
+    _ensure_column("charges", "charger_network", "VARCHAR(16)", "''")
     # 0, not NULL: "not set" and "set to zero" mean the same thing here (fall
     # back to the global pace), so there is nothing for NULL to carry.
     _ensure_column("places", "departure_pace_kmh", "FLOAT", "0.0")

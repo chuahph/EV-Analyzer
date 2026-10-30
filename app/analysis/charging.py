@@ -193,6 +193,7 @@ def analyze(charges: list[Charge], drives: list[Drive] | None = None) -> dict[st
             # Which of the car's own energy counters energy_added_kwh was
             # read from — the three disagree by about 11%.
             "energy_source": getattr(c, "energy_source", "") or None,
+            "charger_network": getattr(c, "charger_network", "") or None,
             # telemetry / polled / blank (legacy) — which path wrote this
             # row, same distinction Drive.source carries for a trip.
             "ingest_source": getattr(c, "source", "") or None,

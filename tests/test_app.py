@@ -1143,7 +1143,7 @@ def test_summary_since_charge_window():
                 # charging_analysis.analyze's recent_charges).
                 "duration_min", "max_power_kw", "outside_temp_c", "billed_kwh",
                 "energy_source", "ingest_source", "polled_kwh",
-                "implied_capacity_kwh", "capacity_samples",
+                "implied_capacity_kwh", "capacity_samples", "charger_network",
             }
             assert lc["used_since_kwh"] >= 0
             # Energy Charged/AC-DC Energy/Charging Cost (and Driving Cost,

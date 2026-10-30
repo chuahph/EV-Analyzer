@@ -2250,7 +2250,8 @@ function attr(text) {
 // identically (same buttons) instead of two different formats.
 function chargeRowHtml(c, currency, idx) {
   const when = `${tripWhen(c.start_time)} → ${tripEnd(c.start_time, c.end_time)}`;
-  const loc = c.location ? `${c.location} · ${c.charge_type}` : c.charge_type;
+  const kind = c.charger_network ? `${c.charge_type} · ${c.charger_network}` : c.charge_type;
+  const loc = c.location ? `${c.location} · ${kind}` : kind;
   const locHtml = h(loc);
   const kwh = `${fmt(c.energy_added_kwh, 1)} kWh`;
   const soc = c.start_soc != null && c.end_soc != null

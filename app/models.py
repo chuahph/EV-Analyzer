@@ -532,6 +532,9 @@ class Charge(Base):
     # against the car's own "Added" display, and a row written under one
     # answer must stay readable after the answer changes.
     energy_source: Mapped[str] = mapped_column(String(16), default="")
+    # Who runs the charger, where the car says: Tesla, CCS, CHAdeMO, GB; "" if
+    # it did not (home charging, or a session from before it was streamed).
+    charger_network: Mapped[str] = mapped_column(String(16), default="")
 
     # Usable pack capacity this session implies, measured from the slope of
     # energy-added against SoC across the whole charge rather than from its two

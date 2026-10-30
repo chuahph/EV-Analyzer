@@ -2576,3 +2576,42 @@ def test_a_session_this_car_cannot_have_charged_on_ac_is_filed_dc():
         advance_charge(ac, _charge_tel(minute * 60, minute * 0.125, minute * 0.12, 40.0 + minute * 0.12))
     done = advance_charge(ac, _charge_tel(66 * 60, 0, 0, 48.0, charging=False))
     assert done is not None and done["fast"] is False
+
+
+def test_the_charger_label_comes_from_what_the_car_reports():
+    from app.sync import charger_network
+
+    assert charger_network("FastChargerSupercharger") == "Tesla"
+    assert charger_network("Tesla") == "Tesla"
+    assert charger_network("FastChargerMCSingleWireCAN") == "Tesla"
+    assert charger_network("FastChargerCCS") == "CCS"
+    assert charger_network("CCS", "SAE") == "CCS"
+    assert charger_network("FastChargerCHAdeMO") == "CHAdeMO"
+    # Nothing useful, or the car's "no reading": no label, never a wrong one.
+    assert charger_network(None) == ""
+    assert charger_network("<invalid>") == ""
+    assert charger_network("FastChargerUnknown", "IEC") == ""
+
+
+def test_a_charge_keeps_the_charger_the_car_named_and_files_it_dc():
+    """Sent on change, so it can arrive on any record of the session; and a
+    named DC charger settles AC or DC without inferring it from the power."""
+    def tel(ts, ac, dc, kwh, **extra):
+        f = {"EnergyRemaining": kwh, "Soc": 60.0, "Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+             "DetailedChargeState": "DetailedChargeStateCharging",
+             "ACChargingEnergyIn": ac, "DCChargingEnergyIn": dc, "ACChargingPower": 7.5}
+        f.update(extra)
+        return snapshot_from_telemetry(f, ts=ts)
+
+    shadow: dict = {}
+    advance_charge(shadow, tel(0, 0.0, 0.0, 40.0))
+    advance_charge(shadow, tel(120, 0.25, 0.24, 40.24, FastChargerType="FastChargerSupercharger"))
+    advance_charge(shadow, tel(240, 0.5, 0.48, 40.48))
+    done = advance_charge(shadow, _charge_tel(300, 0, 0, 40.48, charging=False))
+    assert done is not None and done["network"] == "Tesla" and done["fast"] is True
+    # A later session starts with no label of its own.
+    nxt: dict = {}
+    advance_charge(nxt, tel(0, 0.0, 0.0, 40.0))
+    advance_charge(nxt, tel(120, 0.25, 0.24, 40.24))
+    again = advance_charge(nxt, _charge_tel(300, 0, 0, 40.24, charging=False))
+    assert again is not None and again["network"] == "" and again["fast"] is False

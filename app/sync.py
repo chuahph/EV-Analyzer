@@ -1232,6 +1232,10 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         "lifetime_charged_raw": num("LifetimeEnergyChargedKwh"),
         "charge_state_raw": charge_state or None,
         "fast": charge_state.startswith("DetailedChargeStateDC"),
+        # What the charger is, where the car says (needs FastChargerType and
+        # ChargingCableType in the configuration; None until it streams them).
+        "charger_type_raw": enum_str("FastChargerType"),
+        "cable_type_raw": enum_str("ChargingCableType"),
         "out_temp": num("OutsideTemp") if num("OutsideTemp") is not None else 20.0,
         "shift": _shift_of(fields, speed * MILES_TO_KM if speed is not None else None),
         "speed_kmh": (speed * MILES_TO_KM) if speed is not None else 0.0,
@@ -2204,6 +2208,26 @@ def amend_closed_trip(trip: dict[str, Any], snap: dict[str, Any]) -> bool:
     return True
 
 
+def charger_network(fast_type: Any, cable_type: Any = None) -> str:
+    """A short label for the charger from what the car reports: Tesla, CCS,
+    CHAdeMO, GB, or "" when it says nothing useful. The enum spellings are
+    matched loosely (the car's own API says "Tesla", the stream's enum names
+    say "FastChargerSupercharger" or similar), so a spelling nobody
+    anticipated falls through to "" rather than to a wrong label."""
+    text = " ".join(str(x) for x in (fast_type, cable_type) if isinstance(x, str)).lower()
+    if not text or "invalid" in text and not any(k in text for k in ("tesla", "ccs", "chademo")):
+        return ""
+    if "tesla" in text or "supercharger" in text or "singlewirecan" in text:
+        return "Tesla"
+    if "ccs" in text or "combo" in text:
+        return "CCS"
+    if "chademo" in text:
+        return "CHAdeMO"
+    if "gb_dc" in text or "fastchargergb" in text:
+        return "GB"
+    return ""
+
+
 # A plug-in that moved less than this was somebody testing the cable, not a
 # charge. Well above the 0.02 kWh step EnergyRemaining moves in.
 CHARGE_MIN_KWH = 0.05
@@ -2360,6 +2384,8 @@ def _advance_charge(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, A
         shadow["open"] = dict(snap)
         shadow["peak_kw"] = float(snap.get("charger_kw") or 0.0)
         shadow["fast"] = bool(snap.get("fast"))
+        shadow.pop("net", None)
+        _note_charger(shadow, snap)
         shadow["last"] = dict(snap)
         return done
 
@@ -2367,6 +2393,8 @@ def _advance_charge(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, A
         shadow["open"] = dict(snap)
         shadow["peak_kw"] = float(snap.get("charger_kw") or 0.0)
         shadow["fast"] = bool(snap.get("fast"))
+        shadow.pop("net", None)
+        _note_charger(shadow, snap)
         shadow["last"] = dict(snap)
         return None
 
@@ -2394,6 +2422,8 @@ def _advance_charge(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, A
             shadow["open"] = dict(snap)
             shadow["peak_kw"] = float(snap.get("charger_kw") or 0.0)
             shadow["fast"] = bool(snap.get("fast"))
+            shadow.pop("net", None)
+            _note_charger(shadow, snap)
             shadow["last"] = dict(snap)
             return done
         shadow["peak_kw"] = max(float(shadow.get("peak_kw") or 0.0),
@@ -2409,6 +2439,7 @@ def _advance_charge(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, A
         # for the same reason: the two ends are not the session, they are
         # just what is left of it once the middle has been thrown away.
         shadow["fast"] = bool(shadow.get("fast")) or bool(snap.get("fast"))
+        _note_charger(shadow, snap)
         shadow["last"] = dict(snap)
         return None
 
@@ -2445,6 +2476,15 @@ def settle_charge(shadow: dict[str, Any], now_ts: float) -> dict[str, Any] | Non
     return _charge_close(shadow, last)
 
 
+def _note_charger(shadow: dict[str, Any], snap: dict[str, Any]) -> None:
+    """Remember the charger label the first time the car names one in this
+    session: it is sent on change, so it can arrive on any record."""
+    if not shadow.get("net"):
+        label = charger_network(snap.get("charger_type_raw"), snap.get("cable_type_raw"))
+        if label:
+            shadow["net"] = label
+
+
 def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any] | None:
     """Emit the open charge, ending at ``end``, and clear the machine."""
     start = shadow.pop("open", None)
@@ -2452,6 +2492,7 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
     # Popped rather than re-derived from start/end below — see advance_charge,
     # where it accumulates across every snapshot the session actually saw.
     fast = bool(shadow.pop("fast", False))
+    net = shadow.pop("net", "") or ""
     level_first = shadow.pop("level_first", None)
     level_last = shadow.pop("level_last", None)
     shadow.pop("level_for", None)
@@ -2481,6 +2522,8 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
                                kwh_lifetime) if v is not None), default=0.0)
     if biggest < CHARGE_MIN_KWH or minutes <= 0:
         return None
+    if net in ("Tesla", "CCS", "CHAdeMO", "GB"):
+        fast = True       # the car named a DC charger: no need to infer it from power
     if not fast and minutes >= AC_CLASSIFY_MIN_MIN and (
             peak > AC_MAX_PEAK_KW or biggest / (minutes / 60.0) > AC_MAX_KW):
         fast = True
@@ -2552,6 +2595,7 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
         "level_pair_end": level_last,
         "peak_kw": round(peak, 1),
         "fast": fast,
+        "network": net,
         "lat": start.get("lat"), "lon": start.get("lon"),
         "pack_temp_c": end.get("pack_temp_c"),
         # Nothing writes a Charge row from this. It is evidence.
