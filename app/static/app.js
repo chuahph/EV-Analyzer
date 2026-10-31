@@ -2331,7 +2331,7 @@ function chargeRowHtml(c, currency, idx) {
   if (!STATIC_MODE && c.id != null && !chargeSelectMode && !chargerProfile &&
       c.charge_type === "DC" && atHome && !c.charger_profile) {
     profileHint = `<span class="charge-profile-hint">DC at Home: is this a public charger? ` +
-      `<button class="charge-profile-save" data-charge-id="${c.id}">Save as condo DC charger</button></span>`;
+      `<button class="charge-profile-save" data-charge-id="${c.id}">Save as condo charger</button></span>`;
   }
   // Copy this session's raw figures for checking against the car's own
   // screen or a charger receipt — same tool as a trip's own ⧉, and needs no
@@ -2420,7 +2420,7 @@ function wireEditRateButtons(root) {
   });
 }
 
-// "Save as condo DC charger" - one tap on a DC-at-Home card. The tapped
+// "Save as condo charger" - one tap on a DC-at-Home card. The tapped
 // session supplies the default rate; every other past session is left alone
 // until "Apply to past charges" (here offered right after, and in Rates).
 function wireChargerProfileButtons(root) {
@@ -3322,7 +3322,7 @@ function setupRatesModal() {
   function renderProfile() {
     if (!cpInfo) return;
     if (!chargerProfile) {
-      cpInfo.textContent = "None saved. Tap \u201cSave as condo DC charger\u201d on a DC charge at Home.";
+      cpInfo.textContent = "None saved. Tap \u201cSave as condo charger\u201d on a DC charge at Home.";
     } else {
       const r = chargerProfile.rate != null ? `${fmt(chargerProfile.rate, 3)}/kWh` : "public DC rate";
       cpInfo.textContent = `${chargerProfile.name} \u00b7 public DC \u00b7 ${r}. ` +

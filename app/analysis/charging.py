@@ -173,7 +173,7 @@ def analyze(charges: list[Charge], drives: list[Drive] | None = None) -> dict[st
             # to guessing from location text in that case).
             "source": getattr(c, "price_source", "") or None,
             # Name of the saved charger profile that tagged this session
-            # (e.g. "Condo DC charger"); None when none did.
+            # (e.g. "Condo charger"); None when none did.
             "charger_profile": getattr(c, "charger_profile", "") or None,
             # The rest are diagnostic-only — not rendered on the list row,
             # kept here so the "copy diagnostics" button can hand them back

@@ -189,7 +189,7 @@ def resolve_pricing(
 
 # A session faster than this cannot be AC at home, so it is treated as DC.
 CONDO_DC_MIN_KW = 15.0
-PROFILE_DEFAULT_NAME = "Condo DC charger"
+PROFILE_DEFAULT_NAME = "Condo charger"
 
 
 def get_profile(session: Session) -> dict | None:
@@ -210,6 +210,11 @@ def get_profile(session: Session) -> dict | None:
 
 def save_profile(session: Session, name: str, rate: float | None) -> dict:
     name = (name or "").strip()[:40] or PROFILE_DEFAULT_NAME
+    # A rename carries over to the sessions the old name already tagged.
+    old = get_profile(session)
+    if old and old["name"] != name:
+        session.query(Charge).filter(Charge.charger_profile == old["name"]).update(
+            {Charge.charger_profile: name}, synchronize_session=False)
     state.put(session, state.CHARGER_PROFILE_KEY,
               json.dumps({"name": name, "kind": "public_dc", "rate": rate}))
     return get_profile(session)
