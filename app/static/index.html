@@ -1310,6 +1310,14 @@ export default {
             <input type="number" id="rate-office-dc" min="0" step="0.01">
           </label>
         </div>
+        <div class="rate-group" id="charger-profile-group">
+          <div class="rate-group-title"><span>🅿️ Condo DC charger</span></div>
+          <p class="modal-sub" id="cp-info"></p>
+          <div class="cp-actions">
+            <button type="button" id="cp-apply" class="btn hidden">Apply to past charges</button>
+            <button type="button" id="cp-remove" class="btn hidden">Remove</button>
+          </div>
+        </div>
         <button type="submit" class="btn btn-accent">Save</button>
       </form>
       <span id="rates-status" class="status"></span>

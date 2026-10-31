@@ -5101,8 +5101,11 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
         raw_coords = (f"{float(lat):.4f}, {float(lon):.4f}"
                       if lat is not None and lon is not None else "")
         fast = bool(c.get("fast"))
-        source, rate = pricing_prefs.resolve_source_and_rate(
-            session, settings, raw_coords, fast, c_start)
+        loc_label = _place(raw_coords, session) if raw_coords else ""
+        source, rate, charger_profile = pricing_prefs.resolve_pricing(
+            session, settings, raw_coords or loc_label, fast, c_start,
+            float(c.get("peak_kw") or 0.0))
+        fast = fast or bool(charger_profile)
         row = Charge(
             vehicle_id=vehicle_id,
             start_time=c_start.replace(microsecond=0),
@@ -5113,7 +5116,8 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             energy_added_kwh=kwh,
             charge_type="DC" if fast else "AC",
             max_power_kw=round(float(c.get("peak_kw") or 0.0), 1),
-            location=_place(raw_coords, session) if raw_coords else "",
+            location=loc_label,
+            charger_profile=charger_profile,
             cost=round(pricing_prefs.payable_kwh(
                 kwh, "DC" if fast else "AC", settings) * rate, 2),
             payable_kwh=round(pricing_prefs.payable_kwh(
@@ -6350,12 +6354,15 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
     # session or one given an explicit cost isn't tied to any of the three
     # presets, so the dashboard falls back to guessing from location text.
     price_source = ""
+    charger_profile = ""
     payable = 0.0
     if is_free:
         cost = 0.0
     elif cost is None:
-        price_source, rate = pricing_prefs.resolve_source_and_rate(
-            session, settings, location, charge_type == "DC", start_time)
+        price_source, rate, charger_profile = pricing_prefs.resolve_pricing(
+            session, settings, location, charge_type == "DC", start_time, max_power_kw)
+        if charger_profile:
+            charge_type = "DC"   # a saved public-DC charger: never AC-priced
         payable = pricing_prefs.payable_kwh(energy_added_kwh, charge_type, settings)
         cost = round(payable * rate, 2)
 
@@ -6366,7 +6373,7 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
         start_soc=start_soc, end_soc=end_soc, energy_added_kwh=round(energy_added_kwh, 2),
         charge_type=charge_type, max_power_kw=max_power_kw, location=location,
         cost=cost, outside_temp_c=outside_temp_c, is_free=is_free, price_source=price_source,
-        payable_kwh=round(payable, 3),
+        payable_kwh=round(payable, 3), charger_profile=charger_profile,
     )
     session.add(charge)
     session.commit()
@@ -6629,6 +6636,74 @@ def save_pricing_prefs(payload: dict = Body(...), session: Session = Depends(get
         "default_source": pricing_prefs.get_default_source(session),
         "updated_at": pricing_prefs.get_updated_at(session),
     }
+
+
+def _profile_payload(session: Session) -> dict:
+    return {
+        "profile": pricing_prefs.get_profile(session),
+        "min_kw": pricing_prefs.CONDO_DC_MIN_KW,
+        "past_count": len(pricing_prefs.past_profile_candidates(session))
+        if pricing_prefs.get_profile(session) else 0,
+    }
+
+
+@router.get("/charger-profile")
+def get_charger_profile(session: Session = Depends(get_session)):
+    """The saved Home charger profile (the condo's public DC charger), or
+    null, plus how many past sessions it would tag."""
+    return _profile_payload(session)
+
+
+@router.post("/charger-profile")
+def save_charger_profile(payload: dict = Body(default={}), session: Session = Depends(get_session)):
+    """Save the Home charger profile: a name and an optional RM/kWh, nothing
+    else. 'charge_id' (the card that was tapped) supplies the default rate —
+    what that session was billed at — and that one session is tagged; every
+    other past session waits for /charger-profile/apply-past."""
+    name = str(payload.get("name") or "").strip()[:40]
+    rate = payload.get("rate")
+    charge = None
+    if payload.get("charge_id") is not None:
+        charge = session.get(Charge, payload.get("charge_id"))
+        if charge is None:
+            raise HTTPException(404, "Charge not found.")
+    if rate in (None, ""):
+        rate = pricing_prefs.charge_rate(charge) if charge is not None else None
+    else:
+        try:
+            rate = float(rate)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "'rate' must be a number.")
+        if not math.isfinite(rate) or rate < 0:
+            raise HTTPException(400, "'rate' must be >= 0.")
+    profile = pricing_prefs.save_profile(session, name, rate)
+    if charge is not None and not charge.is_free:
+        charge.price_source = "public"
+        charge.charger_profile = profile["name"]
+        charge.charge_type = "DC"
+    session.commit()
+    return _profile_payload(session)
+
+
+@router.delete("/charger-profile")
+def delete_charger_profile(session: Session = Depends(get_session)):
+    """Forget the profile. Sessions already tagged keep their tag."""
+    pricing_prefs.clear_profile(session)
+    return _profile_payload(session)
+
+
+@router.post("/charger-profile/apply-past")
+def apply_charger_profile_to_past(payload: dict = Body(default={}), session: Session = Depends(get_session)):
+    """Tag past DC sessions at Home with the profile. Without
+    {"confirm": true} it only previews the count. Changes the tag only
+    (price source, profile name, DC label) - never energy, SoC, kWh, cost
+    or location."""
+    if pricing_prefs.get_profile(session) is None:
+        raise HTTPException(409, "Save a charger profile first.")
+    rows = pricing_prefs.past_profile_candidates(session)
+    if payload.get("confirm") is not True:
+        return {"preview": True, "count": len(rows), "ids": [c.id for c in rows]}
+    return {"preview": False, "count": pricing_prefs.apply_to_past(session)}
 
 
 @router.get("/export")

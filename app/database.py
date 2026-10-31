@@ -361,6 +361,7 @@ def init_db() -> None:
     _ensure_column("charges", "implied_capacity_kwh", "FLOAT", "NULL")
     _ensure_column("charges", "capacity_samples", "INTEGER", "NULL")
     _ensure_column("charges", "price_source", "VARCHAR(10)", "''")
+    _ensure_column("charges", "charger_profile", "VARCHAR(40)", "''")
     _ensure_column("charges", "source", "VARCHAR(12)", "''")
     _ensure_column("charges", "shadow_start_ts", "FLOAT", "NULL")
     _ensure_column("charges", "polled_kwh", "FLOAT", "NULL")
