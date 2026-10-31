@@ -192,8 +192,12 @@ def replace_with_import(
     for c in charges:
         c = dict(c)
         if not c.get("cost") and c.get("energy_added_kwh") and not c.get("is_free"):
-            source, rate = pricing_prefs.resolve_source_and_rate(
-                session, settings, c.get("location", ""), c.get("charge_type") == "DC", c["start_time"])
+            source, rate, profile = pricing_prefs.resolve_pricing(
+                session, settings, c.get("location", ""), c.get("charge_type") == "DC",
+                c["start_time"], c.get("max_power_kw") or 0.0)
+            if profile:
+                c["charge_type"] = "DC"
+                c["charger_profile"] = profile
             pk = pricing_prefs.payable_kwh(
                 c["energy_added_kwh"], c.get("charge_type", "AC"), settings)
             c["cost"] = round(pk * rate, 2)

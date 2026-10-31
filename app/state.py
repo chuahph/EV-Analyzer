@@ -250,6 +250,8 @@ PRICE_HOME_DC_KEY = "price_home_dc"
 PRICE_OFFICE_AC_KEY = "price_office_ac"
 PRICE_OFFICE_DC_KEY = "price_office_dc"
 DEFAULT_PRICE_SOURCE_KEY = "default_price_source"  # "public" | "home" | "office"
+CHARGER_PROFILE_KEY = "charger_profile_home"  # JSON {name, kind, rate|null}: the
+# saved public-DC charger at Home (the condo). Only a label and a rate.
 # When the Rates page was last saved — there's no live TNB/public-charger
 # rate feed to auto-refresh from, so this is a manual-review reminder
 # instead: the Rates page shows it and links to TNB's official tariff page.

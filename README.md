@@ -225,6 +225,14 @@ Once linked, run `python run.py collect` to log new drives/charges over time.
    from the **Recent Charges** card: tap ✎ next to it and enter the actual
    RM/kWh rate; the cost recalculates from that instead.
 
+   **Condo DC charger.** If the charger at your Home is a public DC one, tap
+   *Save as condo DC charger* on a DC charge at Home (or manage it under
+   Rates). New DC sessions (or over 15 kW) starting inside the Home place then
+   keep their "Home" label but count as public DC at the saved rate, and stay
+   out of the Home AC RM/kWh. Past charges are never re-tagged on their own:
+   *Apply to past charges* previews the count first and changes only the tag,
+   never energy, SoC, kWh or cost. The profile stores just a name and a rate.
+
    Optional: time-of-use pricing instead of the flat rate above — driving
    cost, and charging cost for whichever charger type has no AC/DC rate set,
    then price each session by its own start time. Both rates must be set

@@ -557,6 +557,10 @@ class Charge(Base):
     # keeps meaning "this was a home charge" even after rates change later,
     # unlike comparing the stored cost to today's configured rates.
     price_source: Mapped[str] = mapped_column(String(10), default="")
+    # Name of the saved charger profile (e.g. "Condo DC charger") that tagged
+    # this session, blank otherwise. A tag only: the location label, energy,
+    # SoC and cost are never touched by it.
+    charger_profile: Mapped[str] = mapped_column(String(40), default="")
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="charges")
 

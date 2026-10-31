@@ -15,13 +15,14 @@ Either way, the result is just a starting cost: the ✎ edit button (and the
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from . import state, tariff
 from .analysis import haversine_km
-from .models import Place
+from .models import Charge, Place
 from .sync import now_local
 
 # Wider than a Place's own (typically ~150m) geofence radius — this is about
@@ -157,6 +158,114 @@ def resolve_source_and_rate(
     stops matching for anything already logged."""
     source = match_source(location_or_coords, session) or get_default_source(session)
     return source, rate_for_source(session, settings, source, dc, dt)
+
+
+def resolve_pricing(
+    session: Session, settings, location_or_coords: str, dc: bool, dt: datetime,
+    max_power_kw: float = 0.0,
+) -> tuple[str, float, str]:
+    """resolve_source_and_rate plus the charger profile that applied, as
+    (source, rate, profile_name); profile_name is "" when none did.
+
+    A DC session (or one over CONDO_DC_MIN_KW) that starts inside the Home
+    area, with a Home charger profile saved, is priced as public DC at the
+    profile's rate rather than the Home rate. Callers store the name on
+    Charge.charger_profile; the location label is left as it was."""
+    profile = get_profile(session)
+    if profile and is_profile_match(session, location_or_coords, dc, max_power_kw):
+        rate = profile["rate"]
+        if rate is None:
+            rate = rate_for_source(session, settings, "public", True, dt)
+        return "public", float(rate), profile["name"]
+    source, rate = resolve_source_and_rate(session, settings, location_or_coords, dc, dt)
+    return source, rate, ""
+
+
+# A session faster than this cannot be AC at home, so it is treated as DC.
+CONDO_DC_MIN_KW = 15.0
+PROFILE_DEFAULT_NAME = "Condo DC charger"
+
+
+def get_profile(session: Session) -> dict | None:
+    """The saved Home charger profile: {name, kind, rate} or None. Holds only
+    a label and an optional RM/kWh (None = use the public DC rate)."""
+    raw = state.get(session, state.CHARGER_PROFILE_KEY, "")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        rate = data.get("rate")
+        return {"name": str(data.get("name") or PROFILE_DEFAULT_NAME)[:40],
+                "kind": "public_dc",
+                "rate": float(rate) if rate is not None else None}
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def save_profile(session: Session, name: str, rate: float | None) -> dict:
+    name = (name or "").strip()[:40] or PROFILE_DEFAULT_NAME
+    state.put(session, state.CHARGER_PROFILE_KEY,
+              json.dumps({"name": name, "kind": "public_dc", "rate": rate}))
+    return get_profile(session)
+
+
+def clear_profile(session: Session) -> None:
+    state.put(session, state.CHARGER_PROFILE_KEY, "")
+
+
+def is_profile_match(session: Session, location_or_coords: str, dc: bool,
+                     max_power_kw: float = 0.0) -> bool:
+    """DC (or over CONDO_DC_MIN_KW) and inside the Home area. Coordinates
+    must fall inside the Home place's own geofence (its radius_km), tighter
+    than the 2 km pricing match, so a public charger down the road is not
+    swept in."""
+    if not (dc or (max_power_kw or 0.0) > CONDO_DC_MIN_KW):
+        return False
+    text = (location_or_coords or "").strip()
+    if not text:
+        return False
+    homes = [p for p in session.query(Place).all() if p.name.strip().lower() == "home"]
+    if _is_coords(text):
+        for p in homes:
+            d = haversine_km(text, f"{p.lat}, {p.lon}")
+            if d is not None and d <= (p.radius_km or 0.15):
+                return True
+        return False
+    return bool(homes) and "home" in text.lower()
+
+
+def charge_rate(c: Charge) -> float | None:
+    """RM/kWh a stored session was actually billed at (cost over payable kWh)."""
+    kwh = (c.payable_kwh or 0.0) or (c.energy_added_kwh or 0.0)
+    return round(c.cost / kwh, 3) if kwh and not c.is_free else None
+
+
+def past_profile_candidates(session: Session) -> list[Charge]:
+    """Stored sessions the profile would have tagged: DC (or fast), in the
+    Home area, not already tagged, not free."""
+    out = []
+    for c in session.query(Charge).filter(Charge.charger_profile == "").order_by(Charge.start_time):
+        if c.is_free:
+            continue
+        if is_profile_match(session, c.location or "", c.charge_type == "DC", c.max_power_kw):
+            out.append(c)
+    return out
+
+
+def apply_to_past(session: Session) -> int:
+    """Tag the candidates as public DC under the profile. Changes only
+    price_source, charger_profile (and charge_type when over the power
+    threshold) — never energy, SoC, kWh, cost or location."""
+    profile = get_profile(session)
+    if not profile:
+        return 0
+    rows = past_profile_candidates(session)
+    for c in rows:
+        c.price_source = "public"
+        c.charger_profile = profile["name"]
+        c.charge_type = "DC"
+    session.commit()
+    return len(rows)
 
 
 def rate_for_source(session: Session, settings, source: str, dc: bool, dt: datetime) -> float:

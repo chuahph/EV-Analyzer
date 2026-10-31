@@ -834,6 +834,16 @@ canvas { max-height: 260px; }
    pencil does the same thing on every row, so dimming it would only make
    it harder to find. Sits inside .charge-loc (a column flex item), so it
    needs to stay an inline box or it would drop onto a line of its own. */
+.charge-profile-tag {
+  display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px;
+  border-radius: 8px; background: rgba(46, 160, 140, .16); vertical-align: middle;
+}
+.charge-profile-hint { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.charge-profile-save {
+  border: 1px solid currentColor; background: none; color: inherit; cursor: pointer;
+  font-size: 12px; border-radius: 8px; padding: 4px 8px; margin-top: 2px; min-height: 32px;
+}
+.cp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .charge-rename-btn {
   border: none; background: none; cursor: pointer; font-size: 13px;
   padding: 0 6px; vertical-align: middle; border-radius: 4px;
