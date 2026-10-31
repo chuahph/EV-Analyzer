@@ -167,23 +167,17 @@ def resolve_pricing(
     """resolve_source_and_rate plus the charger profile that applied, as
     (source, rate, profile_name); profile_name is "" when none did.
 
-    A DC session (or one over CONDO_DC_MIN_KW) that starts inside the Home
-    area, with a Home charger profile saved, is priced as public DC at the
-    profile's rate rather than the Home rate. Callers store the name on
-    Charge.charger_profile; the location label is left as it was."""
+    The profile is a label, not a price. All Home charging is on the condo's
+    chargers, and the condo charges exactly the Home AC and Home DC rates (the
+    owner's word, 31 October), so a session inside the Home area keeps the
+    Home price for its type and gains the profile's name. A session over
+    CONDO_DC_MIN_KW is priced as DC whatever it was filed as."""
+    fast = dc or (max_power_kw or 0.0) > CONDO_DC_MIN_KW
     profile = get_profile(session)
-    if profile and is_profile_match(session, location_or_coords, dc, max_power_kw):
-        rate = profile["rate"]
-        if rate is None:
-            rate = rate_for_source(session, settings, "public", True, dt)
-        return "public", float(rate), profile["name"]
-    source, rate = resolve_source_and_rate(session, settings, location_or_coords, dc, dt)
-    # All Home charging is on the condo's chargers (the owner's word, 31
-    # October), its AC ones included: an AC session there carries the label
-    # too, but stays Home AC at the Home AC rate. Callers tell the two apart by
-    # the source: only the DC one comes back "public".
     if profile and is_home_location(session, location_or_coords):
+        source, rate = resolve_source_and_rate(session, settings, location_or_coords, fast, dt)
         return source, rate, profile["name"]
+    source, rate = resolve_source_and_rate(session, settings, location_or_coords, dc, dt)
     return source, rate, ""
 
 
@@ -194,7 +188,8 @@ PROFILE_DEFAULT_NAME = "Condo charger"
 
 def get_profile(session: Session) -> dict | None:
     """The saved Home charger profile: {name, kind, rate} or None. Holds only
-    a label and an optional RM/kWh (None = use the public DC rate)."""
+    a label and an RM/kWh kept from an earlier version; pricing uses the Home
+    rates (see resolve_pricing)."""
     raw = state.get(session, state.CHARGER_PROFILE_KEY, "")
     if not raw:
         return None
@@ -224,15 +219,6 @@ def clear_profile(session: Session) -> None:
     state.put(session, state.CHARGER_PROFILE_KEY, "")
 
 
-def is_profile_match(session: Session, location_or_coords: str, dc: bool,
-                     max_power_kw: float = 0.0) -> bool:
-    """DC (or over CONDO_DC_MIN_KW) and inside the Home area: the condo's
-    public DC charger, priced at the profile's rate."""
-    if not (dc or (max_power_kw or 0.0) > CONDO_DC_MIN_KW):
-        return False
-    return is_home_location(session, location_or_coords)
-
-
 def is_home_location(session: Session, location_or_coords: str) -> bool:
     """Inside the Home area. Coordinates must fall inside the Home place's own
     geofence (its radius_km), tighter than the 2 km pricing match, so a public
@@ -257,34 +243,55 @@ def charge_rate(c: Charge) -> float | None:
 
 
 def past_profile_candidates(session: Session) -> list[Charge]:
-    """Stored sessions the profile would have tagged: in the Home area (AC or
-    DC, see resolve_pricing), not already tagged, not free."""
+    """Stored sessions in the Home area (AC or DC) that the profile has not
+    tagged yet, plus any an earlier version tagged and priced as public DC at
+    the profile's own rate (31 October: the condo charges the Home rates), which are re-priced at the Home DC rate. Not free
+    ones, and not one whose rate was set by hand."""
     out = []
-    for c in session.query(Charge).filter(Charge.charger_profile == "").order_by(Charge.start_time):
-        if c.is_free:
+    for c in session.query(Charge).order_by(Charge.start_time):
+        if c.is_free or (c.price_source or "") == "custom":
             continue
-        if is_home_location(session, c.location or ""):
+        if not is_home_location(session, c.location or ""):
+            continue
+        if not c.charger_profile or (c.price_source or "") == "public":
             out.append(c)
     return out
 
 
-def apply_to_past(session: Session) -> int:
-    """Tag the candidates as public DC under the profile. Changes only
-    price_source, charger_profile (and charge_type when over the power
-    threshold) — never energy, SoC, kWh, cost or location."""
+def apply_to_past(session: Session, settings=None) -> int:
+    """Tag the candidates with the profile. One priced as something other than
+    Home for its type (an earlier version's public DC at the profile's rate, or
+    a session over CONDO_DC_MIN_KW filed AC) is re-priced at today's Home rate
+    for its type; one already priced as Home keeps its cost. Energy, SoC, kWh
+    and location are never touched."""
     profile = get_profile(session)
     if not profile:
         return 0
+    if settings is None:
+        from .config import get_settings
+        settings = get_settings()
     rows = past_profile_candidates(session)
     for c in rows:
-        c.charger_profile = profile["name"]
-        # Only the DC charger is priced differently; an AC session there keeps
-        # its Home AC source, type and cost, and gains just the label.
-        if is_profile_match(session, c.location or "", c.charge_type == "DC", c.max_power_kw):
-            c.price_source = "public"
-            c.charge_type = "DC"
+        tag_condo(session, settings, c, profile["name"])
     session.commit()
     return len(rows)
+
+
+def tag_condo(session: Session, settings, c: Charge, name: str) -> None:
+    """One session on the condo's charger: the label, and the Home price for
+    its type (see resolve_pricing)."""
+    fast = c.charge_type == "DC" or (c.max_power_kw or 0.0) > CONDO_DC_MIN_KW
+    kind = "DC" if fast else (c.charge_type or "AC")
+    c.charger_profile = name
+    if (c.price_source or "") == "home" and c.charge_type == kind:
+        # Already priced as Home for its type, at the rate in force then:
+        # rates are not retroactive, so only the label changes.
+        return
+    c.charge_type = kind
+    c.price_source = "home"
+    payable = payable_kwh(c.energy_added_kwh, c.charge_type, settings, c.billed_kwh or 0.0)
+    c.payable_kwh = round(payable, 3)
+    c.cost = round(payable * rate_for_source(session, settings, "home", fast, c.start_time), 2)
 
 
 def rate_for_source(session: Session, settings, source: str, dc: bool, dt: datetime) -> float:

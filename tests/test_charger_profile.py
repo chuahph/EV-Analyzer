@@ -31,11 +31,14 @@ def _charge(session, kind="DC", kw=37.0, loc="Home", kwh=20.0, cost=21.38, src="
     return c
 
 
-def test_dc_at_home_with_profile_is_public_dc_at_profile_rate(home):
+def test_dc_at_home_with_profile_is_priced_at_the_home_dc_rate(home):
+    """31 October: the condo charges exactly the Home rates, so its DC charger
+    is Home DC with the profile's label, not public DC at a rate of its own."""
     pricing_prefs.save_profile(home, "Condo charger", 1.069)
     src, rate, name = pricing_prefs.resolve_pricing(
         home, get_settings(), "Home", True, T0, 37.0)
-    assert (src, rate, name) == ("public", 1.069, "Condo charger")
+    assert (src, name) == ("home", "Condo charger")
+    assert rate == pricing_prefs.get_rates(home, get_settings())["home_dc"]
 
 
 def test_over_15kw_counts_as_dc_even_if_flagged_ac(home):
@@ -70,42 +73,44 @@ def test_dc_away_from_home_is_unchanged_with_profile(home):
     assert name == ""
 
 
-def test_past_preview_then_apply_changes_only_the_tag(home):
+def test_past_preview_then_apply_tags_and_prices_at_home_rates(home):
+    rates = pricing_prefs.get_rates(home, get_settings())
     old_dc = _charge(home)                              # like charge #102
     ac = _charge(home, kind="AC", kw=7.4, cost=18.0)
     away = _charge(home, loc="Mall", src="public")
+    # Tagged by the earlier version: public DC at the profile's own rate.
+    early = _charge(home, kwh=3.34, cost=3.57, src="public", charger_profile="Condo charger")
     pricing_prefs.save_profile(home, "Condo charger", 1.069)
 
     ids = [c.id for c in pricing_prefs.past_profile_candidates(home)]
-    assert ids == [old_dc.id, ac.id]                    # preview only
-    assert old_dc.price_source == "home"                # nothing changed yet
+    assert ids == [old_dc.id, ac.id, early.id]          # preview only
+    assert old_dc.price_source == "home" and early.cost == 3.57   # nothing changed yet
 
-    before = (old_dc.energy_added_kwh, old_dc.start_soc, old_dc.end_soc,
-              old_dc.cost, old_dc.location, old_dc.payable_kwh)
-    ac_before = (ac.charge_type, ac.cost, ac.payable_kwh)
-    assert pricing_prefs.apply_to_past(home) == 2
-    assert (old_dc.price_source, old_dc.charger_profile) == ("public", "Condo charger")
-    assert before == (old_dc.energy_added_kwh, old_dc.start_soc, old_dc.end_soc,
-                      old_dc.cost, old_dc.location, old_dc.payable_kwh)
-    # The AC one gets the label only: still Home AC, same cost.
-    assert (ac.price_source, ac.charger_profile) == ("home", "Condo charger")
-    assert (ac.charge_type, ac.cost, ac.payable_kwh) == ac_before
+    before = (old_dc.energy_added_kwh, old_dc.start_soc, old_dc.end_soc, old_dc.location)
+    assert pricing_prefs.apply_to_past(home, get_settings()) == 3
+    # Already Home DC: the label only, its cost as it was (rates are not retroactive).
+    assert (old_dc.price_source, old_dc.charger_profile, old_dc.charge_type) == ("home", "Condo charger", "DC")
+    assert old_dc.cost == 21.38
+    assert before == (old_dc.energy_added_kwh, old_dc.start_soc, old_dc.end_soc, old_dc.location)
+    # Re-priced from the profile's own rate to the Home DC rate.
+    assert (early.price_source, early.cost) == ("home", round(3.34 * rates["home_dc"], 2))
+    # AC already Home AC: the label only.
+    assert (ac.price_source, ac.charger_profile, ac.charge_type, ac.cost) == ("home", "Condo charger", "AC", 18.0)
     assert (away.price_source, away.charger_profile) == ("public", "")
-    assert pricing_prefs.apply_to_past(home) == 0       # idempotent
+    assert pricing_prefs.apply_to_past(home, get_settings()) == 0       # idempotent
 
 
-def test_home_ac_rate_leaves_out_the_condo_dc_charger(home):
+def test_home_ac_rate_counts_the_condo_ac_charger(home):
     ac = _charge(home, kind="AC", kw=7.4, kwh=10.0, cost=9.0)
     dc = _charge(home)
     pricing_prefs.save_profile(home, "Condo charger", 1.069)
-    pricing_prefs.apply_to_past(home)
+    pricing_prefs.apply_to_past(home, get_settings())
     out = analyze([ac, dc])
-    assert out["home_ac_cost_per_kwh"] == 0.9
     assert out["home_ac_sessions"] == 1
     assert out["condo_dc_sessions"] == 1
     assert out["dc_sessions"] == 1 and out["dc_energy_kwh"] == 20.0
     rec = [r for r in out["recent_charges"] if r["charger_profile"] and r["charge_type"] == "DC"]
-    assert rec and rec[0]["source"] == "public" and rec[0]["location"] == "Home"
+    assert rec and rec[0]["source"] == "home" and rec[0]["location"] == "Home"
 
 
 def test_api_flow_save_from_card_auto_apply_and_apply_past():
@@ -138,8 +143,9 @@ def test_api_flow_save_from_card_auto_apply_and_apply_past():
                 "location": "Home"}).json()["id"]
             with SessionLocal() as s:
                 n = s.get(Charge, new)
-                assert (n.price_source, n.charger_profile, n.location) == ("public", "Condo charger", "Home")
-                assert n.cost == round(20.0 * 1.069, 2)
+                assert (n.price_source, n.charger_profile, n.location) == ("home", "Condo charger", "Home")
+                rates = pricing_prefs.get_rates(s, get_settings())
+                assert n.cost == round(20.0 * rates["home_dc"], 2)
                 s.delete(n)
                 s.commit()
         finally:

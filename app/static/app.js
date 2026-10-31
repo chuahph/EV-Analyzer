@@ -2271,12 +2271,12 @@ function chargeRowHtml(c, currency, idx) {
   const when = `${tripWhen(c.start_time)} → ${tripEnd(c.start_time, c.end_time)}`;
   const kind = c.charger_network ? `${c.charge_type} · ${c.charger_network}` : c.charge_type;
   const loc = c.location ? `${c.location} · ${kind}` : kind;
-  // A saved charger profile (the condo's public DC charger) keeps the place
+  // A saved charger profile (the condo's chargers) keeps the place
   // label as it was and adds a tag. A DC session at Home with no profile
   // saved yet gets a one-tap hint instead.
   let locHtml = h(loc);
   if (c.charger_profile) {
-    const why = c.charge_type === "DC" ? "Counted as public DC, not Home AC"
+    const why = c.charge_type === "DC" ? "Condo charger, priced at your Home DC rate"
       : "Condo charger, priced at your Home AC rate";
     locHtml += ` <span class="charge-profile-tag" title="${why}">` +
       `${h("🅿️ " + c.charger_profile)}</span>`;
@@ -2450,8 +2450,8 @@ function wireChargerProfileButtons(root) {
   });
 }
 
-// Previews how many past sessions would be tagged, then asks. Only the tag
-// changes - never energy, SoC, kWh, cost or location.
+// Previews how many past sessions would be tagged, then asks. Each is priced
+// at the Home rate for its type; energy, SoC, kWh and location never change.
 async function applyChargerProfileToPast() {
   const post = (confirm) => fetch("/api/charger-profile/apply-past", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -2459,8 +2459,9 @@ async function applyChargerProfileToPast() {
   });
   const pv = await (await post(false)).json();
   if (!pv.count) return { count: 0, applied: false };
-  if (!window.confirm(`Tag ${pv.count} past DC charge${pv.count === 1 ? "" : "s"} at Home as ` +
-      `"${chargerProfile.name}" (public DC)?\n\nOnly the tag changes - energy, SoC, kWh and cost stay as they are.`)) {
+  if (!window.confirm(`Tag ${pv.count} past charge${pv.count === 1 ? "" : "s"} at Home as ` +
+      `"${chargerProfile.name}"?\n\nOne priced as anything other than Home (such as an earlier ` +
+      `condo DC rate) is re-priced at today's Home rate for its type; the rest keep their cost.`)) {
     return { count: pv.count, applied: false };
   }
   const done = await (await post(true)).json();
@@ -3328,9 +3329,8 @@ function setupRatesModal() {
     if (!chargerProfile) {
       cpInfo.textContent = "None saved. Tap \u201cSave as condo charger\u201d on a DC charge at Home.";
     } else {
-      const r = chargerProfile.rate != null ? `${fmt(chargerProfile.rate, 3)}/kWh` : "public DC rate";
-      cpInfo.textContent = `${chargerProfile.name} \u00b7 public DC \u00b7 ${r}. ` +
-        `${chargerProfilePast} past charge${chargerProfilePast === 1 ? "" : "s"} not yet tagged.`;
+      cpInfo.textContent = `${chargerProfile.name} \u00b7 priced at your Home AC and DC rates. ` +
+        `${chargerProfilePast} past charge${chargerProfilePast === 1 ? "" : "s"} to tag or re-price.`;
     }
     cpApply?.classList.toggle("hidden", !chargerProfile);
     cpRemove?.classList.toggle("hidden", !chargerProfile);

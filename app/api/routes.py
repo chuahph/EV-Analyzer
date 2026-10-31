@@ -5105,7 +5105,7 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
         source, rate, charger_profile = pricing_prefs.resolve_pricing(
             session, settings, raw_coords or loc_label, fast, c_start,
             float(c.get("peak_kw") or 0.0))
-        fast = fast or (bool(charger_profile) and source == "public")
+        fast = fast or (bool(charger_profile) and float(c.get("peak_kw") or 0.0) > pricing_prefs.CONDO_DC_MIN_KW)
         row = Charge(
             vehicle_id=vehicle_id,
             start_time=c_start.replace(microsecond=0),
@@ -6361,8 +6361,8 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
     elif cost is None:
         price_source, rate, charger_profile = pricing_prefs.resolve_pricing(
             session, settings, location, charge_type == "DC", start_time, max_power_kw)
-        if charger_profile and price_source == "public":
-            charge_type = "DC"   # the saved public-DC charger: never AC-priced
+        if charger_profile and (max_power_kw or 0.0) > pricing_prefs.CONDO_DC_MIN_KW:
+            charge_type = "DC"   # too fast for AC: the condo's DC charger
         payable = pricing_prefs.payable_kwh(energy_added_kwh, charge_type, settings)
         cost = round(payable * rate, 2)
 
@@ -6649,7 +6649,7 @@ def _profile_payload(session: Session) -> dict:
 
 @router.get("/charger-profile")
 def get_charger_profile(session: Session = Depends(get_session)):
-    """The saved Home charger profile (the condo's public DC charger), or
+    """The saved Home charger profile (the condo's chargers), or
     null, plus how many past sessions it would tag."""
     return _profile_payload(session)
 
@@ -6678,9 +6678,7 @@ def save_charger_profile(payload: dict = Body(default={}), session: Session = De
             raise HTTPException(400, "'rate' must be >= 0.")
     profile = pricing_prefs.save_profile(session, name, rate)
     if charge is not None and not charge.is_free:
-        charge.price_source = "public"
-        charge.charger_profile = profile["name"]
-        charge.charge_type = "DC"
+        pricing_prefs.tag_condo(session, get_settings(), charge, profile["name"])
     session.commit()
     return _profile_payload(session)
 
@@ -6703,7 +6701,7 @@ def apply_charger_profile_to_past(payload: dict = Body(default={}), session: Ses
     rows = pricing_prefs.past_profile_candidates(session)
     if payload.get("confirm") is not True:
         return {"preview": True, "count": len(rows), "ids": [c.id for c in rows]}
-    return {"preview": False, "count": pricing_prefs.apply_to_past(session)}
+    return {"preview": False, "count": pricing_prefs.apply_to_past(session, get_settings())}
 
 
 @router.get("/export")

@@ -215,8 +215,7 @@ def analyze(charges: list[Charge], drives: list[Drive] | None = None) -> dict[st
         for c in sorted(charges, key=lambda c: c.start_time, reverse=True)
     ]
 
-    # Home AC rate: sessions priced as Home AC. A session tagged by a charger
-    # profile is public DC (price_source "public"), so it never lands here.
+    # Home AC rate: sessions priced as Home AC, the condo's AC charger included.
     # An AC session on the condo's AC charger carries the profile label too,
     # but is still Home AC (price_source "home"), so it stays in.
     home_ac = [c for c in ac if getattr(c, "price_source", "") == "home"
