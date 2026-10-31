@@ -51,11 +51,13 @@ def test_dc_at_home_without_profile_is_unchanged(home):
     assert rate == pricing_prefs.get_rates(home, get_settings())["home_dc"]
 
 
-def test_ac_at_home_is_unchanged_with_profile(home):
+def test_ac_at_home_gets_the_label_but_keeps_the_home_ac_price(home):
+    """All Home charging is on the condo's chargers (31 October): AC there is
+    labelled too, and stays Home AC at the Home AC rate."""
     pricing_prefs.save_profile(home, "Condo DC charger", 1.069)
     src, rate, name = pricing_prefs.resolve_pricing(
         home, get_settings(), "Home", False, T0, 7.4)
-    assert (src, name) == ("home", "")
+    assert (src, name) == ("home", "Condo DC charger")
     assert rate == pricing_prefs.get_rates(home, get_settings())["home_ac"]
 
 
@@ -75,16 +77,19 @@ def test_past_preview_then_apply_changes_only_the_tag(home):
     pricing_prefs.save_profile(home, "Condo DC charger", 1.069)
 
     ids = [c.id for c in pricing_prefs.past_profile_candidates(home)]
-    assert ids == [old_dc.id]                           # preview only
+    assert ids == [old_dc.id, ac.id]                    # preview only
     assert old_dc.price_source == "home"                # nothing changed yet
 
     before = (old_dc.energy_added_kwh, old_dc.start_soc, old_dc.end_soc,
               old_dc.cost, old_dc.location, old_dc.payable_kwh)
-    assert pricing_prefs.apply_to_past(home) == 1
+    ac_before = (ac.charge_type, ac.cost, ac.payable_kwh)
+    assert pricing_prefs.apply_to_past(home) == 2
     assert (old_dc.price_source, old_dc.charger_profile) == ("public", "Condo DC charger")
     assert before == (old_dc.energy_added_kwh, old_dc.start_soc, old_dc.end_soc,
                       old_dc.cost, old_dc.location, old_dc.payable_kwh)
-    assert (ac.price_source, ac.charger_profile) == ("home", "")
+    # The AC one gets the label only: still Home AC, same cost.
+    assert (ac.price_source, ac.charger_profile) == ("home", "Condo DC charger")
+    assert (ac.charge_type, ac.cost, ac.payable_kwh) == ac_before
     assert (away.price_source, away.charger_profile) == ("public", "")
     assert pricing_prefs.apply_to_past(home) == 0       # idempotent
 
@@ -99,7 +104,7 @@ def test_home_ac_rate_leaves_out_the_condo_dc_charger(home):
     assert out["home_ac_sessions"] == 1
     assert out["condo_dc_sessions"] == 1
     assert out["dc_sessions"] == 1 and out["dc_energy_kwh"] == 20.0
-    rec = [r for r in out["recent_charges"] if r["charger_profile"]]
+    rec = [r for r in out["recent_charges"] if r["charger_profile"] and r["charge_type"] == "DC"]
     assert rec and rec[0]["source"] == "public" and rec[0]["location"] == "Home"
 
 

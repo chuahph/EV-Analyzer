@@ -178,6 +178,12 @@ def resolve_pricing(
             rate = rate_for_source(session, settings, "public", True, dt)
         return "public", float(rate), profile["name"]
     source, rate = resolve_source_and_rate(session, settings, location_or_coords, dc, dt)
+    # All Home charging is on the condo's chargers (the owner's word, 31
+    # October), its AC ones included: an AC session there carries the label
+    # too, but stays Home AC at the Home AC rate. Callers tell the two apart by
+    # the source: only the DC one comes back "public".
+    if profile and is_home_location(session, location_or_coords):
+        return source, rate, profile["name"]
     return source, rate, ""
 
 
@@ -215,12 +221,17 @@ def clear_profile(session: Session) -> None:
 
 def is_profile_match(session: Session, location_or_coords: str, dc: bool,
                      max_power_kw: float = 0.0) -> bool:
-    """DC (or over CONDO_DC_MIN_KW) and inside the Home area. Coordinates
-    must fall inside the Home place's own geofence (its radius_km), tighter
-    than the 2 km pricing match, so a public charger down the road is not
-    swept in."""
+    """DC (or over CONDO_DC_MIN_KW) and inside the Home area: the condo's
+    public DC charger, priced at the profile's rate."""
     if not (dc or (max_power_kw or 0.0) > CONDO_DC_MIN_KW):
         return False
+    return is_home_location(session, location_or_coords)
+
+
+def is_home_location(session: Session, location_or_coords: str) -> bool:
+    """Inside the Home area. Coordinates must fall inside the Home place's own
+    geofence (its radius_km), tighter than the 2 km pricing match, so a public
+    charger down the road is not swept in; a stored label must say Home."""
     text = (location_or_coords or "").strip()
     if not text:
         return False
@@ -241,13 +252,13 @@ def charge_rate(c: Charge) -> float | None:
 
 
 def past_profile_candidates(session: Session) -> list[Charge]:
-    """Stored sessions the profile would have tagged: DC (or fast), in the
-    Home area, not already tagged, not free."""
+    """Stored sessions the profile would have tagged: in the Home area (AC or
+    DC, see resolve_pricing), not already tagged, not free."""
     out = []
     for c in session.query(Charge).filter(Charge.charger_profile == "").order_by(Charge.start_time):
         if c.is_free:
             continue
-        if is_profile_match(session, c.location or "", c.charge_type == "DC", c.max_power_kw):
+        if is_home_location(session, c.location or ""):
             out.append(c)
     return out
 
@@ -261,9 +272,12 @@ def apply_to_past(session: Session) -> int:
         return 0
     rows = past_profile_candidates(session)
     for c in rows:
-        c.price_source = "public"
         c.charger_profile = profile["name"]
-        c.charge_type = "DC"
+        # Only the DC charger is priced differently; an AC session there keeps
+        # its Home AC source, type and cost, and gains just the label.
+        if is_profile_match(session, c.location or "", c.charge_type == "DC", c.max_power_kw):
+            c.price_source = "public"
+            c.charge_type = "DC"
     session.commit()
     return len(rows)
 

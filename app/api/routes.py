@@ -5105,7 +5105,7 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
         source, rate, charger_profile = pricing_prefs.resolve_pricing(
             session, settings, raw_coords or loc_label, fast, c_start,
             float(c.get("peak_kw") or 0.0))
-        fast = fast or bool(charger_profile)
+        fast = fast or (bool(charger_profile) and source == "public")
         row = Charge(
             vehicle_id=vehicle_id,
             start_time=c_start.replace(microsecond=0),
@@ -6361,8 +6361,8 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
     elif cost is None:
         price_source, rate, charger_profile = pricing_prefs.resolve_pricing(
             session, settings, location, charge_type == "DC", start_time, max_power_kw)
-        if charger_profile:
-            charge_type = "DC"   # a saved public-DC charger: never AC-priced
+        if charger_profile and price_source == "public":
+            charge_type = "DC"   # the saved public-DC charger: never AC-priced
         payable = pricing_prefs.payable_kwh(energy_added_kwh, charge_type, settings)
         cost = round(payable * rate, 2)
 

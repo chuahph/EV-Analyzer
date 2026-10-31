@@ -2272,7 +2272,9 @@ function chargeRowHtml(c, currency, idx) {
   // saved yet gets a one-tap hint instead.
   let locHtml = h(loc);
   if (c.charger_profile) {
-    locHtml += ` <span class="charge-profile-tag" title="Counted as public DC, not Home AC">` +
+    const why = c.charge_type === "DC" ? "Counted as public DC, not Home AC"
+      : "Condo charger, priced at your Home AC rate";
+    locHtml += ` <span class="charge-profile-tag" title="${why}">` +
       `${h("🅿️ " + c.charger_profile)}</span>`;
   }
   const kwh = `${fmt(c.energy_added_kwh, 1)} kWh`;

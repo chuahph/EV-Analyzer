@@ -217,11 +217,13 @@ def analyze(charges: list[Charge], drives: list[Drive] | None = None) -> dict[st
 
     # Home AC rate: sessions priced as Home AC. A session tagged by a charger
     # profile is public DC (price_source "public"), so it never lands here.
+    # An AC session on the condo's AC charger carries the profile label too,
+    # but is still Home AC (price_source "home"), so it stays in.
     home_ac = [c for c in ac if getattr(c, "price_source", "") == "home"
-               and not getattr(c, "is_free", False)
-               and not getattr(c, "charger_profile", "")]
+               and not getattr(c, "is_free", False)]
     home_ac_energy = sum(c.energy_added_kwh for c in home_ac)
-    profiled = [c for c in charges if getattr(c, "charger_profile", "")]
+    profiled = [c for c in charges if getattr(c, "charger_profile", "")
+                and getattr(c, "charge_type", "") == "DC"]
 
     return {
         "available": True,
