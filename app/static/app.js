@@ -1868,6 +1868,10 @@ function chargeDiagnostics(c, ctx) {
       capacity_samples: c.capacity_samples,
       cost: c.cost, is_free: c.is_free, rate_per_kwh: c.rate_per_kwh,
       source: c.source,
+      // Who runs the charger, where the car said (Tesla, CCS...), and the
+      // saved charger profile that tagged the session; null when neither.
+      charger_network: c.charger_network ?? null,
+      charger_profile: c.charger_profile ?? null,
     },
   }, null, 2);
 }

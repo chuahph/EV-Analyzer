@@ -12925,6 +12925,7 @@ def summary(
             "billed_kwh": round(last_charge.billed_kwh, 2) if last_charge.billed_kwh else None,
             "energy_source": last_charge.energy_source or None,
             "charger_network": getattr(last_charge, "charger_network", "") or None,
+            "charger_profile": getattr(last_charge, "charger_profile", "") or None,
             "ingest_source": last_charge.source or None,
             "polled_kwh": (
                 round(last_charge.polled_kwh, 2) if last_charge.polled_kwh is not None else None
