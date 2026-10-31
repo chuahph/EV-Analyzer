@@ -14221,11 +14221,14 @@ def _telemetry_ingest(payload: dict, session: Session):
                     **({"stale": True} if stale else {}),
                 })
         car.update(fields)
-        # When the car last said its gear and its speed, so a gear that cannot
-        # be true any more (see sync._shift_of) can be told from a current one.
-        if ts and not stale and ("Gear" in fields or "VehicleSpeed" in fields):
+        # When the car last said each of these, so a value that cannot be true
+        # any more can be told from a current one: a gear (see sync._shift_of),
+        # and the charger type, which the car never clears after unplugging
+        # (see sync._note_charger).
+        timed = ("Gear", "VehicleSpeed", "FastChargerType", "FastChargerPresent")
+        if ts and not stale and any(k in fields for k in timed):
             kt = car.get("_kt") if isinstance(car.get("_kt"), dict) else {}
-            for k in ("Gear", "VehicleSpeed"):
+            for k in timed:
                 if k in fields:
                     kt[k] = ts
             car["_kt"] = kt

@@ -2605,7 +2605,9 @@ def test_a_charge_keeps_the_charger_the_car_named_and_files_it_dc():
 
     shadow: dict = {}
     advance_charge(shadow, tel(0, 0.0, 0.0, 40.0))
-    advance_charge(shadow, tel(120, 0.25, 0.24, 40.24, FastChargerType="FastChargerSupercharger"))
+    # Sent during the session: its time is the record's.
+    advance_charge(shadow, tel(120, 0.25, 0.24, 40.24, FastChargerType="FastChargerSupercharger",
+                               _kt={"FastChargerType": 120}))
     advance_charge(shadow, tel(240, 0.5, 0.48, 40.48))
     done = advance_charge(shadow, _charge_tel(300, 0, 0, 40.48, charging=False))
     assert done is not None and done["network"] == "Tesla" and done["fast"] is True
@@ -2615,3 +2617,26 @@ def test_a_charge_keeps_the_charger_the_car_named_and_files_it_dc():
     advance_charge(nxt, tel(120, 0.25, 0.24, 40.24))
     again = advance_charge(nxt, _charge_tel(300, 0, 0, 40.24, charging=False))
     assert again is not None and again["network"] == "" and again["fast"] is False
+
+
+
+def test_a_charger_type_left_over_from_an_earlier_session_is_not_used():
+    """31 October: the car still read FastChargerCombo while driving after a DC
+    charge. The next AC charge at home must not be labelled CCS or filed DC."""
+    def tel(ts, ac, dc, kwh):
+        f = {"EnergyRemaining": kwh, "Soc": 60.0, "Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+             "DetailedChargeState": "DetailedChargeStateCharging",
+             "ACChargingEnergyIn": ac, "DCChargingEnergyIn": dc, "ACChargingPower": 7.5,
+             # Left in the composite by a DC session hours earlier.
+             "FastChargerType": "FastChargerCombo", "ChargingCableType": "CableTypeIEC",
+             "_kt": {"FastChargerType": -20000.0}}
+        return snapshot_from_telemetry(f, ts=ts)
+
+    shadow: dict = {}
+    for minute in range(0, 66, 5):
+        advance_charge(shadow, tel(minute * 60, minute * 0.125, minute * 0.12, 40.0 + minute * 0.12))
+    done = advance_charge(shadow, _charge_tel(66 * 60, 0, 0, 48.0, charging=False))
+    assert done is not None and done["network"] == "" and done["fast"] is False
+    # And the real values the car sent, read as they should be.
+    from app.sync import charger_network
+    assert charger_network("FastChargerCombo", "CableTypeIEC") == "CCS"

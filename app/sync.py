@@ -1236,6 +1236,11 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         # ChargingCableType in the configuration; None until it streams them).
         "charger_type_raw": enum_str("FastChargerType"),
         "cable_type_raw": enum_str("ChargingCableType"),
+        # When the car last SENT the charger type: it keeps reporting the last
+        # one long after unplugging (FastChargerCombo while driving, 31
+        # October), so only a type sent during a session can describe it.
+        "charger_type_ts": (fields.get("_kt") or {}).get("FastChargerType")
+        if isinstance(fields.get("_kt"), dict) else None,
         "out_temp": num("OutsideTemp") if num("OutsideTemp") is not None else 20.0,
         "shift": _shift_of(fields, speed * MILES_TO_KM if speed is not None else None),
         "speed_kmh": (speed * MILES_TO_KM) if speed is not None else 0.0,
@@ -2476,13 +2481,30 @@ def settle_charge(shadow: dict[str, Any], now_ts: float) -> dict[str, Any] | Non
     return _charge_close(shadow, last)
 
 
+# A charger type sent this long before the session opened still belongs to it
+# (the car may name the charger as the cable goes in, a moment before charging).
+CHARGER_TYPE_LEAD_SEC = 300.0
+
+
 def _note_charger(shadow: dict[str, Any], snap: dict[str, Any]) -> None:
     """Remember the charger label the first time the car names one in this
-    session: it is sent on change, so it can arrive on any record."""
-    if not shadow.get("net"):
-        label = charger_network(snap.get("charger_type_raw"), snap.get("cable_type_raw"))
-        if label:
-            shadow["net"] = label
+    session: it is sent on change, so it can arrive on any record.
+
+    Only a type the car SENT during the session (or just before it opened)
+    counts. The car never clears the value: on 31 October it still read
+    FastChargerCombo while driving after a DC charge, and taken at face value
+    the next AC charge at home would have been labelled CCS and filed DC. A
+    second DC session on the same kind of charger sends no change and so gets
+    no label, which is a missing label, never a wrong one."""
+    if shadow.get("net"):
+        return
+    sent = snap.get("charger_type_ts")
+    opened = (shadow.get("open") or {}).get("ts")
+    if sent is None or opened is None or float(sent) < float(opened) - CHARGER_TYPE_LEAD_SEC:
+        return
+    label = charger_network(snap.get("charger_type_raw"), snap.get("cable_type_raw"))
+    if label:
+        shadow["net"] = label
 
 
 def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any] | None:
