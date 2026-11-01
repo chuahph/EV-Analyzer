@@ -11672,7 +11672,9 @@ def repair_split_trip(
         # never watched — so flatten it rather than leave a drop that would be
         # read as this drive's consumption. A streamed trip with nothing blind
         # was watched end to end: the drop is shared by distance instead.
-        if (drive.source or "") == "telemetry" and not blind and drive.start_soc is not None \
+        # (A few tens of metres unseen at the start, the usual gap before the
+        # first reading, still leaves the trip watched: #3300 had 0.051 km.)
+        if (drive.source or "") == "telemetry" and blind <= 0.5 and drive.start_soc is not None \
                 and drive.end_soc is not None:
             mid_soc = round(drive.start_soc - (drive.start_soc - drive.end_soc) * a_km / max(a_km + b_km, 1e-9), 2)
             second.start_soc = mid_soc

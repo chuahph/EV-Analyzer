@@ -13839,7 +13839,8 @@ def test_a_split_streamed_trip_is_not_put_back_by_promotion():
             "start_time": at.isoformat(timespec="seconds"),
             "end_time": (at + timedelta(minutes=37)).isoformat(timespec="seconds"),
             "distance_km": 16.1, "duration_min": 37.0, "energy_kwh": 2.71,
-            "start_odo_km": 33963.0, "end_odo_km": 33979.1, "soc_start": 59.0, "soc_end": 55.0}])
+            "start_odo_km": 33963.0, "end_odo_km": 33979.1, "soc_start": 59.0, "soc_end": 55.0,
+            "start_recovered_km": 0.051}])
         sess.commit()
         with TestClient(app) as client:
             client.post("/api/telemetry/promote?apply=true")
