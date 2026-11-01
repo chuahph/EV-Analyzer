@@ -13812,3 +13812,61 @@ def test_live_starts_a_new_drive_when_the_driver_left_the_car():
         assert routes_mod._LIVE_MEM[vin]["_go"]["ts"] == 1_793_500_000
     finally:
         routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_a_split_streamed_trip_is_not_put_back_by_promotion():
+    """1 November: one streamed trip covered two drives (the driver got out at
+    a stop). Split by hand, its first leg keeps the trip's start, so the
+    promoter matched it and would have rewritten it as the whole trip again,
+    with the second leg then counting the same kilometres twice."""
+    from app import state, sync as sync_mod
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+    from app.models import Drive, Vehicle
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_TRIPS_KEY)
+    made: list[int] = []
+    try:
+        vin = sess.scalars(select(Vehicle.vin)).first()
+        at = sync_mod.now_local().replace(microsecond=0) - timedelta(hours=40)
+        ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
+        routes_mod._put_trips(sess, [{
+            "vin": vin, "start_ts": ts, "end_ts": ts + 37 * 60,
+            "start_time": at.isoformat(timespec="seconds"),
+            "end_time": (at + timedelta(minutes=37)).isoformat(timespec="seconds"),
+            "distance_km": 16.1, "duration_min": 37.0, "energy_kwh": 2.71,
+            "start_odo_km": 33963.0, "end_odo_km": 33979.1, "soc_start": 59.0, "soc_end": 55.0}])
+        sess.commit()
+        with TestClient(app) as client:
+            client.post("/api/telemetry/promote?apply=true")
+            with SessionLocal() as s:
+                row = s.scalars(select(Drive).where(Drive.start_time == at)).first()
+                rid = row.id
+                made.append(rid)
+            q = (f"drive_id={rid}&boundary_odo_km=33968.2&second_start="
+                 f"{(at + timedelta(minutes=18)).isoformat(timespec='minutes')}&apply=true")
+            plan = client.get(f"/api/repair-split-trip?{q}").json()
+            made.append(plan["new_drive_id"])
+            again = client.get("/api/telemetry/promote").json()
+            assert again["would_add"] == 0
+            client.post("/api/telemetry/promote?apply=true")
+        with SessionLocal() as s:
+            a, b = s.get(Drive, rid), s.get(Drive, plan["new_drive_id"])
+            assert (a.distance_km, b.distance_km) == (5.2, 10.9)
+            assert a.end_soc == b.start_soc and 55.0 < a.end_soc < 59.0   # the drop shared, not flattened
+            assert abs((a.energy_used_kwh or 0) + (b.energy_used_kwh or 0) - 2.71) < 0.05
+    finally:
+        with SessionLocal() as s:
+            for i in made:
+                r = s.get(Drive, i)
+                if r is not None:
+                    s.delete(r)
+            s.commit()
+        state.put(sess, state.TELEMETRY_TRIPS_KEY, prev or "[]")
+        sess.commit()
+        sess.close()
+        settings.app_passcode = old_pc

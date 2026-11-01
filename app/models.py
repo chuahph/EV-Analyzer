@@ -330,6 +330,10 @@ class Drive(Base):
     # nothing else could tell: a trip can have a perfectly good distance,
     # duration and idle record and still have had no usable energy reading.
     energy_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Set by a hand repair that changes a streamed trip without changing the
+    # streamed record it came from (split, lost departure). Promotion leaves
+    # such a row as the repair made it instead of correcting it back.
+    hand_repaired: Mapped[bool] = mapped_column(Boolean, default=False)
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="drives")
 

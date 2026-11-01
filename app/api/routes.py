@@ -4648,6 +4648,20 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
             vehicle_id = next(iter(vin_to_vehicle.values()))
 
         row = by_shadow.get((vehicle_id, t_start.replace(microsecond=0)))
+        if row is not None and getattr(row, "hand_repaired", False):
+            # Same start, but a hand repair has since changed the row (a split
+            # keeps the first leg's start): correcting it from the stream would
+            # put the whole trip back over the repair, and the second leg would
+            # then count the same kilometres twice.
+            claimed.add(row.id)
+            kept_repaired.append({"start": t.get("start_time"),
+                                  "was": {"id": row.id, "km": round(row.distance_km or 0.0, 3),
+                                          "kwh": round(row.energy_used_kwh or 0.0, 3),
+                                          "source": row.source},
+                                  "now": {"km": t.get("distance_km"), "kwh": t.get("energy_kwh")},
+                                  "action": "kept",
+                                  "why": "this trip was repaired by hand; left as the repair made it"})
+            continue
         if row is None:
             # A row this trip was written into whose start has since been moved
             # by a hand repair (repair-lost-departure moved one 44 minutes on
@@ -4682,6 +4696,7 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
             best = None
             for d in drives:
                 if (d.vehicle_id != vehicle_id or d.id in claimed
+                        or getattr(d, "hand_repaired", False)
                         or d.shadow_start_ts is not None
                         or not d.start_time or not d.end_time):
                     continue
@@ -11637,8 +11652,10 @@ def repair_split_trip(
             # Losing the flag here would let a number this app invented pass
             # for a measurement on the strength of having been divided.
             energy_estimated=getattr(drive, "energy_estimated", False),
+            source=drive.source, hand_repaired=True,
         )
         session.add(second)
+        drive.hand_repaired = True
         # The original becomes the FIRST leg: it already carries the correct
         # start, so rewriting its end is the smaller change — and keeping its
         # id means anything referring to this trip still points at a real one.
@@ -11653,8 +11670,15 @@ def repair_split_trip(
         drive.end_coords = mid_coords
         # Its own SoC pair no longer describes anything measured — this leg was
         # never watched — so flatten it rather than leave a drop that would be
-        # read as this drive's consumption.
-        drive.end_soc = drive.start_soc
+        # read as this drive's consumption. A streamed trip with nothing blind
+        # was watched end to end: the drop is shared by distance instead.
+        if (drive.source or "") == "telemetry" and not blind and drive.start_soc is not None \
+                and drive.end_soc is not None:
+            mid_soc = round(drive.start_soc - (drive.start_soc - drive.end_soc) * a_km / max(a_km + b_km, 1e-9), 2)
+            second.start_soc = mid_soc
+            drive.end_soc = mid_soc
+        else:
+            drive.end_soc = drive.start_soc
         drive.start_recovered_km, drive.start_lost_km = a_blind, 0.0
         drive.end_lost_km, drive.end_est_km, drive.tail_trim_sec = 0.0, None, None
         # Its arrival instrumentation belonged to the trip's OLD end, which is
@@ -12440,6 +12464,7 @@ def repair_lost_departure(
         drive.duration_min = new_duration
         if new_duration:
             drive.avg_speed_kmh = round(new_distance / (new_duration / 60.0), 1)
+        drive.hand_repaired = True
         session.commit()
     return plan
 
