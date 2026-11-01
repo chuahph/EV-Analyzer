@@ -13871,3 +13871,24 @@ def test_a_split_streamed_trip_is_not_put_back_by_promotion():
         sess.commit()
         sess.close()
         settings.app_passcode = old_pc
+
+
+def test_naming_the_stop_between_two_split_trips(session):
+    from datetime import datetime as _dt
+
+    from app.api import routes as routes_mod
+    from app.models import Drive, Vehicle
+
+    v = Vehicle(vin="STOPNAME000001", name="x", model="m")
+    session.add(v); session.flush()
+    a = Drive(vehicle_id=v.id, start_time=_dt(2026, 11, 1, 16, 25), end_time=_dt(2026, 11, 1, 16, 37),
+              distance_km=5.2, duration_min=12, start_soc=59, end_soc=57.7, energy_used_kwh=0.87,
+              start_location="PWCC", end_location="", start_odo_km=33962.575, end_odo_km=33967.763)
+    b = Drive(vehicle_id=v.id, start_time=_dt(2026, 11, 1, 16, 43), end_time=_dt(2026, 11, 1, 17, 2),
+              distance_km=10.9, duration_min=19, start_soc=57.7, end_soc=55, energy_used_kwh=1.84,
+              start_location="", end_location="Badminton Arena", start_odo_km=33967.763, end_odo_km=33978.663)
+    session.add_all([a, b]); session.commit()
+    plan = routes_mod.set_trip_stop(drive_id=a.id, name="Jelutong", coords=None, apply=False, session=session)
+    assert plan["next_drive_id"] == b.id and a.end_location == ""          # a preview writes nothing
+    routes_mod.set_trip_stop(drive_id=a.id, name="Jelutong", coords=None, apply=True, session=session)
+    assert (a.end_location, b.start_location) == ("Jelutong", "Jelutong")

@@ -12471,6 +12471,57 @@ def repair_lost_departure(
     return plan
 
 
+@router.api_route("/set-trip-stop", methods=["GET", "POST"])
+def set_trip_stop(
+    drive_id: int = Query(...),
+    name: str | None = Query(None, max_length=120),
+    coords: str | None = Query(None, max_length=60),
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Name the stop between a trip and the one after it.
+
+    A split (repair-split-trip) leaves that stop unnamed when nothing recorded
+    where the car stood, which is exactly when a split is needed: 1 November,
+    #3300 and #3303 met at a stop in poor coverage. Give ``coords`` ("lat,
+    lon", looked up like any other place) or a ``name``, or both (the name
+    wins as the label, the coordinates are kept). Sets this trip's end and,
+    when the next trip starts on the same odometer reading, that trip's start.
+    Dry run by default.
+    """
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        raise HTTPException(404, "No such trip.")
+    label, area, raw = (name or "").strip(), "", (coords or "").strip()
+    if raw:
+        if not pricing_prefs._is_coords(raw):
+            raise HTTPException(422, "coords must look like '5.3697, 100.3153'.")
+        found, area = _place_and_area(raw, session)
+        label = label or found
+    if not label:
+        raise HTTPException(422, "Give a name, coordinates, or both.")
+    nxt = session.scalars(
+        select(Drive).where(Drive.vehicle_id == drive.vehicle_id,
+                            Drive.start_time > drive.start_time)
+        .order_by(Drive.start_time).limit(1)).first()
+    joins = (nxt is not None and drive.end_odo_km is not None and nxt.start_odo_km is not None
+             and abs(nxt.start_odo_km - drive.end_odo_km) <= 0.002)
+    plan = {"drive_id": drive.id, "end_location": [drive.end_location, label],
+            "next_drive_id": nxt.id if joins else None,
+            "next_start_location": [nxt.start_location, label] if joins else None,
+            "coords": raw or None, "applied": apply}
+    if apply:
+        drive.end_location, drive.end_area = label, area or drive.end_area
+        if raw:
+            drive.end_coords = raw
+        if joins:
+            nxt.start_location, nxt.start_area = label, area or nxt.start_area
+            if raw:
+                nxt.start_coords = raw
+        session.commit()
+    return plan
+
+
 @router.api_route("/repair-charge-types", methods=["GET", "POST"])
 def repair_charge_types(
     apply: bool = Query(False),
