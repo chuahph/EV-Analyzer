@@ -13760,3 +13760,55 @@ def test_the_dashboard_is_told_when_a_promotion_was_refused():
         sess.commit()
         sess.close()
         settings.app_passcode = old_pc
+
+
+def test_live_starts_a_new_drive_when_the_driver_left_the_car():
+    """1 November: the car stopped in poor coverage, the driver got out for a
+    few minutes and drove on. The car's Current Drive restarted; the Live page
+    ran on from the first start (16 km, 34 min against the car's 10.9, 17)."""
+    from datetime import datetime, timezone
+
+    from app.api import routes as routes_mod
+
+    def at(sec):
+        return datetime.fromtimestamp(1_793_500_000 + sec, timezone.utc).isoformat()
+
+    def drive(vin, t0, t1, odo0):
+        for i, t in enumerate(range(t0, t1, 10)):
+            routes_mod._live_mem_fold(vin, at(t), {"Gear": "ShiftStateD", "VehicleSpeed": 30.0,
+                                                  "Odometer": odo0 + i * 0.08, "EnergyRemaining": 50.0 - i * 0.01})
+
+    def stop(vin, t0, t1, odo):
+        routes_mod._live_mem_fold(vin, at(t0), {"Gear": "ShiftStateP", "VehicleSpeed": 0.0, "Odometer": odo})
+        for t in range(t0 + 10, t1, 30):
+            routes_mod._live_mem_fold(vin, at(t), {"VehicleSpeed": 0.0})
+
+    for late in (False, True):
+        vin = "LIVEEXIT%08d" % int(late)
+        try:
+            routes_mod._LIVE_MEM.pop(vin, None)
+            drive(vin, 0, 600, 1000.0)                      # first leg
+            stop(vin, 600, 840, 1004.8)                     # a 4-minute stop
+            if not late:
+                routes_mod._live_mem_fold(vin, at(650), {"DriverSeatOccupied": False})
+            drive(vin, 840, 900, 1004.8)                    # drives on
+            if late:                                        # the seat word arrives now
+                routes_mod._live_mem_fold(vin, at(650), {"DriverSeatOccupied": False})
+            go = routes_mod._LIVE_MEM[vin]["_go"]
+            assert abs(go["ts"] - (1_793_500_000 + 840)) < 15, (late, go["ts"])
+            # The alignment does not pull it back to an earlier stored start.
+            routes_mod._live_align_to_shadows({vin: {"open": {"ts": 1_793_500_000, "odo_km": 1000.0}}})
+            assert abs(routes_mod._LIVE_MEM[vin]["_go"]["ts"] - (1_793_500_000 + 840)) < 15
+        finally:
+            routes_mod._LIVE_MEM.pop(vin, None)
+
+    # A stop where nobody got out keeps the drive going, as before.
+    vin = "LIVEEXITNONE0001"
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        drive(vin, 0, 600, 1000.0)
+        stop(vin, 600, 840, 1004.8)
+        drive(vin, 840, 900, 1004.8)
+        assert routes_mod._LIVE_MEM[vin]["_go"]["ts"] == 1_793_500_000
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)

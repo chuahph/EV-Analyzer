@@ -15613,6 +15613,12 @@ def _live_align_to_shadows(shadows: dict) -> None:
                 # 2 km, 1 min" for a drive that began at 08:20 and the figures
                 # started again from nothing. The stored trip survives a
                 # restart, so the page takes its start from there.
+                # Not back to an earlier stored start when the live drive was
+                # started afresh because the driver left the car: the stored
+                # machine may have missed that exit (it arrived late, and late
+                # records are only gap-filled there).
+                if g_ts > o_ts + 120.0 and go.get("_split"):
+                    continue
                 if abs(g_ts - o_ts) > 120.0:
                     stored_max = float(shadow.get("max_speed_kmh") or 0.0)
                     car["_go"] = {**{k: opened.get(k) for k in _LIVE_KEYS},
@@ -15628,6 +15634,31 @@ def _live_align_to_shadows(shadows: dict) -> None:
                 car.pop("_go", None)
                 car.pop("_stop", None)
                 print(f"[live] {vin[-6:]} drive closed: the stored trip has ended", flush=True)
+
+
+def _live_note_exit(vin: str, car: dict, ts: float) -> None:
+    """The driver's seat read empty at ``ts``. During a stop in the drive the
+    page is tracking, the driver has left the car, and the car's own Current
+    Drive starts afresh when it next moves. Two cases: the reading arrives
+    while the car still stands (the next move starts a new drive), or it
+    arrives after the car has driven off again (poor coverage at the stop),
+    and the drive is restarted from where it left that stop."""
+    go = car.get("_go")
+    if go is None:
+        return
+    stop = car.get("_stop")
+    if stop is not None and ts >= float(stop) - 5.0:
+        car["_exited"] = True
+        return
+    gap = car.get("_lastgap")
+    if gap and float(gap["a"]) - 5.0 <= ts <= float(gap["b"]):
+        base = gap.get("base") or {}
+        car["_go"] = {**base, "ts": float(gap["b"]),
+                      "max_speed": float(car.get("VehicleSpeed") or 0.0) * sync_mod.MILES_TO_KM,
+                      "_split": True}
+        car.pop("_lastgap", None)
+        print(f"[live] {vin[-6:]} new drive from {time.time() - float(gap['b']):.0f}s ago: "
+              f"word that the driver left the car arrived late", flush=True)
 
 
 def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
@@ -15656,6 +15687,12 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             kt[k] = ts
     car["_seen"] = time.time()
     car["_v"] = int(car.get("_v") or 0) + 1      # wakes the live streams
+    # Before the trailing-record return: the seat reading usually comes in the
+    # stored batches, seconds behind the fast lane, and in poor coverage
+    # minutes behind, after the car has already driven off again.
+    seat = fields.get("DriverSeatOccupied")
+    if ts and (seat is False or (isinstance(seat, str) and seat.strip().lower() == "false")):
+        _live_note_exit(vin, car, ts)
     if older:
         return   # a trailing record: fields merged, the drive logic below is for the newest
     prev_t = float(car.get("_t") or 0.0)
@@ -15703,11 +15740,25 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             and (speed > 30.0 or (speed == 0.0 and in_gear))):
         car["_sign"] = max(-50, min(50, int(car.get("_sign") or 0) + (1 if raw > 0 else -1)))
     if moving:
-        car.pop("_stop", None)
+        stopped_at = car.pop("_stop", None)
+        if go is not None and car.pop("_exited", False):
+            # The driver left the car during that stop, so this is a new
+            # drive, as the car's own Current Drive counts it (1 November: the
+            # car reset after a few minutes out; the page ran on for 34 min).
+            base = car.get("_stopsnap") or {k: snap.get(k) for k in _LIVE_KEYS}
+            car["_go"] = {**base, "ts": stamp, "max_speed": speed, "_split": True}
+            car.pop("_lastgap", None)
+            print(f"[live] {vin[-6:]} new drive: the driver left the car at the last stop", flush=True)
+        elif go is not None and stopped_at is not None:
+            # Kept in case word that the driver got out arrives late.
+            car["_lastgap"] = {"a": float(stopped_at), "b": stamp, "base": car.get("_stopsnap")}
         if go is None:
+            # Nothing from a drive already closed may carry into this one.
+            for k in ("_exited", "_lastgap", "_stopsnap"):
+                car.pop(k, None)
             base = car.get("_park") or {k: snap.get(k) for k in _LIVE_KEYS}
             car["_go"] = {**base, "ts": stamp, "max_speed": speed}
-        else:
+        elif car.get("_go") is go:
             go["max_speed"] = max(float(go.get("max_speed") or 0.0), speed)
             # A drive that began before a reading was known (the app had just
             # restarted, and the car sends odometer and energy only when they
@@ -15718,10 +15769,15 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     else:
         if go is not None:
             stop = car.setdefault("_stop", stamp)
+            # Where a drive restarting from this stop begins: the last reading
+            # while standing, the same as a parked car's would-be start.
+            car["_stopsnap"] = {k: snap.get(k) for k in _LIVE_KEYS}
             if stamp - stop > LIVE_TRIP_PARK_END_SEC:
                 car.pop("_go", None)
                 car.pop("_stop", None)
         if "_go" not in car:
+            for k in ("_exited", "_lastgap", "_stopsnap"):
+                car.pop(k, None)
             car["_park"] = {k: snap.get(k) for k in _LIVE_KEYS}
     go = car.get("_go")
     if go is not None and raw is not None and car.get("_sign"):
