@@ -2377,8 +2377,19 @@ function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime
   const form = document.getElementById("edit-charge-form");
   form.dataset.chargeId = chargeId;
   form.dataset.network = network || "";
-  document.getElementById("edit-charge-network").value = network || "";
-  document.getElementById("edit-charge-network-row").classList.toggle("hidden", type !== "DC");
+  const netSel = document.getElementById("edit-charge-network");
+  const netOpts = type === "DC"
+    ? [["", "Not set"], ["Tesla", "Tesla Supercharger"], ["CCS", "CCS"], ["CHAdeMO", "CHAdeMO"], ["GB", "GB"]]
+    : [["", "Not set"], ["TDC", "Tesla Destination Charger (TDC)"]];
+  netSel.innerHTML = netOpts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  netSel.value = netOpts.some(([v]) => v === (network || "")) ? (network || "") : "";
+  // Compared on save against what is SHOWN, so a label this list does not
+  // offer (an AC session the car itself called Tesla) is not cleared by a
+  // save that never touched the select.
+  form.dataset.network = netSel.value;
+  document.getElementById("edit-charge-network-hint").textContent =
+    `Later ${type === "DC" ? "DC" : "AC"} sessions at this place use the same label.`;
+  document.getElementById("edit-charge-network-row").classList.remove("hidden");
   // Which source (public/home/office/other) this edit is attributed to, so
   // the row's selected-icon indicator follows the pick as soon as this is
   // saved, instead of only reacting to location text.

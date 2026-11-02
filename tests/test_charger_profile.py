@@ -269,3 +269,37 @@ def test_dc_is_priced_on_what_the_charger_delivered_once_a_receipt_says(session)
             # Run again: nothing left to change.
     finally:
         settings.app_passcode = old
+
+
+def test_an_ac_charge_can_be_a_tesla_destination_charger(session):
+    from app.database import SessionLocal
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as s:
+                c = Charge(vehicle_id=1, start_time=T0, end_time=T0.replace(hour=14),
+                           duration_min=120, start_soc=50, end_soc=70, energy_added_kwh=13.0,
+                           charge_type="AC", max_power_kw=11.0, location="Gurney Plaza",
+                           cost=0.0, is_free=True)
+                s.add(c)
+                s.commit()
+                cid = c.id
+            # A DC network is refused on AC, and the other way round.
+            assert client.get("/api/set-charger-network",
+                              params={"charge_id": cid, "network": "Tesla"}).status_code == 422
+            r = client.get("/api/set-charger-network",
+                           params={"charge_id": cid, "network": "TDC", "apply": "true"}).json()
+            assert r["charger_network"] == ["", "TDC"]
+            with SessionLocal() as s:
+                assert s.get(Charge, cid).charger_network == "TDC"
+                assert pricing_prefs.place_network(s, "Gurney Plaza", "AC") == "TDC"
+                # The place's DC sessions are not touched by its AC label.
+                assert pricing_prefs.place_network(s, "Gurney Plaza", "DC") == ""
+                s.delete(s.get(Charge, cid))
+                pricing_prefs.remember_place_network(s, "Gurney Plaza", "", "AC")
+                s.commit()
+    finally:
+        settings.app_passcode = old

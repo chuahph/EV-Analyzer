@@ -370,25 +370,32 @@ def learn_dc_loss(session: Session) -> float | None:
     return pct
 
 
-def place_network(session: Session, place: str) -> str:
-    """The charger network the owner said a place's DC charger belongs to
-    ("Tesla" for a Supercharger), or "". The car reports only the plug, and on
-    a CCS2 car a Supercharger reads as CCS."""
+def place_network(session: Session, place: str, kind: str = "DC") -> str:
+    """The charger the owner said a place's ``kind`` (AC or DC) sessions use:
+    "Tesla" for a Supercharger, "TDC" for a Tesla Destination Charger, or "".
+    The car reports only the plug, and on a CCS2 car a Supercharger reads as
+    CCS. Kept per type: a mall can have both."""
     if not place:
         return ""
     try:
         saved = json.loads(state.get(session, state.CHARGER_PLACE_NETWORK_KEY) or "{}") or {}
     except ValueError:
         return ""
-    return str(saved.get(place.strip().lower()) or "")
+    key = place.strip().lower()
+    kind = "DC" if (kind or "").upper() == "DC" else "AC"
+    # Entries saved before the type was part of the key were all DC.
+    return str(saved.get(f"{key}|{kind}") or (saved.get(key) if kind == "DC" else "") or "")
 
 
-def remember_place_network(session: Session, place: str, network: str) -> None:
+def remember_place_network(session: Session, place: str, network: str,
+                           kind: str = "DC") -> None:
     try:
         saved = json.loads(state.get(session, state.CHARGER_PLACE_NETWORK_KEY) or "{}") or {}
     except ValueError:
         saved = {}
-    key = place.strip().lower()
+    kind = "DC" if (kind or "").upper() == "DC" else "AC"
+    saved.pop(place.strip().lower(), None) if kind == "DC" else None
+    key = f"{place.strip().lower()}|{kind}"
     if network:
         saved[key] = network
     else:

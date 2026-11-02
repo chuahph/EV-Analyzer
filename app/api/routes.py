@@ -5169,8 +5169,8 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             shadow_start_ts=float(int(float(c["start_ts"]))),
             energy_source=energy_source,
             charger_network=(
-                (fast and str(c.get("network") or "") in ("", "CCS")
-                 and pricing_prefs.place_network(session, loc_label))
+                (str(c.get("network") or "") in (("", "CCS") if fast else ("", "Tesla"))
+                 and pricing_prefs.place_network(session, loc_label, "DC" if fast else "AC"))
                 or str(c.get("network") or ""))[:16],
         )
         session.add(row)
@@ -12810,17 +12810,23 @@ def set_charger_network(
     Supercharger reports CCS like any other CCS charger (2 November, charge
     103 at QBM). ``network`` is Tesla, CCS, CHAdeMO, GB, or empty to clear.
     With ``remember`` (the default), later DC sessions at the same place that
-    the car reports as CCS take this label. ``reprice_public`` prices the
+    the car reports as CCS take this label. On AC, ``TDC`` marks a Tesla
+    Destination Charger, remembered for the place's AC sessions the same way.
+    ``reprice_public`` prices the
     session at the Public rate for its type, for one priced as Home or Office
     because it was within their radius. Dry run by default.
     """
-    allowed = {"tesla": "Tesla", "ccs": "CCS", "chademo": "CHAdeMO", "gb": "GB", "": ""}
-    label = allowed.get(network.strip().lower())
-    if label is None:
-        raise HTTPException(422, "network must be Tesla, CCS, CHAdeMO, GB, or empty.")
     c = session.get(Charge, charge_id)
     if c is None:
         raise HTTPException(404, "No such charge.")
+    kind = "DC" if c.charge_type == "DC" else "AC"
+    allowed = ({"tesla": "Tesla", "ccs": "CCS", "chademo": "CHAdeMO", "gb": "GB", "": ""}
+               if kind == "DC" else {"tdc": "TDC", "": ""})
+    label = allowed.get(network.strip().lower())
+    if label is None:
+        raise HTTPException(
+            422, "network must be Tesla, CCS, CHAdeMO, GB, or empty for a DC charge."
+            if kind == "DC" else "network must be TDC or empty for an AC charge.")
     settings = get_settings()
     plan = {"charge_id": c.id, "location": c.location,
             "charger_network": [c.charger_network or "", label],
@@ -12839,7 +12845,7 @@ def set_charger_network(
     if apply:
         c.charger_network = label
         if remember and c.location:
-            pricing_prefs.remember_place_network(session, c.location, label)
+            pricing_prefs.remember_place_network(session, c.location, label, kind)
         if new_cost is not None:
             c.price_source, c.cost = "public", new_cost
         session.commit()

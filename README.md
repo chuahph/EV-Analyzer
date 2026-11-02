@@ -244,7 +244,9 @@ Once linked, run `python run.py collect` to log new drives/charges over time.
    **Superchargers.** A CCS2 car reports a Supercharger as CCS.
    `/api/set-charger-network?charge_id=<id>&network=Tesla&apply=true` labels
    a session and remembers its place, so later DC sessions there show as
-   Tesla. A charge at a named place of its own is not priced as Home or Office
+   Tesla. The same is in the ✎ dialog as *Charger*: Tesla Supercharger, CCS,
+   CHAdeMO or GB on DC, and Tesla Destination Charger (shown as TDC) on AC,
+   remembered per place and type. A charge at a named place of its own is not priced as Home or Office
    just because it is within their 2 km pricing radius.
 
    Optional: time-of-use pricing instead of the flat rate above — driving
