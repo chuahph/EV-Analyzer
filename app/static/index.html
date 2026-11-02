@@ -1175,6 +1175,19 @@ export default {
           <input type="number" id="edit-charge-billed" min="0" step="0.01" inputmode="decimal">
           <span class="field-hint" id="edit-charge-billed-hint"></span>
         </label>
+        <!-- DC only: the car reports the plug, not who runs the charger, and a
+             CCS2 car at a Supercharger reports CCS. Remembered for the place. -->
+        <label class="field hidden" id="edit-charge-network-row">
+          <span class="field-label">Charger</span>
+          <select id="edit-charge-network">
+            <option value="">Not set</option>
+            <option value="Tesla">Tesla Supercharger</option>
+            <option value="CCS">CCS</option>
+            <option value="CHAdeMO">CHAdeMO</option>
+            <option value="GB">GB</option>
+          </select>
+          <span class="field-hint">Later DC sessions at this place use the same label.</span>
+        </label>
         <button type="submit" class="btn btn-accent">Save</button>
       </form>
       <span id="edit-charge-status" class="status"></span>

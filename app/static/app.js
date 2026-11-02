@@ -2327,6 +2327,7 @@ function chargeRowHtml(c, currency, idx) {
         `data-loc="${escLoc}" data-kwh="${c.energy_added_kwh}" data-quick-rate="${r}" ` +
         `data-source="${source}" data-is-free="${c.is_free}" data-start-time="${c.start_time}" ` +
         `data-billed="${c.billed_kwh || ""}" data-payable="${c.payable_kwh || ""}" data-type="${c.charge_type}" ` +
+        `data-network="${c.charger_network || ""}" ` +
         `title="${title}">${icon}</button>`;
     }
   }
@@ -2372,9 +2373,12 @@ function tnbTouRate(startTimeIso) {
   return isPeak ? TNB_TOU_PEAK_RATE : TNB_TOU_OFFPEAK_RATE;
 }
 
-function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime, billed, payable, type) {
+function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime, billed, payable, type, network) {
   const form = document.getElementById("edit-charge-form");
   form.dataset.chargeId = chargeId;
+  form.dataset.network = network || "";
+  document.getElementById("edit-charge-network").value = network || "";
+  document.getElementById("edit-charge-network-row").classList.toggle("hidden", type !== "DC");
   // Which source (public/home/office/other) this edit is attributed to, so
   // the row's selected-icon indicator follows the pick as soon as this is
   // saved, instead of only reacting to location text.
@@ -2400,7 +2404,7 @@ function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime
   document.getElementById("edit-charge-billed-row").classList.toggle("hidden", isFree);
   document.getElementById("edit-charge-billed-hint").textContent = billed
     ? "From your receipt."
-    : (type === "DC" ? "Blank = the car's figure." : `Blank = estimate${payable ? ` (${payable} kWh)` : ""}: the car's figure plus the AC charging loss.`);
+    : (type === "DC" ? `Blank = the car's figure plus the DC loss learned from your receipts${payable ? ` (${payable} kWh)` : ""}.` : `Blank = estimate${payable ? ` (${payable} kWh)` : ""}: the car's figure plus the AC charging loss.`);
   setStatus(document.getElementById("edit-charge-status"), "", "");
   openModal("edit-charge-modal");
 }
@@ -2419,7 +2423,8 @@ function wireEditRateButtons(root) {
       const isOther = btn.dataset.source === "other";
       openEditChargeModal(btn.dataset.chargeId, btn.dataset.loc, btn.dataset.kwh,
         btn.dataset.quickRate, isOther && btn.dataset.isFree === "true", btn.dataset.source,
-        btn.dataset.startTime, btn.dataset.billed, btn.dataset.payable, btn.dataset.type);
+        btn.dataset.startTime, btn.dataset.billed, btn.dataset.payable, btn.dataset.type,
+        btn.dataset.network);
     });
   });
 }
@@ -2575,6 +2580,13 @@ function setupEditChargeModal() {
         }),
       });
       if (!resp.ok) throw new Error((await resp.json()).detail || "Failed");
+      const network = document.getElementById("edit-charge-network").value;
+      if (!document.getElementById("edit-charge-network-row").classList.contains("hidden")
+          && network !== (form.dataset.network || "")) {
+        const q = new URLSearchParams({ charge_id: form.dataset.chargeId, network, apply: "true" });
+        const r2 = await fetch(`/api/set-charger-network?${q}`, { method: "POST" });
+        if (!r2.ok) throw new Error((await r2.json()).detail || "Saving the charger failed");
+      }
       closeModal("edit-charge-modal");
       load();   // refresh KPIs/lists so the corrected cost shows immediately
     } catch (err) {
