@@ -12777,7 +12777,8 @@ def repair_arrival_short(
                 t["recovered_via"] = "car"
                 t.pop("end_odo_unconfirmed", None)
                 plan["staged"] = True
-        state.put(session, state.TELEMETRY_TRIPS_KEY, _json_mod.dumps(trips))
+        if plan.get("staged"):
+            _put_trips(session, trips)
         session.commit()
     return plan
 
