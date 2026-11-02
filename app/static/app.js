@@ -2269,7 +2269,10 @@ function attr(text) {
 // identically (same buttons) instead of two different formats.
 function chargeRowHtml(c, currency, idx) {
   const when = `${tripWhen(c.start_time)} → ${tripEnd(c.start_time, c.end_time)}`;
-  const kind = c.charger_network ? `${c.charge_type} · ${c.charger_network}` : c.charge_type;
+  // Stored as "Tesla" (the car's own word, and what places remember); shown
+  // as SuC on DC, the owner's name for a Supercharger.
+  const net = c.charge_type === "DC" && c.charger_network === "Tesla" ? "SuC" : c.charger_network;
+  const kind = net ? `${c.charge_type} · ${net}` : c.charge_type;
   const loc = c.location ? `${c.location} · ${kind}` : kind;
   // A saved charger profile (the condo's chargers) keeps the place
   // label as it was and adds a tag. A DC session at Home with no profile
@@ -2379,7 +2382,7 @@ function openEditChargeModal(chargeId, loc, kwh, rate, isFree, source, startTime
   form.dataset.network = network || "";
   const netSel = document.getElementById("edit-charge-network");
   const netOpts = type === "DC"
-    ? [["", "Not set"], ["Tesla", "Tesla Supercharger"], ["CCS", "CCS"], ["CHAdeMO", "CHAdeMO"], ["GB", "GB"]]
+    ? [["", "Not set"], ["Tesla", "Tesla Supercharger (SuC)"], ["CCS", "CCS"], ["CHAdeMO", "CHAdeMO"], ["GB", "GB"]]
     : [["", "Not set"], ["TDC", "Tesla Destination Charger (TDC)"]];
   netSel.innerHTML = netOpts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
   netSel.value = netOpts.some(([v]) => v === (network || "")) ? (network || "") : "";
