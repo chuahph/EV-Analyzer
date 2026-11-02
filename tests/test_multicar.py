@@ -5113,8 +5113,9 @@ def test_repair_trip_after_charge_starts_the_drive_when_the_charge_ended():
                 assert d.energy_estimated and d.hand_repaired
 
             # A trip no charge ended inside is refused.
-            assert client.get("/api/repair-trip-after-charge",
-                              params={"drive_id": did}).status_code == 409
+            again = client.get("/api/repair-trip-after-charge", params={"drive_id": did})
+            assert again.status_code == 409
+            assert "has been repaired" in again.json()["detail"]
     finally:
         settings.app_passcode = old
         _reset_to_demo()

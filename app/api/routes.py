@@ -12553,9 +12553,28 @@ def repair_trip_after_charge(
                              Charge.end_time < drive.end_time)
         .order_by(Charge.end_time.desc()).limit(1)).first()
     if charge is None:
+        done = session.scalars(
+            select(Charge).where(Charge.vehicle_id == drive.vehicle_id,
+                                 Charge.end_time == drive.start_time).limit(1)).first()
+        if done is not None and getattr(drive, "hand_repaired", False):
+            raise HTTPException(
+                409, f"Trip {drive_id} already starts at "
+                     f"{drive.start_time.isoformat(timespec='minutes')}, when "
+                     f"charge {done.id} ended: it has been repaired. Energy "
+                     f"{drive.energy_used_kwh} kWh.")
+        near = session.scalars(
+            select(Charge).where(Charge.end_time >= drive.start_time - timedelta(hours=3),
+                                 Charge.start_time <= drive.end_time + timedelta(hours=3))
+            .order_by(Charge.end_time)).all()
+        seen = "; ".join(
+            f"#{c.id} {c.start_time.isoformat(timespec='minutes')}-"
+            f"{c.end_time.isoformat(timespec='minutes')} (vehicle {c.vehicle_id})"
+            for c in near) or "none within 3 hours"
         raise HTTPException(
-            409, f"No charge ended inside trip {drive_id}, so it did not run "
-                 f"through one.")
+            409, f"No charge ended inside trip {drive_id} "
+                 f"({drive.start_time.isoformat(timespec='minutes')}-"
+                 f"{drive.end_time.isoformat(timespec='minutes')}, vehicle "
+                 f"{drive.vehicle_id}). Charges nearby: {seen}.")
     energy = drive.energy_used_kwh
     estimated = bool(getattr(drive, "energy_estimated", False))
     source = "kept"
