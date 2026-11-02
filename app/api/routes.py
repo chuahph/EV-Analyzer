@@ -7724,6 +7724,8 @@ def repair_trip_boundary(
             # what end_est_km means, but now checked against the car itself.
             closed.end_est_km = round(boundary_odo_km - seen, 3) or None
             closed.end_est_verified = True
+        # Or the next promotion sweep puts the streamed boundary back.
+        closed.hand_repaired = opened.hand_repaired = True
         session.commit()
     return {"applied": apply, **plan}
 

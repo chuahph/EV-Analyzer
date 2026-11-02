@@ -1681,6 +1681,8 @@ def test_moving_a_boundary_forward_records_the_tail_it_measured(monkeypatch):
             # Unseen by any poll still, but no longer a guess.
             assert closed.end_est_km == pytest.approx(0.193)
             assert closed.end_est_verified is True
+            # Both kept as repaired, or the next promotion sweep undoes it.
+            assert closed.hand_repaired and s.get(Drive, bid).hand_repaired
             assert _place_tail_km(s, "Home") is None      # one sample is not a median
     finally:
         settings.app_passcode = old
