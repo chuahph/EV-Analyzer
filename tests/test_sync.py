@@ -2679,3 +2679,55 @@ def test_a_charge_inside_an_open_trip_is_not_driven_through():
         assert last["start_ts"] >= 660 and last["energy_kwh"] and 0.5 < last["energy_kwh"] < 1.0
         # And the leg before the charge: a trip of its own only if it went somewhere.
         assert (len(trips) == 2) is expect_first, (bay_mi, trips)
+
+
+def test_a_park_whose_last_odometer_never_arrived_is_an_unconfirmed_end():
+    """2 November, #3305: into the car park with the signal going, the shift
+    to P arrived and the last odometer did not (the gear is sent at once, the
+    odometer every 30 s or so). The trip ended 0.3 km short of the car's own
+    7.0 km, on "timeout", which read as a confirmed arrival; the gap would
+    have gone to the next trip's departure. Marked unconfirmed, it goes to
+    this trip, split with the departure as a dark car park is."""
+    from app.sync import advance_shadow, settle_shadow, snapshot_from_telemetry
+
+    def rec(ts, odo_mi, speed, gear="ShiftStateD", fresh=True):
+        s = snapshot_from_telemetry({"Odometer": odo_mi, "EnergyRemaining": 60.0 - ts / 1000.0,
+                                     "Gear": gear, "VehicleSpeed": speed, "Soc": 80.0}, ts=ts)
+        if fresh:
+            s["odo_fresh"] = True
+        return s
+
+    for final_fresh in (False, True):
+        shadow: dict = {}
+        advance_shadow(shadow, rec(0, 20000.0, 0.0, gear="ShiftStateP"))
+        odo = 20000.0
+        for t in range(10, 610, 10):
+            odo += 0.004
+            advance_shadow(shadow, rec(t, odo, 15.0, fresh=(t % 30 == 0)))
+        # Into the car park: still moving, no odometer gets through.
+        for t in (610, 620):
+            advance_shadow(shadow, rec(t, odo, 8.0, fresh=False))
+        advance_shadow(shadow, rec(630, odo + (0.2 if final_fresh else 0.0), 0.0,
+                                   gear="ShiftStateP", fresh=final_fresh))
+        trip = settle_shadow(shadow, 630 + 5500)
+        assert trip is not None and trip["ended_on"] == "timeout"
+        assert bool(trip.get("end_odo_unconfirmed")) is (not final_fresh)
+
+    # The gap at the next trip's start goes to the arrival, not all to the departure.
+    prev = {"start_odo_km": 34000.972, "end_odo_km": 34007.652, "distance_km": 6.68,
+            "energy_kwh": 1.22, "wh_per_km": 182.6, "ended_on": "timeout",
+            "end_odo_unconfirmed": True}
+    nxt = {"start_odo_km": 34008.0}
+    assert recover_sleep_gap(prev, nxt) is True
+    assert prev["end_odo_km"] == pytest.approx(34008.0 - DEPARTURE_BLIND_KM, abs=0.001)
+    # With the place's own arrival tail, in and out may together pass the cap.
+    prev2 = {**prev, "end_odo_km": 34007.652, "distance_km": 6.68, "energy_kwh": 1.22}
+    nxt2 = {"start_odo_km": 34008.3, "end_odo_km": 34015.3, "distance_km": 7.0,
+            "energy_kwh": 1.3, "wh_per_km": 185.7}
+    assert recover_sleep_gap(prev2, nxt2, arrival_tail_km=0.32) is True
+    assert prev2["end_odo_km"] == pytest.approx(34007.972, abs=0.001)
+    assert nxt2.get("start_recovered_km") == pytest.approx(0.328, abs=0.002)
+    # A confirmed end still hands the gap to the departure.
+    conf = {**prev, "end_odo_km": 34007.652, "end_odo_unconfirmed": None}
+    recover_sleep_gap(conf, {"start_odo_km": 34007.7})
+    assert conf["end_odo_km"] == 34007.652

@@ -1651,6 +1651,17 @@ def advance_shadow(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, An
     # evidence recover_sleep_gap needs to split a carpark gap instead of
     # assuming a split. Kept only on a change of value, so a car sitting
     # awake does not rewrite the store every batch.
+    # Whether the car has moved since the last odometer it actually sent. The
+    # odometer streams every 30 s or so; the gear is sent the moment it
+    # changes. Losing signal on the way into a car park can deliver the P and
+    # lose the final odometer: 2 November, #3305 ended on P at 34007.652
+    # while the car's own trip meter read 7.0 km, about 0.3 km further. Such
+    # a trip's end is not confirmed, and recover_sleep_gap treats it so.
+    if snap.get("odo_fresh"):
+        shadow["moved_since_odo"] = False
+    elif float(snap.get("speed_kmh") or 0.0) > ZERO_SPEED_KMH:
+        shadow["moved_since_odo"] = True
+
     if (not open_at and snap.get("odo_fresh")
             and float(snap.get("speed_kmh") or 0.0) == 0.0
             and float(snap.get("odo_km") or 0.0) > 0.0):
@@ -2658,7 +2669,8 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
 
 def recover_sleep_gap(prev: dict[str, Any], nxt: dict[str, Any],
                       rested_odo_km: float | None = None,
-                      via: str = "unknown") -> bool:
+                      via: str = "unknown",
+                      arrival_tail_km: float | None = None) -> bool:
     """Give a trip back the metres it drove after its last transmission.
 
     The mechanism, measured rather than assumed. A car out of coverage
@@ -2708,7 +2720,7 @@ def recover_sleep_gap(prev: dict[str, Any], nxt: dict[str, Any],
     start_odo = prev.get("start_odo_km")
     if end_odo is None or next_start is None or start_odo is None:
         return False
-    if prev.get("ended_on") != "stream_lost":
+    if prev.get("ended_on") != "stream_lost" and not prev.get("end_odo_unconfirmed"):
         # The arrival was confirmed — the car said goodbye, at power-down or
         # as the driver left — so it ended where it says. Any ground between
         # that and the next trip's first reading is the DEPARTURE's: pulling
@@ -2777,6 +2789,13 @@ def recover_sleep_gap(prev: dict[str, Any], nxt: dict[str, Any],
         # A polled reading, rounded to 0.1 km: good enough to stop an arrival
         # being over-credited, too coarse to hand metres to the departure.
         boundary, credit_departure = min(float(next_start), float(rested_odo_km)), False
+    elif arrival_tail_km is not None and arrival_tail_km > 0:
+        # This place's own arrival tail (told, or fitted from the car's trip
+        # meter): the arrival gets that much, the departure the rest. Each
+        # side is held to the cap below, not their sum: in and out of a deep
+        # car park can together pass it.
+        boundary = float(end_odo) + min(float(arrival_tail_km), whole)
+        credit_departure = True
     else:
         if whole > SHADOW_TAIL_MAX_KM:
             return False
@@ -2925,6 +2944,7 @@ def _shadow_close(shadow: dict[str, Any], end: dict[str, Any],
     # Read before clearing: this is reported on the trip, and popping it
     # first would make every trip claim it ended on a timeout.
     exit_seen = bool(shadow.get("exit_seen"))
+    odo_unconfirmed = bool(shadow.get("moved_since_odo"))
     ended_by_bms = bool(shadow.pop("ended_by_bms", False))
     ended_by_charge = bool(shadow.pop("ended_by_charge", False))
     idle_sec = float(shadow.pop("idle_sec", 0.0) or 0.0)
@@ -3147,6 +3167,9 @@ def _shadow_close(shadow: dict[str, Any], end: dict[str, Any],
                      else "charging" if ended_by_charge
                      else "bms" if ended_by_bms
                      else "exit" if exit_seen else "timeout"),
+        # The car moved after the last odometer it sent, so the end odometer
+        # may be short of where it stopped (see moved_since_odo).
+        "end_odo_unconfirmed": odo_unconfirmed or None,
         "pack_temp_c": end.get("pack_temp_c"),
         "inside_temp": end.get("inside_temp"),
         # The mean across the drive where the stream gave enough of it, and

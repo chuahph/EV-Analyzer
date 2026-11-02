@@ -5135,3 +5135,54 @@ def test_repair_trip_after_charge_starts_the_drive_when_the_charge_ended():
     finally:
         settings.app_passcode = old
         _reset_to_demo()
+
+
+def test_repair_arrival_short_adds_the_stretch_the_car_meter_counted():
+    """#3305: the car's 7.0 km against the trip's 6.68, the last odometer lost
+    on the way into the car park. The car's figure sets the end, energy grows
+    at the trip's rate, and the staged copy moves with it."""
+    import json as _json
+
+    from app import state
+    from app.models import Drive
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as s:
+                d = s.query(Drive).order_by(Drive.start_time.desc()).first()
+                d.start_odo_km, d.end_odo_km = 34000.972, 34007.652
+                d.distance_km, d.energy_used_kwh, d.duration_min = 6.7, 1.22, 27.0
+                d.shadow_start_ts = 1793000000.0
+                state.put(s, state.TELEMETRY_TRIPS_KEY, _json.dumps([
+                    {"vin": "X", "start_ts": 1793000000.0, "end_ts": 1793001620.0,
+                     "start_odo_km": 34000.972, "end_odo_km": 34007.652,
+                     "distance_km": 6.68, "energy_kwh": 1.22,
+                     "end_odo_unconfirmed": True}]))
+                s.commit()
+                did = d.id
+
+            assert client.get("/api/repair-arrival-short",
+                              params={"drive_id": did, "true_distance_km": 9.0}).status_code == 409
+            r = client.get("/api/repair-arrival-short",
+                           params={"drive_id": did, "true_distance_km": 7.0}).json()
+            assert r["added_km"] == 0.32 and r["applied"] is False
+            assert r["energy_kwh"][1] == pytest.approx(1.22 + 0.32 * 0.2, abs=0.002)
+
+            client.get("/api/repair-arrival-short",
+                       params={"drive_id": did, "true_distance_km": 7.0, "apply": "true"})
+            with SessionLocal() as s:
+                d = s.get(Drive, did)
+                assert d.end_odo_km == 34007.972 and d.distance_km == 7.0
+                assert d.recovered_via == "car" and d.hand_repaired
+                staged = _json.loads(state.get(s, state.TELEMETRY_TRIPS_KEY))[0]
+                assert staged["end_odo_km"] == 34007.972
+                assert "end_odo_unconfirmed" not in staged
+            # Asked again, there is nothing left to add.
+            assert client.get("/api/repair-arrival-short",
+                              params={"drive_id": did, "true_distance_km": 7.0}).status_code == 409
+    finally:
+        settings.app_passcode = old
+        _reset_to_demo()

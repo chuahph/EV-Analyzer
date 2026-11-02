@@ -4214,6 +4214,20 @@ def _mark_swept(session: Session) -> None:
         "at": time.time()}))
 
 
+def _arrival_tail_at(session: Session, trip: dict) -> float | None:
+    """The arrival tail of the place a staged trip ended at (see
+    _place_tail_km), or None. Never raises: a missing tail only means the
+    gap is split the default way."""
+    try:
+        lat, lon = trip.get("end_lat"), trip.get("end_lon")
+        if lat is None or lon is None:
+            return None
+        name = _place(f"{float(lat):.4f}, {float(lon):.4f}", session)
+        return _place_tail_km(session, name) if name else None
+    except Exception:   # noqa: BLE001
+        return None
+
+
 def _append_trip(trips: list, finished: dict,
                  session: Session | None = None, via: str = "close") -> bool:
     """Add a finished trip to the store, paying back the one before it.
@@ -4246,8 +4260,11 @@ def _append_trip(trips: list, finished: dict,
         rested = _rested_odo_between(session, finished.get("vin"),
                                      previous.get("end_ts"),
                                      finished.get("start_ts"))
+    tail = None
+    if session is not None and previous is not None and previous.get("end_odo_unconfirmed"):
+        tail = _arrival_tail_at(session, previous)
     paid = previous is not None and sync_mod.recover_sleep_gap(
-        previous, finished, rested_odo_km=rested, via=via)
+        previous, finished, rested_odo_km=rested, via=via, arrival_tail_km=tail)
     trips.append(finished)
     return bool(paid)
 
@@ -12678,6 +12695,89 @@ def repair_trip_after_charge(
         drive.energy_used_kwh = energy
         drive.energy_estimated = estimated
         drive.hand_repaired = True
+        session.commit()
+    return plan
+
+
+@router.api_route("/repair-arrival-short", methods=["GET", "POST"])
+def repair_arrival_short(
+    drive_id: int = Query(...),
+    true_distance_km: float = Query(..., allow_inf_nan=False),
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Give a trip the last stretch the car drove after its final odometer
+    report, from the car's own trip meter.
+
+    2 November, #3305: the car's Current Drive read 7.0 km, the trip 6.68,
+    because the signal went on the way into the car park: the shift to P
+    arrived, the last odometer did not. Sync now marks such an end as
+    unconfirmed and pays it back from the next trip's first reading; this
+    does it from the car's figure, which is exact, and at once. The end
+    odometer moves to start + ``true_distance_km``, and the energy grows at
+    the trip's own rate (at least ARRIVAL_CRAWL_WH_PER_KM, the gate and the
+    ramps). The staged copy moves too, so the next trip's departure is
+    measured from the new end. Dry run by default.
+    """
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        raise HTTPException(404, "No such trip.")
+    if drive.start_odo_km is None or drive.end_odo_km is None:
+        raise HTTPException(409, f"Trip {drive_id} has no odometer readings.")
+    new_end = round(drive.start_odo_km + true_distance_km, 3)
+    ext = round(new_end - drive.end_odo_km, 3)
+    if ext <= 0.05:
+        raise HTTPException(
+            409, f"Trip {drive_id} already reads {drive.distance_km} km against "
+                 f"the car's {true_distance_km}: nothing to add.")
+    if ext > sync_mod.SHADOW_TAIL_MAX_KM:
+        raise HTTPException(
+            409, f"That adds {ext} km, more than an arrival "
+                 f"({sync_mod.SHADOW_TAIL_MAX_KM} km). Check the figure.")
+    nxt = session.scalars(
+        select(Drive).where(Drive.vehicle_id == drive.vehicle_id,
+                            Drive.start_time > drive.start_time)
+        .order_by(Drive.start_time).limit(1)).first()
+    if nxt is not None and nxt.start_odo_km is not None and nxt.start_odo_km < new_end - 0.002:
+        raise HTTPException(
+            409, f"Trip {nxt.id} starts at {nxt.start_odo_km}, before the new "
+                 f"end {new_end}. Use /api/repair-trip-boundary for the two.")
+    rate = max(float(drive.wh_per_km or 0.0), sync_mod.ARRIVAL_CRAWL_WH_PER_KM)
+    gained = round(ext * rate / 1000.0, 3)
+    new_energy = (round(drive.energy_used_kwh + gained, 3)
+                  if drive.energy_used_kwh and drive.energy_used_kwh > 0 else drive.energy_used_kwh)
+    plan = {"drive_id": drive.id,
+            "end_odo_km": [drive.end_odo_km, new_end],
+            "distance_km": [drive.distance_km, round(true_distance_km, 1)],
+            "energy_kwh": [drive.energy_used_kwh, new_energy],
+            "added_km": ext, "added_kwh": gained, "applied": apply}
+    if apply:
+        drive.end_odo_km = new_end
+        drive.distance_km = round(true_distance_km, 1)
+        drive.energy_used_kwh = new_energy
+        drive.recovered_km = round(float(drive.recovered_km or 0.0) + ext, 3)
+        drive.recovered_kwh = round(float(drive.recovered_kwh or 0.0) + gained, 3)
+        drive.recovered_via = "car"
+        drive.recovered_at = sync_mod.now_local().isoformat(timespec="seconds")
+        if drive.duration_min:
+            drive.avg_speed_kmh = round(drive.distance_km / (drive.duration_min / 60.0), 1)
+        drive.hand_repaired = True
+        try:
+            trips = _json_mod.loads(state.get(session, state.TELEMETRY_TRIPS_KEY) or "[]") or []
+        except ValueError:
+            trips = []
+        start_ts = float(drive.shadow_start_ts or 0.0)
+        for t in trips:
+            if start_ts and abs(float(t.get("start_ts") or 0.0) - start_ts) <= 2.0:
+                t["end_odo_km"] = new_end
+                t["distance_km"] = round(new_end - float(t.get("start_odo_km") or drive.start_odo_km), 3)
+                if t.get("energy_kwh") is not None and float(t["energy_kwh"]) > 0:
+                    t["energy_kwh"] = round(float(t["energy_kwh"]) + gained, 3)
+                t["recovered_km"] = round(float(t.get("recovered_km") or 0.0) + ext, 3)
+                t["recovered_via"] = "car"
+                t.pop("end_odo_unconfirmed", None)
+                plan["staged"] = True
+        state.put(session, state.TELEMETRY_TRIPS_KEY, _json_mod.dumps(trips))
         session.commit()
     return plan
 
