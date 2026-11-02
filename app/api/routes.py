@@ -12522,6 +12522,97 @@ def set_trip_stop(
     return plan
 
 
+@router.api_route("/repair-trip-after-charge", methods=["GET", "POST"])
+def repair_trip_after_charge(
+    drive_id: int = Query(...),
+    true_wh_per_km: float | None = Query(None, allow_inf_nan=False),
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Start a trip after the charge it was wrongly opened across.
+
+    A trip that opened as the car rolled into a charging bay, before the
+    stored path knew the cable was in, ran on through the whole session: 2
+    November, #3292 began at 12:01 though the car charged until 12:09 (charge
+    #102) and only then drove out. Sync now ends such a trip on the battery's
+    own rising energy (sync.CHARGE_PROVES_KWH); this puts a row already saved
+    right. The start moves to the charge's end and takes its SoC and place.
+
+    A trip like that often has no energy at all (the meter it starts from was
+    taken mid-charge). ``true_wh_per_km`` (the car's Current Drive or Since
+    Charge readout) fills it; without one the median rate of this car's recent
+    measured trips is used. Either way the trip is flagged energy_estimated,
+    which keeps it out of the accuracy figures. Dry run by default.
+    """
+    drive = session.get(Drive, drive_id)
+    if drive is None:
+        raise HTTPException(404, "No such trip.")
+    charge = session.scalars(
+        select(Charge).where(Charge.vehicle_id == drive.vehicle_id,
+                             Charge.end_time > drive.start_time,
+                             Charge.end_time < drive.end_time)
+        .order_by(Charge.end_time.desc()).limit(1)).first()
+    if charge is None:
+        raise HTTPException(
+            409, f"No charge ended inside trip {drive_id}, so it did not run "
+                 f"through one.")
+    energy = drive.energy_used_kwh
+    estimated = bool(getattr(drive, "energy_estimated", False))
+    source = "kept"
+    if not energy:
+        if true_wh_per_km is not None:
+            rate, source = true_wh_per_km, "car"
+        else:
+            recent = session.scalars(
+                select(Drive).where(Drive.vehicle_id == drive.vehicle_id,
+                                    Drive.id != drive.id,
+                                    Drive.distance_km >= 2.0,
+                                    Drive.energy_used_kwh > 0)
+                .order_by(Drive.start_time.desc()).limit(40)).all()
+            rates = sorted(d.energy_used_kwh * 1000.0 / d.distance_km for d in recent
+                           if not getattr(d, "energy_estimated", False))
+            if not rates:
+                raise HTTPException(
+                    409, "No measured trips to take a rate from. Give "
+                         "'true_wh_per_km'.")
+            rate, source = rates[len(rates) // 2], "median of recent trips"
+        if not (sync_mod.MIN_PLAUSIBLE_WH_PER_KM <= rate <= sync_mod.MAX_PLAUSIBLE_WH_PER_KM):
+            raise HTTPException(
+                409, f"{rate:.0f} Wh/km is outside the plausible "
+                     f"{sync_mod.MIN_PLAUSIBLE_WH_PER_KM:.0f}-"
+                     f"{sync_mod.MAX_PLAUSIBLE_WH_PER_KM:.0f} range.")
+        energy, estimated = round(rate * (drive.distance_km or 0.0) / 1000.0, 2), True
+    new_start = charge.end_time
+    new_duration = round((drive.end_time - new_start).total_seconds() / 60.0, 1)
+    plan = {
+        "drive_id": drive.id,
+        "charge_id": charge.id,
+        "start_time": [drive.start_time.isoformat(timespec="minutes"),
+                       new_start.isoformat(timespec="minutes")],
+        "duration_min": [drive.duration_min, new_duration],
+        "start_soc": [drive.start_soc, charge.end_soc],
+        "start_location": [drive.start_location, charge.location or drive.start_location],
+        "energy_kwh": [drive.energy_used_kwh, energy],
+        "energy_source": source,
+        "energy_estimated": estimated,
+        "applied": apply,
+    }
+    if apply:
+        drive.start_time = new_start
+        drive.duration_min = new_duration
+        if new_duration > 0:
+            drive.avg_speed_kmh = round((drive.distance_km or 0.0) / (new_duration / 60.0), 1)
+        if charge.end_soc:
+            drive.start_soc = charge.end_soc
+        if charge.location and not drive.start_location:
+            drive.start_location = charge.location
+        drive.energy_used_kwh = energy
+        drive.energy_estimated = estimated
+        drive.hand_repaired = True
+        session.commit()
+    return plan
+
+
 @router.api_route("/repair-charge-types", methods=["GET", "POST"])
 def repair_charge_types(
     apply: bool = Query(False),

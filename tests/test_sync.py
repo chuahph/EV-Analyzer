@@ -2640,3 +2640,42 @@ def test_a_charger_type_left_over_from_an_earlier_session_is_not_used():
     # And the real values the car sent, read as they should be.
     from app.sync import charger_network
     assert charger_network("FastChargerCombo", "CableTypeIEC") == "CCS"
+
+
+def test_a_charge_inside_an_open_trip_is_not_driven_through():
+    """31 October: a trip opened as the car settled into the charging bay,
+    charging began the same minute (never seen unplugged), and the trip ran
+    through the charge into the drive after it, with no energy and outside
+    "since charge". Rising pack energy while standing proves the charge."""
+    def rec(ts, odo_mi, energy, speed=0.0, gear="ShiftStateP", charging=False, seat=True):
+        f = {"Odometer": odo_mi, "EnergyRemaining": energy, "Gear": gear,
+             "VehicleSpeed": speed, "Soc": 80.0, "DriverSeatOccupied": seat}
+        f["DetailedChargeState"] = ("DetailedChargeStateCharging" if charging
+                                    else "DetailedChargeStateDisconnected")
+        return snapshot_from_telemetry(f, ts=ts)
+
+    for bay_mi, expect_first in ((0.03, False), (2.0, True)):
+        shadow: dict = {}
+        trips = []
+        def step(s):
+            t = advance_shadow(shadow, s)
+            if t:
+                trips.append(t)
+        step(rec(0, 21050.0, 55.0))
+        # Moves (a few metres into the bay, or a real drive), then charges at once.
+        step(rec(30, 21050.0 + bay_mi / 2, 55.0, speed=3.0, gear="ShiftStateD", charging=True))
+        step(rec(60, 21050.0 + bay_mi, 54.98, charging=True))
+        for i in range(1, 9):                       # eight minutes of DC charging
+            step(rec(60 + i * 60, 21050.0 + bay_mi, 54.98 + i * 0.42, charging=True))
+        step(rec(660, 21050.0 + bay_mi, 58.3))     # unplugged
+        # The drive after the charge: 3.5 km.
+        for i in range(1, 13):
+            step(rec(660 + i * 60, 21050.0 + bay_mi + i * 0.18, 58.3 - i * 0.07,
+                     speed=15.0, gear="ShiftStateD"))
+        for i in range(1, 30):                      # parked again, driver out
+            step(rec(1380 + i * 60, 21050.0 + bay_mi + 12 * 0.18, 57.46, seat=False))
+        last = trips[-1]
+        # The drive after the charge is its own trip, with real energy.
+        assert last["start_ts"] >= 660 and last["energy_kwh"] and 0.5 < last["energy_kwh"] < 1.0
+        # And the leg before the charge: a trip of its own only if it went somewhere.
+        assert (len(trips) == 2) is expect_first, (bay_mi, trips)

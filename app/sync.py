@@ -1743,6 +1743,26 @@ def advance_shadow(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, An
                              readings=snap) or done
         open_at = None
 
+    # A charge proven by the pack itself, for when the transition above was
+    # never seen: energy rising while the car stands cannot come from a stale
+    # reading. 31 October: a trip opened as the car settled into the charging
+    # bay, charging began within the same minute (so the car was never seen
+    # unplugged during the trip), and the trip ran on through the 8-minute
+    # charge into the drive after it, 12:01 to 12:21. The charge added more
+    # than the drive used, so the trip had no energy, and it began before the
+    # charge ended, so it fell outside "since charge" altogether.
+    if open_at and snap.get("charging"):
+        e0, e1 = open_at.get("energy_kwh"), snap.get("energy_kwh")
+        if e0 is not None and e1 is not None and float(e1) - float(e0) > CHARGE_PROVES_KWH:
+            moved = float(snap.get("odo_km") or 0.0) - float(open_at.get("odo_km") or 0.0)
+            shadow["ended_by_charge"] = True
+            closed = _shadow_close(shadow, shadow.get("still_snap") or last or snap, readings=snap)
+            # Barely moved before plugging in: the manoeuvre into the bay, not
+            # a journey. Dropped; the drive after the charge opens its own trip.
+            if moved >= CHARGE_BAY_MAX_KM:
+                done = closed or done
+            open_at = None
+
     # Gear and VehicleSpeed arrive as separate records — gear on change,
     # speed every ten seconds — so a car that selects Park is described by a
     # composite still carrying the speed it had a moment earlier, and
@@ -2232,6 +2252,12 @@ def charger_network(fast_type: Any, cable_type: Any = None) -> str:
         return "GB"
     return ""
 
+
+# Energy rising this much in an open trip while the car stands proves a charge
+# (EnergyRemaining moves in 0.02 kWh steps), and a trip that had moved less
+# than CHARGE_BAY_MAX_KM before it was only the car settling into the bay.
+CHARGE_PROVES_KWH = 0.1
+CHARGE_BAY_MAX_KM = 0.3
 
 # A plug-in that moved less than this was somebody testing the cable, not a
 # charge. Well above the 0.02 kWh step EnergyRemaining moves in.
