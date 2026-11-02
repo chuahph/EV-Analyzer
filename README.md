@@ -228,14 +228,24 @@ Once linked, run `python run.py collect` to log new drives/charges over time.
    from the **Recent Charges** card: tap ✎ next to it and enter the actual
    RM/kWh rate; the cost recalculates from that instead.
 
-   **Condo charger.** If the charger at your Home is a public DC one, tap
-   *Save as condo charger* on a DC charge at Home (or manage it under
-   Rates). New DC sessions (or over 15 kW) starting inside the Home place then
-   keep their "Home" label but count as public DC at the saved rate, and stay
-   out of the Home AC RM/kWh. AC sessions at Home get the label too but stay
-   Home AC, at the Home AC rate. Past charges are never re-tagged on their own:
-   *Apply to past charges* previews the count first and changes only the tag,
-   never energy, SoC, kWh or cost. The profile stores just a name and a rate.
+   **Billed kWh.** A charger bills what it delivered, which is more than
+   reached the battery. AC sessions are priced on the car's figure plus 5%.
+   For DC, enter the billed kWh from one receipt (✎ → *Billed kWh*): the app
+   learns this car's DC loss from DC receipts (9.7% on the first Supercharger
+   receipt) and prices every DC session without a receipt on the car's figure
+   plus that loss. `/api/reprice-dc-loss` previews the same for past DC
+   sessions at their own rates; add `&apply=true` to save it.
+
+   **Condo charger.** All charging at Home is on the condo's chargers, priced
+   at your Home AC and Home DC rates. Sessions inside the Home place carry the
+   *Condo charger* label (a session over 15 kW counts as DC). *Apply to past
+   charges* tags earlier Home sessions after a preview.
+
+   **Superchargers.** A CCS2 car reports a Supercharger as CCS.
+   `/api/set-charger-network?charge_id=<id>&network=Tesla&apply=true` labels
+   a session and remembers its place, so later DC sessions there show as
+   Tesla. A charge at a named place of its own is not priced as Home or Office
+   just because it is within their 2 km pricing radius.
 
    Optional: time-of-use pricing instead of the flat rate above — driving
    cost, and charging cost for whichever charger type has no AC/DC rate set,

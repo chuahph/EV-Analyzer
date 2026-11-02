@@ -297,7 +297,8 @@ def tag_condo(session: Session, settings, c: Charge, name: str) -> None:
         return
     c.charge_type = kind
     c.price_source = "home"
-    payable = payable_kwh(c.energy_added_kwh, c.charge_type, settings, c.billed_kwh or 0.0)
+    payable = payable_kwh(c.energy_added_kwh, c.charge_type, settings, c.billed_kwh or 0.0,
+                          session=session)
     c.payable_kwh = round(payable, 3)
     c.cost = round(payable * rate_for_source(session, settings, "home", fast, c.start_time), 2)
 
@@ -320,17 +321,53 @@ def rate_for_source(session: Session, settings, source: str, dc: bool, dt: datet
 
 
 def payable_kwh(energy_added_kwh: float, charge_type: str, settings,
-                billed_kwh: float = 0.0) -> float:
+                billed_kwh: float = 0.0, session: Session | None = None) -> float:
     """The kWh a session is priced on. A receipt's figure when there is one;
-    otherwise an AC session's energy plus the charger-to-pack loss (the meter
-    bills more than reached the pack); a DC session's as the car reports it.
+    otherwise the energy that reached the pack plus the charger-to-pack loss,
+    because the charger bills what it delivered: AC at ac_charge_loss_pct, DC
+    at what this car's DC receipts have measured (dc_loss_pct; 2 November,
+    the QBM Supercharger billed 26.94 kWh for 24.56 into the pack).
     """
     if billed_kwh and billed_kwh > 0:
         return float(billed_kwh)
     kwh = float(energy_added_kwh or 0.0)
     if (charge_type or "AC") != "DC":
         kwh *= 1.0 + max(0.0, float(getattr(settings, "ac_charge_loss_pct", 0.0))) / 100.0
+    elif session is not None:
+        kwh *= 1.0 + dc_loss_pct(session) / 100.0
     return kwh
+
+
+DC_LOSS_MAX_PCT = 20.0
+
+
+def dc_loss_pct(session: Session) -> float:
+    """The DC charger-to-pack loss learned from receipts, in percent; 0 until
+    a DC receipt has been entered (no measurement, no guess)."""
+    try:
+        return max(0.0, min(float(state.get(session, state.DC_LOSS_PCT_KEY) or 0.0),
+                            DC_LOSS_MAX_PCT))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def learn_dc_loss(session: Session) -> float | None:
+    """Re-measure the DC loss from every DC session with a receipt and save
+    it: the median of billed over what reached the pack. Returns the percent,
+    or None when there is no DC receipt."""
+    ratios = sorted(
+        float(c.billed_kwh) / float(c.energy_added_kwh)
+        for c in session.query(Charge).filter(Charge.charge_type == "DC",
+                                              Charge.billed_kwh > 0).all()
+        if c.energy_added_kwh and 1.0 <= float(c.billed_kwh) / float(c.energy_added_kwh) <= 1.0 / 0.6)
+    if not ratios:
+        state.put(session, state.DC_LOSS_PCT_KEY, "")
+        return None
+    n = len(ratios)
+    mid = ratios[n // 2] if n % 2 else (ratios[n // 2 - 1] + ratios[n // 2]) / 2.0
+    pct = round(min((mid - 1.0) * 100.0, DC_LOSS_MAX_PCT), 1)
+    state.put(session, state.DC_LOSS_PCT_KEY, str(pct))
+    return pct
 
 
 def place_network(session: Session, place: str) -> str:

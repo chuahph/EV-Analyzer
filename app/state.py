@@ -251,6 +251,7 @@ PRICE_HOME_DC_KEY = "price_home_dc"
 PRICE_OFFICE_AC_KEY = "price_office_ac"
 PRICE_OFFICE_DC_KEY = "price_office_dc"
 DEFAULT_PRICE_SOURCE_KEY = "default_price_source"  # "public" | "home" | "office"
+DC_LOSS_PCT_KEY = "dc_charge_loss_pct"  # float as text: charger-to-pack loss on DC, the median of DC receipts (billed over what reached the pack), applied to DC sessions without a receipt
 CHARGER_PLACE_NETWORK_KEY = "charger_place_network"  # JSON {place name lowercased: "Tesla"|...}: the network a DC charger at that place belongs to, which the car cannot say (a CCS2 Supercharger reports CCS)
 CHARGER_PROFILE_KEY = "charger_profile_home"  # JSON {name, kind, rate|null}: the
 # saved public-DC charger at Home (the condo). Only a label and a rate.

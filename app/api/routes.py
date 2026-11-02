@@ -5152,9 +5152,9 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             location=loc_label,
             charger_profile=charger_profile,
             cost=round(pricing_prefs.payable_kwh(
-                kwh, "DC" if fast else "AC", settings) * rate, 2),
+                kwh, "DC" if fast else "AC", settings, session=session) * rate, 2),
             payable_kwh=round(pricing_prefs.payable_kwh(
-                kwh, "DC" if fast else "AC", settings), 3),
+                kwh, "DC" if fast else "AC", settings, session=session), 3),
             price_source=source,
             # Same rule the polled path uses: a zero rate is a free session,
             # not a paid one that happened to cost nothing. The charging
@@ -6409,7 +6409,8 @@ def add_manual_charge(payload: dict = Body(...), session: Session = Depends(get_
             session, settings, location, charge_type == "DC", start_time, max_power_kw)
         if charger_profile and (max_power_kw or 0.0) > pricing_prefs.CONDO_DC_MIN_KW:
             charge_type = "DC"   # too fast for AC: the condo's DC charger
-        payable = pricing_prefs.payable_kwh(energy_added_kwh, charge_type, settings)
+        payable = pricing_prefs.payable_kwh(energy_added_kwh, charge_type, settings,
+                                            session=session)
         cost = round(payable * rate, 2)
 
     vehicle = _first_vehicle(session)
@@ -6473,11 +6474,13 @@ def edit_charge_rate(payload: dict = Body(...), session: Session = Depends(get_s
         charge.billed_kwh = billed
     elif payload.get("billed_kwh") == "":
         charge.billed_kwh = 0.0
+    if charge.charge_type == "DC" and "billed_kwh" in payload:
+        session.flush()
+        pricing_prefs.learn_dc_loss(session)
     settings = get_settings()
     pk = pricing_prefs.payable_kwh(charge.energy_added_kwh, charge.charge_type,
-                                   settings, charge.billed_kwh or 0.0)
-    # Only recorded where it differs from the car's figure, so a DC session
-    # without a receipt stays priced on energy_added_kwh as before.
+                                   settings, charge.billed_kwh or 0.0, session=session)
+    # Only recorded where it differs from the car's figure.
     charge.payable_kwh = round(pk, 3) if abs(pk - (charge.energy_added_kwh or 0.0)) > 1e-6 else 0.0
     charge.cost = round(pk * rate, 2)
     charge.is_free = rate == 0
@@ -9457,6 +9460,9 @@ def set_charge_billed(
                  f"{pack / kwh * 100:.0f}% efficient — that receipt is not this "
                  f"session.")
     charge.billed_kwh = kwh
+    if charge.charge_type == "DC":
+        session.flush()
+        pricing_prefs.learn_dc_loss(session)
     if paid is not None:
         charge.cost = round(paid, 2)
         charge.is_free = paid == 0
@@ -12825,7 +12831,8 @@ def set_charger_network(
         rate = pricing_prefs.rate_for_source(session, settings, "public",
                                              c.charge_type == "DC", c.start_time)
         payable = pricing_prefs.payable_kwh(c.energy_added_kwh or 0.0, c.charge_type,
-                                            settings, c.billed_kwh or 0.0)
+                                            settings, c.billed_kwh or 0.0,
+                                            session=session)
         new_cost = round(payable * rate, 2)
         plan["price_source"] = [c.price_source, "public"]
         plan["cost"] = [c.cost, new_cost]
@@ -12837,6 +12844,54 @@ def set_charger_network(
             c.price_source, c.cost = "public", new_cost
         session.commit()
     return plan
+
+
+@router.api_route("/reprice-dc-loss", methods=["GET", "POST"])
+def reprice_dc_loss(
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Price past DC sessions on what the charger delivered, not what reached
+    the pack.
+
+    A DC charger bills at the stall, and a few percent never reaches the
+    battery (the QBM Supercharger, 2 November: 26.94 kWh billed, 24.56 into
+    the pack). Sessions without a receipt were priced on the pack figure.
+    This re-prices each paid DC session without a receipt at its own rate
+    (cost over the kWh it was priced on, so a hand-set rate stays) on the
+    pack figure plus the loss measured from DC receipts. Dry run by default.
+    """
+    loss = pricing_prefs.dc_loss_pct(session)
+    if loss <= 0:
+        raise HTTPException(
+            409, "No DC loss measured yet. Enter the billed kWh from one DC "
+                 "receipt (✎ on the charge) first.")
+    settings = get_settings()
+    rows = session.scalars(
+        select(Charge).where(Charge.charge_type == "DC").order_by(Charge.start_time)).all()
+    plan, total = [], 0.0
+    for c in rows:
+        if c.is_free or (c.billed_kwh or 0) > 0 or not c.cost or not c.energy_added_kwh:
+            continue
+        old_payable = float(c.payable_kwh or 0.0) or float(c.energy_added_kwh)
+        new_payable = pricing_prefs.payable_kwh(c.energy_added_kwh, "DC", settings,
+                                                session=session)
+        if abs(new_payable - old_payable) < 0.005:
+            continue
+        rate = float(c.cost) / old_payable
+        new_cost = round(rate * new_payable, 2)
+        total += new_cost - float(c.cost)
+        plan.append({"charge_id": c.id, "start": c.start_time.isoformat(timespec="minutes"),
+                     "location": c.location, "rate": round(rate, 3),
+                     "kwh_priced": [round(old_payable, 3), round(new_payable, 3)],
+                     "cost": [c.cost, new_cost]})
+        if apply:
+            c.payable_kwh = round(new_payable, 3)
+            c.cost = new_cost
+    if apply:
+        session.commit()
+    return {"dc_loss_pct": loss, "sessions": len(plan), "added_cost": round(total, 2),
+            "applied": apply, "charges": plan}
 
 
 @router.api_route("/repair-charge-types", methods=["GET", "POST"])
@@ -12873,7 +12928,8 @@ def repair_charge_types(
         if not (avg > sync_mod.AC_MAX_KW or peak > sync_mod.AC_MAX_PEAK_KW):
             continue
         keep_cost = bool(c.is_free) or (c.price_source or "") == "custom"
-        new_payable = pricing_prefs.payable_kwh(kwh, "DC", settings, c.billed_kwh or 0.0)
+        new_payable = pricing_prefs.payable_kwh(kwh, "DC", settings, c.billed_kwh or 0.0,
+                                                session=session)
         new_cost = c.cost
         if not keep_cost:
             source = (c.price_source or "") or pricing_prefs.get_default_source(session)

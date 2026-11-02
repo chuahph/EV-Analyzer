@@ -199,7 +199,7 @@ def replace_with_import(
                 c["charge_type"] = "DC"
                 c["charger_profile"] = profile
             pk = pricing_prefs.payable_kwh(
-                c["energy_added_kwh"], c.get("charge_type", "AC"), settings)
+                c["energy_added_kwh"], c.get("charge_type", "AC"), settings, session=session)
             c["cost"] = round(pk * rate, 2)
             c["payable_kwh"] = round(pk, 3)
             c["price_source"] = source

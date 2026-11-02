@@ -216,3 +216,56 @@ def test_set_charger_network_labels_the_charge_and_remembers_the_place(session):
                 s.commit()
     finally:
         settings.app_passcode = old
+
+
+def test_dc_is_priced_on_what_the_charger_delivered_once_a_receipt_says(session):
+    """2 November, QBM Supercharger: 26.94 kWh billed for 24.56 into the pack.
+    One DC receipt teaches the loss (9.7%), and DC sessions without one are
+    then priced on the pack figure plus it, past ones on request."""
+    from app import state
+    from app.database import SessionLocal
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as s:
+                state.put(s, state.DC_LOSS_PCT_KEY, "")
+                mk = lambda kwh, cost: Charge(
+                    vehicle_id=1, start_time=T0, end_time=T0.replace(hour=12, minute=22),
+                    duration_min=21.3, start_soc=45, end_soc=80, energy_added_kwh=kwh,
+                    charge_type="DC", max_power_kw=108.7, location="QBM", cost=cost,
+                    price_source="public")
+                a, b = mk(24.56, 27.75), mk(20.0, 22.6)
+                s.add_all([a, b])
+                s.commit()
+                aid, bid = a.id, b.id
+                assert pricing_prefs.payable_kwh(20.0, "DC", settings, session=s) == 20.0
+            assert client.get("/api/reprice-dc-loss").status_code == 409   # nothing learned
+
+            r = client.post("/api/charges/edit-rate",
+                            json={"id": aid, "price_per_kwh": 1.13, "source": "other",
+                                  "billed_kwh": 26.9392}).json()
+            assert r["cost"] == 30.44
+            with SessionLocal() as s:
+                assert pricing_prefs.dc_loss_pct(s) == pytest.approx(9.7, abs=0.05)
+                assert pricing_prefs.payable_kwh(20.0, "DC", settings, session=s) == \
+                    pytest.approx(21.94, abs=0.01)
+
+            plan = client.get("/api/reprice-dc-loss").json()
+            ids = [p["charge_id"] for p in plan["charges"]]
+            assert bid in ids and aid not in ids          # the receipt's own stays
+            row = next(p for p in plan["charges"] if p["charge_id"] == bid)
+            assert row["rate"] == pytest.approx(1.13, abs=0.001)
+            assert row["cost"][1] == pytest.approx(24.79, abs=0.02)
+            client.get("/api/reprice-dc-loss", params={"apply": "true"})
+            with SessionLocal() as s:
+                assert s.get(Charge, bid).cost == pytest.approx(24.79, abs=0.02)
+                s.delete(s.get(Charge, aid))
+                s.delete(s.get(Charge, bid))
+                state.put(s, state.DC_LOSS_PCT_KEY, "")
+                s.commit()
+            # Run again: nothing left to change.
+    finally:
+        settings.app_passcode = old
