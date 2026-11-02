@@ -5114,16 +5114,21 @@ def test_repair_trip_after_charge_starts_the_drive_when_the_charge_ended():
 
             # A trip no charge ended inside is refused.
             # A trip already moved but left with a negative energy can still
-            # have it filled.
+            # have it filled, and is listed until it is.
             with SessionLocal() as s:
                 s.get(Drive, did).energy_used_kwh = -3.015
                 s.commit()
+            listed = client.get("/api/negative-energy-trips").json()
+            assert listed["count"] == 1 and listed["kwh_missing_from_totals"] == 3.02
+            assert listed["trips"][0]["charge_id"] == cid
+            assert listed["trips"][0]["repair"] == f"/api/repair-trip-after-charge?drive_id={did}"
             r = client.get("/api/repair-trip-after-charge",
                            params={"drive_id": did, "true_wh_per_km": 183, "apply": "true"})
             assert r.status_code == 200, r.json()
             assert r.json()["energy_kwh"] == [-3.015, 0.64]
             with SessionLocal() as s:
                 assert s.get(Drive, did).start_time == cend
+            assert client.get("/api/negative-energy-trips").json()["count"] == 0
             again = client.get("/api/repair-trip-after-charge", params={"drive_id": did})
             assert again.status_code == 409
             assert "has been repaired" in again.json()["detail"]

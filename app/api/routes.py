@@ -12527,6 +12527,40 @@ def set_trip_stop(
     return plan
 
 
+@router.get("/negative-energy-trips")
+def negative_energy_trips(session: Session = Depends(get_session)):
+    """List the trips saved with an energy below zero, each with the link that
+    repairs it.
+
+    A trip that ran through a charge measured the charge as negative driving
+    (#3292 saved -3.015 kWh) and took that much off every total. Read only.
+    """
+    rows = session.scalars(
+        select(Drive).where(Drive.energy_used_kwh < 0).order_by(Drive.start_time)).all()
+    out = []
+    for d in rows:
+        charge = session.scalars(
+            select(Charge).where(Charge.vehicle_id == d.vehicle_id,
+                                 Charge.end_time >= d.start_time,
+                                 Charge.end_time < d.end_time)
+            .order_by(Charge.end_time.desc()).limit(1)).first()
+        out.append({
+            "drive_id": d.id,
+            "start_time": d.start_time.isoformat(timespec="minutes"),
+            "end_time": d.end_time.isoformat(timespec="minutes"),
+            "distance_km": d.distance_km,
+            "energy_kwh": d.energy_used_kwh,
+            "charge_id": charge.id if charge else None,
+            "repair": (f"/api/repair-trip-after-charge?drive_id={d.id}" if charge
+                       else None),
+            "note": ("ran through charge #%d" % charge.id if charge else
+                     "no saved charge inside it; ask before repairing"),
+        })
+    return {"count": len(out),
+            "kwh_missing_from_totals": round(-sum(d.energy_used_kwh for d in rows), 2),
+            "trips": out}
+
+
 @router.api_route("/repair-trip-after-charge", methods=["GET", "POST"])
 def repair_trip_after_charge(
     drive_id: int = Query(...),
