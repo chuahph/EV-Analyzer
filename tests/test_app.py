@@ -13892,3 +13892,66 @@ def test_naming_the_stop_between_two_split_trips(session):
     assert plan["next_drive_id"] == b.id and a.end_location == ""          # a preview writes nothing
     routes_mod.set_trip_stop(drive_id=a.id, name="Jelutong", coords=None, apply=True, session=session)
     assert (a.end_location, b.start_location) == ("Jelutong", "Jelutong")
+
+
+def test_a_saved_trip_takes_lives_power_summed_energy_for_the_same_drive():
+    """Live sums the pack's power second by second, as the car's trip meter
+    does, and matched the car within 1% on 2 November; the saved trip, the
+    difference of two EnergyRemaining readings, read about 0.03 kWh high. A
+    finished Live drive is queued (no database work on the Live path), saved
+    by the stored path, and the saved trip with the same odometer ends takes
+    its figure."""
+    from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+
+    from app.api import routes as routes_mod
+    from app.models import Drive
+
+    vin = "LIVEKWH000000001"
+    t0 = _dtm.now(_tz.utc) - _td(seconds=2000)
+    at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mi = 1.609344
+    fold = lambda d, f: routes_mod._live_mem_fold(vin, at(d), f)
+    routes_mod._LIVE_MEM.pop(vin, None)
+    routes_mod._LIVE_DONE.clear()
+
+    fold(0, {"Gear": "ShiftStateP", "VehicleSpeed": 0.0, "Odometer": 100.0 / mi,
+             "EnergyRemaining": 60.0})
+    for k in range(1, 601):            # 10 minutes, 6 km, 9 kW drawn
+        fold(k, {"Gear": "ShiftStateD", "VehicleSpeed": 40.0 / mi,
+                 "Odometer": (100.0 + k * 0.01) / mi, "EnergyRemaining": 60.0 - k * 0.0026,
+                 "PackVoltage": 360.0, "PackCurrent": -25.0})
+    fold(601, {"Gear": "ShiftStateP", "VehicleSpeed": 0.0, "PackVoltage": 360.0,
+               "PackCurrent": -1.0})
+    assert routes_mod._LIVE_DONE == []          # a stop is not yet the end
+    fold(601 + 16 * 60, {"VehicleSpeed": 0.0})   # 15 minutes in Park: it is
+    rec = routes_mod._LIVE_DONE[-1]
+    assert rec["vin"] == vin
+    assert rec["start_odo"] == pytest.approx(100.0, abs=0.01)
+    assert rec["end_odo"] == pytest.approx(106.0, abs=0.01)
+    # 600 one-second steps at 9 kW, and none of the standby wait after the stop.
+    assert rec["kwh"] == pytest.approx(1.5, abs=0.01)
+    assert rec["cover"] > 0.95
+
+    trip = {"vin": vin, "energy_kwh": 1.56, "start_odo_km": 100.0, "end_odo_km": 106.0}
+    assert routes_mod._live_energy_for(trip, [rec]) == rec["kwh"]
+    # Not when it could be a different drive, or Live missed much of it.
+    assert routes_mod._live_energy_for({**trip, "vin": "OTHER"}, [rec]) is None
+    assert routes_mod._live_energy_for({**trip, "end_odo_km": 106.5}, [rec]) is None
+    assert routes_mod._live_energy_for(trip, [{**rec, "cover": 0.5}]) is None
+    assert routes_mod._live_energy_for({**trip, "energy_kwh": 2.5}, [rec]) is None
+    assert routes_mod._live_energy_for({**trip, "energy_kwh": -3.0}, [rec]) is None
+
+    with TestClient(app):
+        saved = routes_mod._live_drives_flush()
+        assert rec in saved and routes_mod._LIVE_DONE == []
+        assert rec in routes_mod._live_drives_flush()   # kept, not re-queued
+
+        row = Drive(vehicle_id=1, start_time=_dtm(2026, 11, 2, 6, 51),
+                    end_time=_dtm(2026, 11, 2, 7, 1))
+        shadow = {**trip, "start_ts": t0.timestamp() + 1, "end_ts": t0.timestamp() + 601,
+                  "distance_km": 6.0, "duration_min": 10.0}
+        routes_mod._apply_shadow_to_drive(row, shadow, routes_mod._live_energy_for(shadow, saved))
+        assert row.energy_used_kwh == rec["kwh"]
+        routes_mod._apply_shadow_to_drive(row, shadow, None)
+        assert row.energy_used_kwh == 1.56            # without Live, the stored figure
+    routes_mod._LIVE_MEM.pop(vin, None)

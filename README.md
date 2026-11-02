@@ -45,7 +45,10 @@ python scripts/build_site.py --out site   # → ./site (open site/index.html)
   charges as they happen. Boundaries come from the car's own gear and speed
   reports rather than being inferred between two distant polls, and trip
   energy is a difference of `EnergyRemaining`, so it carries no capacity
-  assumption.
+  assumption. Where the Live view tracked the same drive (same odometer at
+  both ends, pack power summed over most of it), the trip takes Live's
+  power-summed energy instead, which is how the car's own trip meter counts
+  and removes the ~0.03 kWh per trip that the stepped reading adds.
 - **Polling (watchdog).** Kept for the three things a one-way stream cannot
   do: wake a car, prove it is reachable, and notice that the stream has
   stopped. It no longer writes history — `/api/health` reports
