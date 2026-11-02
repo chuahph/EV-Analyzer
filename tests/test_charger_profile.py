@@ -164,3 +164,55 @@ def test_renaming_the_profile_renames_the_sessions_it_tagged(home):
     home.expire_all()
     assert home.get(Charge, c.id).charger_profile == "Condo charger"
     assert pricing_prefs.get_profile(home)["name"] == "Condo charger"
+
+
+def test_a_charge_at_a_named_place_is_not_priced_as_a_nearby_office(session):
+    """2 November, charge 103 at the QBM Supercharger: 0.7 km from the Office
+    and 1.3 km from Home, both inside the 2 km pricing radius, so it was
+    priced at the Office rate. At a place of its own, it is neither."""
+    for name, lat, lon in (("Home", 5.3427, 100.3110), ("Office", 5.3261, 100.3042),
+                           ("QBM", 5.3317, 100.3068)):
+        session.add(Place(name=name, lat=lat, lon=lon, radius_km=0.15, created_at=datetime.now()))
+    session.commit()
+    assert pricing_prefs.match_source("5.3318, 100.3069", session) is None
+    # Near the office but at no place of its own: still the office.
+    assert pricing_prefs.match_source("5.3275, 100.3045", session) == "office"
+    assert pricing_prefs.match_source("5.3427, 100.3111", session) == "home"
+
+
+def test_set_charger_network_labels_the_charge_and_remembers_the_place(session):
+    from app.database import SessionLocal
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as s:
+                c = Charge(vehicle_id=1, start_time=T0, end_time=T0.replace(hour=12, minute=22),
+                           duration_min=21.3, start_soc=45, end_soc=80, energy_added_kwh=24.56,
+                           charge_type="DC", max_power_kw=108.7, location="QBM", cost=22.1,
+                           price_source="office", charger_network="CCS")
+                s.add(c)
+                s.commit()
+                cid = c.id
+            assert client.get("/api/set-charger-network",
+                              params={"charge_id": cid, "network": "Ionity"}).status_code == 422
+            r = client.get("/api/set-charger-network",
+                           params={"charge_id": cid, "network": "Tesla",
+                                   "reprice_public": "true"}).json()
+            assert r["charger_network"] == ["CCS", "Tesla"] and r["applied"] is False
+            assert r["price_source"] == ["office", "public"]
+            client.get("/api/set-charger-network",
+                       params={"charge_id": cid, "network": "Tesla", "reprice_public": "true",
+                               "apply": "true"})
+            with SessionLocal() as s:
+                c = s.get(Charge, cid)
+                assert c.charger_network == "Tesla" and c.price_source == "public"
+                assert pricing_prefs.place_network(s, "qbm ") == "Tesla"
+                assert pricing_prefs.place_network(s, "Office") == ""
+                s.delete(c)
+                pricing_prefs.remember_place_network(s, "QBM", "")
+                s.commit()
+    finally:
+        settings.app_passcode = old

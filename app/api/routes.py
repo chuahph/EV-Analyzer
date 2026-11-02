@@ -5168,7 +5168,10 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             source="telemetry",
             shadow_start_ts=float(int(float(c["start_ts"]))),
             energy_source=energy_source,
-            charger_network=str(c.get("network") or "")[:16],
+            charger_network=(
+                (fast and str(c.get("network") or "") in ("", "CCS")
+                 and pricing_prefs.place_network(session, loc_label))
+                or str(c.get("network") or ""))[:16],
         )
         session.add(row)
         # Usable capacity is fitted from charges, so a session that only the
@@ -12781,6 +12784,57 @@ def repair_arrival_short(
                 plan["staged"] = True
         if plan.get("staged"):
             _put_trips(session, trips)
+        session.commit()
+    return plan
+
+
+@router.api_route("/set-charger-network", methods=["GET", "POST"])
+def set_charger_network(
+    charge_id: int = Query(...),
+    network: str = Query(..., max_length=16),
+    remember: bool = Query(True),
+    reprice_public: bool = Query(False),
+    apply: bool = Query(False),
+    session: Session = Depends(get_session),
+):
+    """Say which network a charge's charger belongs to, and remember it for
+    the place.
+
+    The car reports only the plug type, and a CCS2 car at a Tesla
+    Supercharger reports CCS like any other CCS charger (2 November, charge
+    103 at QBM). ``network`` is Tesla, CCS, CHAdeMO, GB, or empty to clear.
+    With ``remember`` (the default), later DC sessions at the same place that
+    the car reports as CCS take this label. ``reprice_public`` prices the
+    session at the Public rate for its type, for one priced as Home or Office
+    because it was within their radius. Dry run by default.
+    """
+    allowed = {"tesla": "Tesla", "ccs": "CCS", "chademo": "CHAdeMO", "gb": "GB", "": ""}
+    label = allowed.get(network.strip().lower())
+    if label is None:
+        raise HTTPException(422, "network must be Tesla, CCS, CHAdeMO, GB, or empty.")
+    c = session.get(Charge, charge_id)
+    if c is None:
+        raise HTTPException(404, "No such charge.")
+    settings = get_settings()
+    plan = {"charge_id": c.id, "location": c.location,
+            "charger_network": [c.charger_network or "", label],
+            "remembered_for": c.location if remember and c.location else None,
+            "applied": apply}
+    new_cost = None
+    if reprice_public:
+        rate = pricing_prefs.rate_for_source(session, settings, "public",
+                                             c.charge_type == "DC", c.start_time)
+        payable = pricing_prefs.payable_kwh(c.energy_added_kwh or 0.0, c.charge_type,
+                                            settings, c.billed_kwh or 0.0)
+        new_cost = round(payable * rate, 2)
+        plan["price_source"] = [c.price_source, "public"]
+        plan["cost"] = [c.cost, new_cost]
+    if apply:
+        c.charger_network = label
+        if remember and c.location:
+            pricing_prefs.remember_place_network(session, c.location, label)
+        if new_cost is not None:
+            c.price_source, c.cost = "public", new_cost
         session.commit()
     return plan
 

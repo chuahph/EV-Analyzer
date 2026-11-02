@@ -129,6 +129,14 @@ def match_source(location_or_coords: str, session: Session) -> str | None:
     if not homes_and_offices:
         return None
     if _is_coords(text):
+        # Inside a place of its own that is neither: a charge AT that place.
+        # 2 November, charge 103 at the QBM Supercharger, 0.7 km from the
+        # Office and 1.3 km from Home, was priced at the Office rate.
+        inside = [(d, p) for p in session.query(Place).all()
+                  for d in [haversine_km(text, f"{p.lat}, {p.lon}")]
+                  if d is not None and d <= float(p.radius_km or 0.15)]
+        if inside and min(inside, key=lambda x: x[0])[1].name.strip().lower() not in ("home", "office"):
+            return None
         best_source, best_km = None, None
         for p in homes_and_offices:
             d = haversine_km(text, f"{p.lat}, {p.lon}")
@@ -323,3 +331,29 @@ def payable_kwh(energy_added_kwh: float, charge_type: str, settings,
     if (charge_type or "AC") != "DC":
         kwh *= 1.0 + max(0.0, float(getattr(settings, "ac_charge_loss_pct", 0.0))) / 100.0
     return kwh
+
+
+def place_network(session: Session, place: str) -> str:
+    """The charger network the owner said a place's DC charger belongs to
+    ("Tesla" for a Supercharger), or "". The car reports only the plug, and on
+    a CCS2 car a Supercharger reads as CCS."""
+    if not place:
+        return ""
+    try:
+        saved = json.loads(state.get(session, state.CHARGER_PLACE_NETWORK_KEY) or "{}") or {}
+    except ValueError:
+        return ""
+    return str(saved.get(place.strip().lower()) or "")
+
+
+def remember_place_network(session: Session, place: str, network: str) -> None:
+    try:
+        saved = json.loads(state.get(session, state.CHARGER_PLACE_NETWORK_KEY) or "{}") or {}
+    except ValueError:
+        saved = {}
+    key = place.strip().lower()
+    if network:
+        saved[key] = network
+    else:
+        saved.pop(key, None)
+    state.put(session, state.CHARGER_PLACE_NETWORK_KEY, json.dumps(saved))
