@@ -5091,7 +5091,7 @@ def test_repair_trip_after_charge_starts_the_drive_when_the_charge_ended():
                 c.end_time = d.start_time + timedelta(minutes=8)
                 c.end_soc = 81.0
                 d.end_time = d.start_time + timedelta(minutes=20)
-                d.distance_km, d.energy_used_kwh, d.duration_min = 3.5, 0.0, 20.0
+                d.distance_km, d.energy_used_kwh, d.duration_min = 3.5, -3.015, 20.0
                 s.commit()
                 did, cid, cend = d.id, c.id, c.end_time
 
@@ -5113,6 +5113,17 @@ def test_repair_trip_after_charge_starts_the_drive_when_the_charge_ended():
                 assert d.energy_estimated and d.hand_repaired
 
             # A trip no charge ended inside is refused.
+            # A trip already moved but left with a negative energy can still
+            # have it filled.
+            with SessionLocal() as s:
+                s.get(Drive, did).energy_used_kwh = -3.015
+                s.commit()
+            r = client.get("/api/repair-trip-after-charge",
+                           params={"drive_id": did, "true_wh_per_km": 183, "apply": "true"})
+            assert r.status_code == 200, r.json()
+            assert r.json()["energy_kwh"] == [-3.015, 0.64]
+            with SessionLocal() as s:
+                assert s.get(Drive, did).start_time == cend
             again = client.get("/api/repair-trip-after-charge", params={"drive_id": did})
             assert again.status_code == 409
             assert "has been repaired" in again.json()["detail"]

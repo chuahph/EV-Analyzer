@@ -5233,9 +5233,14 @@ def _apply_shadow_to_drive(row, t: dict) -> None:
     row.end_time = sync_mod._dt(t["end_ts"]).replace(microsecond=0)
     row.distance_km = float(t.get("distance_km") or 0.0)
     row.duration_min = float(t.get("duration_min") or 0.0)
-    if t.get("energy_kwh") is not None:
+    if t.get("energy_kwh") is not None and float(t["energy_kwh"]) >= 0:
         row.energy_used_kwh = float(t["energy_kwh"])
         row.energy_estimated = False
+    elif t.get("energy_kwh") is not None and row.energy_used_kwh is None:
+        # Negative: a charge inside the trip ran the meter backwards (#3292
+        # saved -3.015 kWh). Saved as missing, never as negative driving that
+        # would take kWh off every total it is summed into.
+        row.energy_used_kwh = 0.0
     # Measured on the stream, so the row can stop claiming its efficiency is
     # a speed-based estimate. idle_tracked is what the dashboard's data
     # quality badge reads, and until telemetry recorded a stop it was false
@@ -12556,12 +12561,15 @@ def repair_trip_after_charge(
         done = session.scalars(
             select(Charge).where(Charge.vehicle_id == drive.vehicle_id,
                                  Charge.end_time == drive.start_time).limit(1)).first()
-        if done is not None and getattr(drive, "hand_repaired", False):
+        if done is not None and not (drive.energy_used_kwh and drive.energy_used_kwh > 0):
+            charge = done       # start already moved; the energy still needs filling
+        elif done is not None and getattr(drive, "hand_repaired", False):
             raise HTTPException(
                 409, f"Trip {drive_id} already starts at "
                      f"{drive.start_time.isoformat(timespec='minutes')}, when "
                      f"charge {done.id} ended: it has been repaired. Energy "
                      f"{drive.energy_used_kwh} kWh.")
+    if charge is None:
         near = session.scalars(
             select(Charge).where(Charge.end_time >= drive.start_time - timedelta(hours=3),
                                  Charge.start_time <= drive.end_time + timedelta(hours=3))
@@ -12578,7 +12586,9 @@ def repair_trip_after_charge(
     energy = drive.energy_used_kwh
     estimated = bool(getattr(drive, "energy_estimated", False))
     source = "kept"
-    if not energy:
+    # Measured across a charge the meter runs backwards: #3292 saved -3.015
+    # kWh, the 8 minutes of charging counted as negative driving.
+    if not (energy and energy > 0):
         if true_wh_per_km is not None:
             rate, source = true_wh_per_km, "car"
         else:
