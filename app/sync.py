@@ -929,7 +929,8 @@ def live_trip(
             round(_idle_adjusted_kwh(energy_kwh, idle_min, snap.get("out_temp")), 2)
             if energy_kwh > 0 and distance >= drive_min_km else None
         ),
-        "wh_per_km": round(energy_kwh * 1000.0 / distance) if energy_kwh > 0 and distance >= drive_min_km else None,
+        # One decimal, as the car's own Current Drive card shows it.
+        "wh_per_km": round(energy_kwh * 1000.0 / distance, 1) if energy_kwh > 0 and distance >= drive_min_km else None,
         "driving_wh_per_km": (
             _subtract_idle_energy(energy_kwh, distance, idle_min, snap.get("out_temp"))
             if energy_kwh > 0 and distance >= drive_min_km else None

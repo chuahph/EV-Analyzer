@@ -14000,7 +14000,7 @@ def test_per_trip_wh_per_km_is_calibrated_to_the_car_once_readings_agree():
             body = client.get("/api/summary?days=365").json()
             trip = body["driving"]["recent_trips"][0]
             assert trip["wh_per_km_measured"] is not None
-            assert trip["wh_per_km"] == round(trip["wh_per_km_measured"] * cal["factor"])
+            assert trip["wh_per_km"] == round(trip["wh_per_km_measured"] * cal["factor"], 1)
 
             # Live takes it from memory, no database read.
             vin = "CALIB0000000001"
@@ -14014,7 +14014,7 @@ def test_per_trip_wh_per_km_is_calibrated_to_the_car_once_readings_agree():
             routes_mod._live_mem_fold(vin, at(60), {"Gear": "ShiftStateD", "VehicleSpeed": 30.0 / mi,
                                                     "Odometer": 102.0 / mi, "EnergyRemaining": 59.66})
             live = client.get(f"/api/live?vin={vin}&capacity_kwh=68.3").json()["trip"]
-            assert live["wh_per_km"] == round(live["wh_per_km_measured"] * cal["factor"])
+            assert live["wh_per_km"] == round(live["wh_per_km_measured"] * cal["factor"], 1)
             routes_mod._LIVE_MEM.pop(vin, None)
 
             with SessionLocal() as s:

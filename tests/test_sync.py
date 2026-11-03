@@ -187,7 +187,7 @@ def test_live_trip_energy_from_the_pack_reading_not_stale_range():
            "energy_kwh": 56.80}
     lt = live_trip(trip, now, capacity_kwh=75.0)
     assert lt["energy_kwh"] == 0.6
-    assert lt["wh_per_km"] == 158                  # 0.6 kWh over 3.8 km
+    assert lt["wh_per_km"] == 157.9                # 0.6 kWh over 3.8 km, one decimal as the car shows it
 
 
 def test_live_trip_km_per_soc_from_energy_on_short_drive():

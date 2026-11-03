@@ -9099,13 +9099,13 @@ def _whkm_calibration_refresh(session: Session) -> dict:
     return out
 
 
-def _whkm_calibrated(whkm):
-    """A single trip's Wh/km as the car's card would show it, or as measured
-    when there is no agreed factor."""
+def _whkm_calibrated(whkm, digits: int = 1):
+    """A single trip's Wh/km as the car's card would show it (to one decimal,
+    as the card does), or as measured when there is no agreed factor."""
     f = _WHKM_CAL.get("factor")
     if whkm is None or not f:
         return whkm
-    return round(float(whkm) * f)
+    return round(float(whkm) * f, digits)
 
 
 @router.get("/whkm-calibration")
@@ -16576,7 +16576,7 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     if trip and go and moving_now and go.get("_od") and go.get("odo_km") is not None:
         dist = go["_od"][0] - float(go["odo_km"])
         if dist >= max(get_settings().drive_min_km, 0.1) and go["_od"][1] > 0:
-            trip["wh_per_km"] = round(go["_od"][1] * 1000.0 / dist)
+            trip["wh_per_km"] = round(go["_od"][1] * 1000.0 / dist, 1)
             trip["driving_wh_per_km"] = trip["wh_per_km"]
     if trip and go and go.get("_p"):
         trip["regen_kwh"] = round(float(go.get("e_regen") or 0.0), 2)
