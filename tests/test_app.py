@@ -13955,3 +13955,71 @@ def test_a_saved_trip_takes_lives_power_summed_energy_for_the_same_drive():
         routes_mod._apply_shadow_to_drive(row, shadow, None)
         assert row.energy_used_kwh == 1.56            # without Live, the stored figure
     routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_per_trip_wh_per_km_is_calibrated_to_the_car_once_readings_agree():
+    """3 November, the owner's call: Live and saved trips read 1-2% above the
+    car's Current Drive card. Five or more car readings that agree set a
+    factor; it moves a single trip's Wh/km (Live and Recent Trips), keeps the
+    measured figure beside it, and is never learned from scattered readings."""
+    from app import state
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+    from app.models import Drive
+
+    settings = get_settings()
+    old = settings.app_passcode
+    settings.app_passcode = ""
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as s:
+                state.put(s, state.CAR_READINGS_KEY, "[]")
+                drives = (s.query(Drive).filter(Drive.distance_km >= 4, Drive.energy_used_kwh > 0)
+                          .order_by(Drive.start_time.desc()).limit(6).all())
+                assert len(drives) == 6
+                rows = [(d.id, d.distance_km, d.energy_used_kwh) for d in drives]
+                s.commit()
+
+            def add(ratio_for):
+                chunks = []
+                for i, (did, km, kwh) in enumerate(rows):
+                    whkm = kwh * 1000.0 / km * ratio_for(i)
+                    pct = whkm * km / 1000.0 / 68.3 * 100.0
+                    chunks.append(f"{did}:{km}:{pct:.3f}:{whkm:.2f}")
+                return client.get("/api/add-car-reading", params={"readings": ",".join(chunks)}).json()
+
+            # Scattered: no factor.
+            r = add(lambda i: (0.90, 1.08)[i % 2])
+            assert r["whkm_calibration"]["factor"] is None
+            # Agreeing at 0.978: applied.
+            r = add(lambda i: 0.978 + (0.002 if i % 2 else -0.002))
+            assert r["whkm_calibration"]["factor"] == pytest.approx(0.978, abs=0.003)
+            cal = client.get("/api/whkm-calibration").json()
+            assert cal["applied"] is True and cal["n"] == 6
+
+            body = client.get("/api/summary?days=365").json()
+            trip = body["driving"]["recent_trips"][0]
+            assert trip["wh_per_km_measured"] is not None
+            assert trip["wh_per_km"] == round(trip["wh_per_km_measured"] * cal["factor"])
+
+            # Live takes it from memory, no database read.
+            vin = "CALIB0000000001"
+            routes_mod._LIVE_MEM.pop(vin, None)
+            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+            t0 = _dtm.now(_tz.utc) - _td(seconds=120)
+            at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            mi = 1.609344
+            routes_mod._live_mem_fold(vin, at(0), {"Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+                                                   "Odometer": 100.0 / mi, "EnergyRemaining": 60.0})
+            routes_mod._live_mem_fold(vin, at(60), {"Gear": "ShiftStateD", "VehicleSpeed": 30.0 / mi,
+                                                    "Odometer": 102.0 / mi, "EnergyRemaining": 59.66})
+            live = client.get(f"/api/live?vin={vin}&capacity_kwh=68.3").json()["trip"]
+            assert live["wh_per_km"] == round(live["wh_per_km_measured"] * cal["factor"])
+            routes_mod._LIVE_MEM.pop(vin, None)
+
+            with SessionLocal() as s:
+                state.put(s, state.CAR_READINGS_KEY, "[]")
+                s.commit()
+            assert client.get("/api/whkm-calibration").json()["applied"] is False
+    finally:
+        settings.app_passcode = old

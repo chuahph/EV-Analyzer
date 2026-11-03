@@ -49,6 +49,11 @@ python scripts/build_site.py --out site   # → ./site (open site/index.html)
   both ends, pack power summed over most of it), the trip takes Live's
   power-summed energy instead, which is how the car's own trip meter counts
   and removes the ~0.03 kWh per trip that the stepped reading adds.
+  A single trip's Wh/km (Live and Recent Trips) is then calibrated to the
+  car's own Current Drive card once five or more car readings
+  (`/api/add-car-reading`) agree; the measured figure is kept beside it, and
+  totals over a period stay measured. `/api/whkm-calibration` shows the
+  factor in force.
 - **Polling (watchdog).** Kept for the three things a one-way stream cannot
   do: wake a car, prove it is reachable, and notice that the stream has
   stopped. It no longer writes history — `/api/health` reports

@@ -9052,6 +9052,71 @@ def add_park_reading(
     }
 
 
+# Per-trip Wh/km calibrated to the car's own Current Drive figure. The owner
+# asked for it (3 November): Live and saved trips read 1-2% above the car's
+# card (#3305 186 vs 183.8, #3308 171 vs 167.2), from the trip meter running
+# a little ahead of the odometer and the card's energy a little under the
+# pack's. Learned from the car readings (add-car-reading), applied only once
+# enough of them agree, and only to a single trip's Wh/km: totals over a
+# charge already match the car (since charge 176.0 against 176.2) and are
+# left measured. Kept in memory so the Live path never reads the database.
+WHKM_CAL_MIN_READINGS = 5
+WHKM_CAL_MIN_KM = 3.0          # shorter trips are mostly the car's 0.1 km rounding
+WHKM_CAL_MAX_SPREAD = 0.03     # interquartile range of the ratios: "they agree"
+WHKM_CAL_MAX_SHIFT = 0.06      # never more than 6% either way
+WHKM_CAL_RECENT = 15
+_WHKM_CAL: dict = {"factor": None, "n": 0, "spread": None, "loaded": False}
+
+
+def _whkm_calibration_refresh(session: Session) -> dict:
+    """Re-learn the factor from the saved car readings. Never raises."""
+    import json as _json
+    out = {"factor": None, "n": 0, "spread": None, "loaded": True}
+    try:
+        rows = _json.loads(state.get(session, state.CAR_READINGS_KEY) or "[]") or []
+        ratios = []
+        for r in sorted(rows, key=lambda r: str(r.get("at") or ""))[-WHKM_CAL_RECENT * 2:]:
+            d = session.get(Drive, int(r["drive_id"]))
+            if (d is None or getattr(d, "energy_estimated", False)
+                    or (d.distance_km or 0.0) < WHKM_CAL_MIN_KM or not d.energy_used_kwh
+                    or d.energy_used_kwh <= 0):
+                continue
+            app_whkm = d.energy_used_kwh * 1000.0 / d.distance_km
+            ratios.append(float(r["wh_per_km"]) / app_whkm)
+        ratios = ratios[-WHKM_CAL_RECENT:]
+        out["n"] = len(ratios)
+        if len(ratios) >= WHKM_CAL_MIN_READINGS:
+            q = sorted(ratios)
+            spread = percentile(q, 0.75) - percentile(q, 0.25)
+            out["spread"] = round(spread, 4)
+            mid = percentile(q, 0.5)
+            if spread <= WHKM_CAL_MAX_SPREAD and abs(mid - 1.0) <= WHKM_CAL_MAX_SHIFT \
+                    and abs(mid - 1.0) >= 0.003:
+                out["factor"] = round(mid, 4)
+    except Exception:   # noqa: BLE001 - uncalibrated is the safe answer
+        pass
+    _WHKM_CAL.update(out)
+    return out
+
+
+def _whkm_calibrated(whkm):
+    """A single trip's Wh/km as the car's card would show it, or as measured
+    when there is no agreed factor."""
+    f = _WHKM_CAL.get("factor")
+    if whkm is None or not f:
+        return whkm
+    return round(float(whkm) * f)
+
+
+@router.get("/whkm-calibration")
+def whkm_calibration(session: Session = Depends(get_session)):
+    """The per-trip Wh/km calibration in force, and the readings behind it."""
+    cal = _whkm_calibration_refresh(session)
+    return {**cal, "min_readings": WHKM_CAL_MIN_READINGS,
+            "max_spread": WHKM_CAL_MAX_SPREAD,
+            "applied": cal["factor"] is not None}
+
+
 @router.api_route("/add-car-reading", methods=["GET", "POST"])
 def add_car_reading(
     readings: str = Query(..., description="drive_id:km:pct:wh_per_km, comma-separated"),
@@ -9126,7 +9191,9 @@ def add_car_reading(
         added.append(drive_id)
     state.put(session, state.CAR_READINGS_KEY,
               _json.dumps(sorted(by_id.values(), key=lambda r: r["drive_id"])))
-    return {"added": added, "readings": len(by_id)}
+    cal = _whkm_calibration_refresh(session)
+    return {"added": added, "readings": len(by_id),
+            "whkm_calibration": {"factor": cal["factor"], "n": cal["n"]}}
 
 
 @router.get("/accuracy")
@@ -13441,6 +13508,13 @@ def summary(
             _hist("full_history", _full_history, session, vehicle.id)[0]),
         home_country=_home_country(session, vehicle.id))
     _mark("driving")
+    _whkm_calibration_refresh(session)
+    if _WHKM_CAL.get("factor"):
+        for row in (driving.get("recent_trips") or []) if isinstance(driving, dict) else []:
+            if row.get("wh_per_km") is not None and not row.get("wh_per_km_measured"):
+                row["wh_per_km_measured"] = row["wh_per_km"]
+                row["wh_per_km"] = _whkm_calibrated(row["wh_per_km"])
+                row["wh_per_km_calibration"] = _WHKM_CAL["factor"]
     # A since-charge window's own `charges` list is always empty by
     # definition (it starts right where last_charge ends, so no charge can
     # have happened "since" yet) — without this, Energy Charged/AC-DC
@@ -16506,6 +16580,10 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
             trip["driving_wh_per_km"] = trip["wh_per_km"]
     if trip and go and go.get("_p"):
         trip["regen_kwh"] = round(float(go.get("e_regen") or 0.0), 2)
+    if trip and _WHKM_CAL.get("factor") and trip.get("wh_per_km") is not None:
+        trip["wh_per_km_measured"] = trip["wh_per_km"]
+        trip["wh_per_km"] = _whkm_calibrated(trip["wh_per_km"])
+        trip["driving_wh_per_km"] = trip["wh_per_km"]
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "server_ts": round(time.time(), 1)}
 

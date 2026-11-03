@@ -6,7 +6,7 @@
  *   - navigations & data  -> network-first, fall back to cache when offline
  *   - other assets        -> cache-first, fall back to network
  */
-const CACHE = "ev-analyzer-v429"; // bump to invalidate cached assets on update
+const CACHE = "ev-analyzer-v430"; // bump to invalidate cached assets on update
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

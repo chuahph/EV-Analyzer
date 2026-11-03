@@ -1755,6 +1755,9 @@ function tripDiagnostics(t, ctx) {
       distance_km: t.distance_km, duration_min: t.duration_min,
       avg_speed_kmh: t.avg_speed_kmh, max_speed_kmh: t.max_speed_kmh,
       energy_kwh: t.energy_kwh, wh_per_km: t.wh_per_km,
+      // Set only when the per-trip calibration to the car is in force.
+      wh_per_km_measured: t.wh_per_km_measured,
+      wh_per_km_calibration: t.wh_per_km_calibration,
       driving_energy_kwh: t.driving_energy_kwh,
       driving_wh_per_km: t.driving_wh_per_km,
       soc_used_pct: t.soc_used_pct, eco_score: t.eco_score,
