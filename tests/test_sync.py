@@ -2695,11 +2695,12 @@ def test_a_park_whose_last_odometer_never_arrived_is_an_unconfirmed_end():
     this trip, split with the departure as a dark car park is."""
     from app.sync import advance_shadow, settle_shadow, snapshot_from_telemetry
 
-    def rec(ts, odo_mi, speed, gear="ShiftStateD", fresh=True):
+    def rec(ts, odo_mi, speed, gear="ShiftStateD", fresh=True, speed_fresh=True):
         s = snapshot_from_telemetry({"Odometer": odo_mi, "EnergyRemaining": 60.0 - ts / 1000.0,
                                      "Gear": gear, "VehicleSpeed": speed, "Soc": 80.0}, ts=ts)
         if fresh:
             s["odo_fresh"] = True
+        s["speed_fresh"] = speed_fresh
         return s
 
     for final_fresh in (False, True):
@@ -2717,6 +2718,19 @@ def test_a_park_whose_last_odometer_never_arrived_is_an_unconfirmed_end():
         trip = settle_shadow(shadow, 630 + 5500)
         assert trip is not None and trip["ended_on"] == "timeout"
         assert bool(trip.get("end_odo_unconfirmed")) is (not final_fresh)
+
+    # A good-signal park: the last odometer came with the last real movement,
+    # and the record bringing P carries the earlier speed only because the
+    # composite holds it. That is a confirmed end.
+    shadow = {}
+    advance_shadow(shadow, rec(0, 20000.0, 0.0, gear="ShiftStateP"))
+    odo = 20000.0
+    for t in range(10, 610, 10):
+        odo += 0.004
+        advance_shadow(shadow, rec(t, odo, 15.0, fresh=True))
+    advance_shadow(shadow, rec(615, odo, 15.0, gear="ShiftStateP", fresh=False, speed_fresh=False))
+    trip = settle_shadow(shadow, 615 + 5500)
+    assert trip is not None and not trip.get("end_odo_unconfirmed")
 
     # The gap at the next trip's start goes to the arrival, not all to the departure.
     prev = {"start_odo_km": 34000.972, "end_odo_km": 34007.652, "distance_km": 6.68,
@@ -2757,3 +2771,24 @@ def test_an_unconfirmed_end_seen_resting_by_a_poll_gives_the_gap_to_the_departur
     nxt2 = {**nxt, "start_odo_km": 34022.546, "distance_km": 13.069}
     recover_sleep_gap(prev2, nxt2, rested_odo_km=34022.4)
     assert prev2["end_odo_km"] == pytest.approx(34022.4, abs=0.001)
+
+
+def test_rising_energy_on_the_move_does_not_end_a_trip():
+    """A stale "Charging" state (the disconnect missed) and regen downhill
+    raise the pack's energy while the car moves; that is not a charge."""
+    from app.sync import advance_shadow, snapshot_from_telemetry
+
+    def rec(ts, odo_mi, energy, speed, gear="ShiftStateD"):
+        return snapshot_from_telemetry(
+            {"Odometer": odo_mi, "EnergyRemaining": energy, "Gear": gear,
+             "VehicleSpeed": speed, "Soc": 80.0,
+             "DetailedChargeState": "DetailedChargeStateCharging"}, ts=ts)
+
+    shadow: dict = {}
+    closed = []
+    for s in [rec(0, 20000.0, 55.0, 0.0, "ShiftStateP")] + [
+            rec(t, 20000.0 + t * 0.005, 55.0 + t * 0.002, 30.0) for t in range(10, 300, 10)]:
+        r = advance_shadow(shadow, s)
+        if r:
+            closed.append(r)
+    assert closed == [] and shadow.get("open")

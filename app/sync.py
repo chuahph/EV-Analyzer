@@ -1658,9 +1658,13 @@ def advance_shadow(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, An
     # lose the final odometer: 2 November, #3305 ended on P at 34007.652
     # while the car's own trip meter read 7.0 km, about 0.3 km further. Such
     # a trip's end is not confirmed, and recover_sleep_gap treats it so.
+    # Only a speed the car actually sent in this record counts: the composite
+    # carries the last one forward, and the record that brings the shift to P
+    # alone would otherwise mark every arrival unconfirmed (3 November, #3308
+    # at the Office, which then cost #3309 its departure).
     if snap.get("odo_fresh"):
         shadow["moved_since_odo"] = False
-    elif float(snap.get("speed_kmh") or 0.0) > ZERO_SPEED_KMH:
+    elif snap.get("speed_fresh") and float(snap.get("speed_kmh") or 0.0) > ZERO_SPEED_KMH:
         shadow["moved_since_odo"] = True
 
     if (not open_at and snap.get("odo_fresh")
@@ -1763,7 +1767,10 @@ def advance_shadow(shadow: dict[str, Any], snap: dict[str, Any]) -> dict[str, An
     # charge into the drive after it, 12:01 to 12:21. The charge added more
     # than the drive used, so the trip had no energy, and it began before the
     # charge ended, so it fell outside "since charge" altogether.
-    if open_at and snap.get("charging"):
+    # Standing still: charging cannot happen on the move, and a stale
+    # "Charging" state plus regen downhill must not end a real drive.
+    if (open_at and snap.get("charging")
+            and float(snap.get("speed_kmh") or 0.0) <= ZERO_SPEED_KMH):
         e0, e1 = open_at.get("energy_kwh"), snap.get("energy_kwh")
         if e0 is not None and e1 is not None and float(e1) - float(e0) > CHARGE_PROVES_KWH:
             moved = float(snap.get("odo_km") or 0.0) - float(open_at.get("odo_km") or 0.0)

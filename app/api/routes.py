@@ -4222,8 +4222,15 @@ def _arrival_tail_at(session: Session, trip: dict) -> float | None:
         lat, lon = trip.get("end_lat"), trip.get("end_lon")
         if lat is None or lon is None:
             return None
-        name = _place(f"{float(lat):.4f}, {float(lon):.4f}", session)
-        return _place_tail_km(session, name) if name else None
+        # Saved places only, by distance: this runs inside the ingest, and
+        # _place may go to the network geocoder for anywhere unsaved.
+        here = f"{float(lat):.4f}, {float(lon):.4f}"
+        inside = [(d, p) for p in session.scalars(select(Place)).all()
+                  for d in [haversine_km(here, f"{p.lat}, {p.lon}")]
+                  if d is not None and d <= float(p.radius_km or 0.15)]
+        if not inside:
+            return None
+        return _place_tail_km(session, min(inside, key=lambda x: x[0])[1].name)
     except Exception:   # noqa: BLE001
         return None
 
@@ -13370,6 +13377,11 @@ def summary(
         if open_trip and snap:
             live = sync_mod.live_trip(open_trip, snap, capacity_kwh, settings.drive_min_km)
             live["eta"] = _live_eta(session, snap, live, capacity_kwh)
+            # Shown like Live's (calibrated to the car's card); the ETA above
+            # works from the measured figure, which is what the pack spends.
+            if _WHKM_CAL.get("factor") and live.get("wh_per_km") is not None:
+                live["wh_per_km_measured"] = live["wh_per_km"]
+                live["wh_per_km"] = _whkm_calibrated(live["wh_per_km"])
             since = datetime.fromtimestamp(open_trip["ts"], sync_mod.MYT).replace(tzinfo=None)
             window_label = "current drive"
         else:
@@ -14798,6 +14810,11 @@ def _telemetry_ingest(payload: dict, session: Session):
             # previous arrival, not where the car stands now.
             if "Odometer" in reported and not stale:
                 snap["odo_fresh"] = True
+            # And the speed: the composite carries the last one forward, so a
+            # record that brings only the shift to P still reads the speed of
+            # a moment before (sync.advance_shadow, moved_since_odo).
+            if "VehicleSpeed" in reported and not stale:
+                snap["speed_fresh"] = True
             # Likewise the displayed %: the charge capacity measure pairs it
             # with the energy at the same record (sync.advance_charge).
             if "BatteryLevel" in reported and not stale:
@@ -16045,7 +16062,7 @@ LIVE_ENERGY_AGREE_KWH = 0.2      # and Live must agree with the stored figure wi
 LIVE_ENERGY_AGREE_FRAC = 0.15    # the larger of these
 
 
-def _live_finish(vin: str, car: dict, go: dict | None) -> None:
+def _live_finish(vin: str, car: dict, go: dict | None, last_ts: float | None = None) -> None:
     """Queue a finished Live drive's power-summed energy (caller holds the lock).
 
     Live adds up the pack's power second by second, the way the car's own
@@ -16062,7 +16079,8 @@ def _live_finish(vin: str, car: dict, go: dict | None) -> None:
         tick = go.get("_od")
         if not tick:
             return
-        end = {"ts": float(car.get("_t") or 0.0), "odo_km": tick[0], "e": tick[1],
+        # The last record of the drive, not one arriving after a silence.
+        end = {"ts": float(last_ts or car.get("_t") or 0.0), "odo_km": tick[0], "e": tick[1],
                "secs": float(go.get("e_secs") or 0.0)}
     try:
         span = float(end["ts"]) - float(go["ts"])
@@ -16115,6 +16133,10 @@ def _live_energy_for(t: dict, live: list[dict]) -> float | None:
     except (KeyError, TypeError, ValueError):
         return None
     if e_stored <= 0 or s1 - s0 <= 0.05:
+        return None
+    # Distance recovered at either end was never seen by Live either, and its
+    # energy is in the stored figure: Live's would drop it.
+    if any(float(t.get(k) or 0.0) > 0 for k in ("recovered_km", "start_recovered_km")):
         return None
     for r in live:
         try:
@@ -16346,7 +16368,7 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
         # stopped. Without this a car that powered down with no closing
         # reading stitched every later drive of the day onto it: 22 km and
         # 329 min on the page against the car's own 4.5 km and 19 min.
-        _live_finish(vin, car, go)
+        _live_finish(vin, car, go, last_ts=prev_t)
         car.pop("_go", None)
         car.pop("_stop", None)
         car["_park"] = {k: snap.get(k) for k in _LIVE_KEYS}

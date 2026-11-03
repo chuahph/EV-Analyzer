@@ -13941,6 +13941,9 @@ def test_a_saved_trip_takes_lives_power_summed_energy_for_the_same_drive():
     assert routes_mod._live_energy_for(trip, [{**rec, "cover": 0.5}]) is None
     assert routes_mod._live_energy_for({**trip, "energy_kwh": 2.5}, [rec]) is None
     assert routes_mod._live_energy_for({**trip, "energy_kwh": -3.0}, [rec]) is None
+    # Recovered ground (and its kWh) was never Live's: the stored figure stays.
+    assert routes_mod._live_energy_for({**trip, "recovered_km": 0.1}, [rec]) is None
+    assert routes_mod._live_energy_for({**trip, "start_recovered_km": 0.05}, [rec]) is None
 
     with TestClient(app):
         saved = routes_mod._live_drives_flush()
