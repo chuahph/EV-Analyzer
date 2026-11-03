@@ -614,7 +614,8 @@ def test_the_parked_readings_reach_the_sleep_gap_recovery():
         trips = [prev]
 
         paid = routes._append_trip(trips, nxt, session=sess)
-        assert paid is False, "paid the arriving trip for the departure's head"
+        # The ground is the departure's: handed to it, never to the arrival.
+        assert prev.get("recovered_km") is None, "paid the arriving trip for the departure's head"
         assert prev["end_odo_km"] == pytest.approx(31405.714)
         assert prev["distance_km"] == pytest.approx(12.034)
 

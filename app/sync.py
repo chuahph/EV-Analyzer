@@ -2159,6 +2159,8 @@ SHADOW_TAIL_MAX_KM = 0.6
 # 0.101 it was credited took it 0.1 over while 3178 stayed short. The car
 # usually reports within metres of moving off; what is lost there is small.
 DEPARTURE_BLIND_KM = 0.05
+# What a polled odometer is rounded to.
+POLL_ODO_STEP_KM = 0.1
 # The least an unseen ARRIVAL stretch is priced at. It is the crawl through a
 # carpark gate and down its ramps, with the climate still running — not more
 # of the road the trip averaged over. Priced at the trip's own Wh/km, an
@@ -2786,6 +2788,13 @@ def recover_sleep_gap(prev: dict[str, Any], nxt: dict[str, Any],
     seen = _parked_before(prev, nxt, float(end_odo), float(next_start))
     if seen is not None:
         boundary, credit_departure = seen, True
+    elif rested_odo_km is not None and float(rested_odo_km) <= float(end_odo) + POLL_ODO_STEP_KM / 2:
+        # A poll saw the car resting where the arrival ended, to its 0.1 km:
+        # the arrival was complete, and the whole gap is the departure's.
+        # 3 November: #3308 ended unconfirmed at 34022.115, a poll read
+        # 34022.1, and #3309 first reported at 34022.246; the 0.131 km went
+        # to neither trip until this, against the car's own 13.5 km for #3309.
+        boundary, credit_departure = float(end_odo), True
     elif rested_odo_km is not None:
         # A polled reading, rounded to 0.1 km: good enough to stop an arrival
         # being over-credited, too coarse to hand metres to the departure.

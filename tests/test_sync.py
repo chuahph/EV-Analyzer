@@ -1329,8 +1329,13 @@ def test_a_departure_head_is_not_paid_to_the_arriving_trip():
             "ended_on": "stream_lost"}
     nxt = {"start_odo_km": 31405.922}
 
-    # Seen resting at its own recorded stop: there is nothing to pay back.
-    assert recover_sleep_gap(dict(prev), nxt, rested_odo_km=31405.714) is False
+    # Seen resting at its own recorded stop: nothing to pay back to the
+    # arrival. The ground is 741's departure, handed over to it.
+    rested = dict(prev)
+    recover_sleep_gap(rested, dict(nxt), rested_odo_km=31405.714)
+    assert rested["end_odo_km"] == 31405.714
+    assert rested.get("recovered_km") is None
+    assert rested["handover_to_odo_km"] == 31405.922
 
     # Seen resting PART of the way along: pay back only as far as the evidence
     # goes, never all the way to where the next trip was first noticed.
@@ -2731,3 +2736,24 @@ def test_a_park_whose_last_odometer_never_arrived_is_an_unconfirmed_end():
     conf = {**prev, "end_odo_km": 34007.652, "end_odo_unconfirmed": None}
     recover_sleep_gap(conf, {"start_odo_km": 34007.7})
     assert conf["end_odo_km"] == 34007.652
+
+
+def test_an_unconfirmed_end_seen_resting_by_a_poll_gives_the_gap_to_the_departure():
+    """3 November: #3308 ended unconfirmed at 34022.115, a poll saw the car at
+    34022.1 (to 0.1 km), and #3309 first reported at 34022.246. The arrival
+    was complete; the 0.131 km is #3309's departure (the car read 13.5 km for
+    it) and must not go to neither trip."""
+    prev = {"start_odo_km": 34013.102, "end_odo_km": 34022.115, "distance_km": 9.013,
+            "energy_kwh": 1.54, "wh_per_km": 170.9, "ended_on": "bms",
+            "end_odo_unconfirmed": True}
+    nxt = {"start_odo_km": 34022.246, "end_odo_km": 34035.615, "distance_km": 13.369,
+           "energy_kwh": 1.71, "wh_per_km": 127.9}
+    assert recover_sleep_gap(prev, nxt, rested_odo_km=34022.1) is True
+    assert prev["end_odo_km"] == 34022.115
+    assert nxt["start_odo_km"] == pytest.approx(34022.115, abs=0.001)
+    assert nxt["distance_km"] == pytest.approx(13.5, abs=0.001)
+    # A poll that saw it further on still bounds the arrival, as before.
+    prev2 = {**prev, "end_odo_km": 34022.115}
+    nxt2 = {**nxt, "start_odo_km": 34022.546, "distance_km": 13.069}
+    recover_sleep_gap(prev2, nxt2, rested_odo_km=34022.4)
+    assert prev2["end_odo_km"] == pytest.approx(34022.4, abs=0.001)
