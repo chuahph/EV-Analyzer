@@ -3221,7 +3221,13 @@ main > .card { max-width: 100%; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(1) { --ac: #22d3ee; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(2) { --ac: #a78bfa; }
 .gl-rmix-col:last-child .gl-hud-stat:nth-child(3) { --ac: #f59e0b; }
-.gl-ladder .gl-ltop { font-size: clamp(14px, calc(4.4 * var(--gh)), 21px); }
+.gl-ladder .gl-ltop { font-size: clamp(14px, calc(4.4 * var(--gh)), 21px); line-height: 1.05; }
+/* The unit under the figure: with one decimal ("160.7") the figure and unit
+   on one line were wider than the bar and the unit was cut ("Wh/"). */
+.glance .gl-ladder .gl-ltop small { display: block; margin: 1px 0 0; line-height: 1; }
+/* The centre line between the top and bottom halves of the side bars: wider
+   than the column and set apart, so the two halves read as separate. */
+.gl-ladder .gl-led-segs i.mid { flex: 0 0 5px; margin: 3px -6px; border-radius: 3px; box-shadow: 0 0 10px #fff; }
 
 /* Wh/km as a bar of LED dots (Cockpit): low on the left, high on the right. */
 .gl-whbar { flex: 1 1 auto; min-height: 14px; display: flex; gap: 2px; align-items: stretch; margin-top: 4px; }

@@ -13318,7 +13318,7 @@ def summary(
         # Only when due (see _promotion_sweep_due): a trip _settle_shadows
         # just closed moved the trips stamp, so it is promoted on this very
         # load, which is what this block exists to guarantee.
-        if _promotion_sweep_due(session):
+        if _promotion_sweep_due(session) or _LIVE_DONE:
             _repair_after_new_trips(
                 session,
                 _promote_shadow_trips(session, apply=True,
@@ -15127,7 +15127,12 @@ def _telemetry_ingest(payload: dict, session: Session):
     # sweep still runs from /api/sync and summary().
     retry = (bool(state.get(session, state.PROMOTE_FAIL_KEY))
              or state.get(session, state.PROMOTE_REFUSED_KEY) == "1")
-    if trips_written or retry:
+    # Or when Live has just finished a drive: its power-summed energy goes to
+    # the saved trip on the next promotion, and Live usually finishes a little
+    # after the stored trip closed, so waiting for the next trip or the
+    # six-hourly sweep left the trip on its stored figure for hours
+    # (4 November, #3313: 1.54 kWh saved against Live's and the car's 1.46).
+    if trips_written or retry or _LIVE_DONE:
         try:
             # Only the rows actually written. len() counted a refusal as a
             # promotion, so the one number that says the journeys did NOT

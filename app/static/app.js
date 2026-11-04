@@ -5179,7 +5179,9 @@ function glKeyBar(c) {
     nw.out_temp != null ? `<span class="gl-kb gl-opt"><em>Outside</em><b>${c.n(nw.out_temp, 0)}°C</b></span>` : "",
     t && t.eta ? `<span class="gl-kb gl-opt"><em>ETA ${c.h(t.eta.place)}</em><b>${c.n(t.eta.eta_min)} min</b></span>` : "",
     nw.climate_on != null ? `<span class="gl-kb gl-opt"><em>Climate</em><b>${nw.climate_on ? "on" : "off"}</b></span>` : "",
-    t && t.regen_kwh != null && c.skin !== 2 ? `<span class="gl-kb gl-opt"><em>Regen</em><b>${c.n(t.regen_kwh, 2)} kWh</b></span>` : "",
+    // Not on designs that already show it (Energy's tile, Dial's and Round
+    // Mix's side bars): the same figure twice on one screen.
+    t && t.regen_kwh != null && ![2, 5, 8].includes(c.skin) ? `<span class="gl-kb gl-opt"><em>Regen</em><b>${c.n(t.regen_kwh, 2)} kWh</b></span>` : "",
   ];
   return `<div class="gl-keybar">${chips.join("")}</div>`;
 }

@@ -45,8 +45,10 @@ def _clear_full_history_cache():
     routes._PARKED_READINGS_ROWS.clear()
     routes._HEALTH_CHECKS_CACHE = None
     routes._WHKM_CAL.update(factor=None, n=0, spread=None, loaded=False)
+    routes._LIVE_DONE.clear()
     yield
     routes._WHKM_CAL.update(factor=None, n=0, spread=None, loaded=False)
+    routes._LIVE_DONE.clear()
     routes._FULL_HISTORY_CACHE.clear()
     routes._PARKED_READINGS_CACHE.clear()
     routes._PARKED_READINGS_ROWS.clear()
