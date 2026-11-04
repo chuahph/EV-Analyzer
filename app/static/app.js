@@ -5182,6 +5182,10 @@ function glKeyBar(c) {
     // Not on designs that already show it (Energy's tile, Dial's and Round
     // Mix's side bars): the same figure twice on one screen.
     t && t.regen_kwh != null && ![2, 5, 8].includes(c.skin) ? `<span class="gl-kb gl-opt"><em>Regen</em><b>${c.n(t.regen_kwh, 2)} kWh</b></span>` : "",
+    // In the Regen chip's place on those designs: what this drive has cost
+    // so far, which none of them shows anywhere else.
+    t && t.energy_kwh != null && c.costRate != null && [2, 5, 8].includes(c.skin)
+      ? `<span class="gl-kb gl-opt"><em>Cost</em><b>${c.h(c.cur)} ${c.n(t.energy_kwh * c.costRate, 2, true)}</b></span>` : "",
   ];
   return `<div class="gl-keybar">${chips.join("")}</div>`;
 }
@@ -5797,6 +5801,14 @@ function renderGlance(d) {
           usedPct: t ? Math.max(+t.soc_used || 0, lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh && t.energy_kwh > 0
             ? t.energy_kwh / lastData.vehicle.usable_capacity_kwh * 100 : 0) : null,
           packKwh: lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh,
+          // What a kWh out of the pack cost at the last charge, the charger's
+          // loss included (RM 30.44 for 24.56 kWh at QBM: 1.24), as the trip
+          // list prices a trip.
+          costRate: (() => {
+            const lc = (lastData && lastData.last_charge) || {};
+            return lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null;
+          })(),
+          cur: (lastData && lastData.currency) || "RM",
         }), foot };
       }
       if (!t) {
