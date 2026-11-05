@@ -5502,7 +5502,7 @@ function glAltPage(skin, c) {
       <div class="gl-hud-speed" style="color:${col}">${num}<small>km/h</small></div>
       <div class="gl-hud-pw">${bar}<span>${kw != null && kw < 0 ? "regen " : ""}${kwShown} kW</span></div>
       <div class="gl-hud-row">
-        ${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}
+        ${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}
         ${stat("avg km/h", avg != null ? n(avg) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}
       </div></div>`;
   }
@@ -5530,7 +5530,7 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-night">
       <div class="gl-night-top"><b>${nw.shift || "P"}</b><span>${pct != null ? n(pct, 1, true) + "%" : ""}</span></div>
       <div class="gl-night-speed" style="color:${soft}">${num}</div>
-      <div class="gl-night-row"><span>${dist != null ? n(dist, 1) : "—"} km</span><span>${mins != null ? n(mins) : "—"} min</span><span>${whk != null ? n(whk, 1, true) : "—"} Wh/km</span></div>
+      <div class="gl-night-row"><span>${dist != null ? n(dist, 1, true) : "—"} km</span><span>${mins != null ? n(mins) : "—"} min</span><span>${whk != null ? n(whk, 1, true) : "—"} Wh/km</span></div>
     </div>`;
   }
   if (skin === 5) {
@@ -5591,7 +5591,7 @@ function glAltPage(skin, c) {
         <div class="gl-dm-odo"><span>ODO KM</span><div class="gl-drum big">${(odoDigits.length ? odoDigits : ["—"]).map((d) => `<b>${d}</b>`).join("")}</div></div>
       </div>
       <div class="gl-dm-grid">
-        ${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}
+        ${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}
         ${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}
         ${stat("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}
       </div></div>`;
@@ -5639,7 +5639,7 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-lines">
       <div class="gl-ln-mid">${streak(false)}<div class="gl-ln-num" style="--c:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>${streak(true)}</div>
       <div class="gl-ln-row">
-        ${cell("km", dist != null ? n(dist, 1) : "—")}${cell("min", mins != null ? n(mins) : "—")}${cell("avg km/h", avg != null ? n(avg) : "—")}
+        ${cell("km", dist != null ? n(dist, 1, true) : "—")}${cell("min", mins != null ? n(mins) : "—")}${cell("avg km/h", avg != null ? n(avg) : "—")}
         ${cell("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}${cell(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}
         ${cell("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}
       </div></div>`;
@@ -5670,7 +5670,7 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-graph">
       ${chart("Speed · last 3 min", num, "km/h", sLine || '<text x="150" y="50" text-anchor="middle" font-size="9" fill="#6f7f94">building the line…</text>', col)}
       ${chart("Power · last 3 min", kwShown, "kW", `<line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="#cfe8ff" stroke-width=".8" stroke-dasharray="5 4" opacity=".6"/>${pLine}` , kw != null && kw < 0 ? "#2ee86a" : "#22d3ee")}
-      <div class="gl-gr-row">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}${stat("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
+      <div class="gl-gr-row">${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}${stat("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}</div>
     </div>`;
   }
   if (skin === 8) {
@@ -5678,7 +5678,7 @@ function glAltPage(skin, c) {
     // on its left and power and battery on its right.
     const round = glGauge3D(spd, col, nw, odo, false);
     return `<div class="gl-page gl-alt gl-rmix">
-      <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
+      <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
       <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}<span class="gl-gearrow">${["P", "R", "N", "D"].map((x) => `<b class="${nw.shift === x ? "on" : ""}">${x}</b>`).join("")}</span></div>
       <div class="gl-rmix-col">${stat("batt used %", c.usedPct != null ? n(c.usedPct, 1) : "—")}
         ${stat("net used kWh", t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—")}
@@ -5692,7 +5692,7 @@ function glAltPage(skin, c) {
         ${stat("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}${stat("range km", range != null ? n(range) : "—")}</div>
       <div class="gl-hud-speed" style="color:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>
       <div class="gl-stk-bot"><div class="gl-stk-trace">${c.trace}</div>
-        <div class="gl-stk-trip">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}</div></div>
+        <div class="gl-stk-trip">${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}</div></div>
     </div>`;
   }
   if (skin === 7) {
@@ -5702,14 +5702,14 @@ function glAltPage(skin, c) {
       <div class="gl-mix-pw"><div class="gl-mix-kw ${kw != null && kw < 0 ? "regen" : ""}"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span><strong>${kwShown}<small>kW</small></strong></div>${bar}
         <div class="gl-mix-batt"><span>Battery</span><strong>${pct != null ? n(pct, 1, true) : "—"}%</strong><em>${range != null ? n(range) + " km" : ""}</em></div></div>
       <div class="gl-mix-trace">${c.trace}</div>
-      <div class="gl-mix-trip">${stat("km", dist != null ? n(dist, 1) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg", avg != null ? n(avg) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}</div>
+      <div class="gl-mix-trip">${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg", avg != null ? n(avg) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}</div>
     </div>`;
   }
   const tile = (label, value, tone = "") => `<div class="gl-big ${tone}"><span>${glIcon(label)}${label}</span><strong>${value}</strong></div>`;
   return `<div class="gl-page gl-alt gl-bigs">
     <div class="gl-bigs-h"><span>${t ? "Trip computer" : lt ? "Last trip" : "Trip"}</span><em>${sub}</em></div>
     <div class="gl-bigs-g">
-      ${tile("km", dist != null ? n(dist, 1) : "—")}${tile("min", mins != null ? n(mins) : "—")}
+      ${tile("km", dist != null ? n(dist, 1, true) : "—")}${tile("min", mins != null ? n(mins) : "—")}
       ${tile("avg km/h", avg != null ? n(avg) : "—")}${tile("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}
       ${tile("net used kWh", t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—")}${tile("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}
     </div></div>`;
@@ -5753,7 +5753,7 @@ function renderGlance(d) {
   const scoreColour = (x) => (x == null ? "var(--muted)" : x >= 80 ? "var(--green)" : x >= 60 ? "var(--accent-2)" : "var(--amber)");
   const lastLine = lt ? `<div class="gl-msg"><span class="gl-msg-l">Last trip${lt.id != null ? ` #${lt.id}` : ""}</span>
       <span>${h(lt.route || tripWhen(lt.start_time))}</span>
-      <strong>${n(lt.distance_km, 1)} km</strong><strong>${n(lt.wh_per_km, 1, true)} Wh/km</strong><strong>${n(lt.duration_min)} min</strong>
+      <strong>${n(lt.distance_km, 1, true)} km</strong><strong>${n(lt.wh_per_km, 1, true)} Wh/km</strong><strong>${n(lt.duration_min)} min</strong>
       ${lt.efficiency_band ? `<span class="gl-chip ${bandTone(lt.efficiency_band)}">${h(lt.efficiency_band)}</span>` : ""}</div>` : "";
 
   const pages = {
@@ -5838,7 +5838,7 @@ function renderGlance(d) {
           lt ? `<div class="gl-trip">
             <div class="gl-trip-h">Last trip<em>${lt.id != null ? "#" + lt.id + " · " : ""}${h(tripWhen(lt.start_time).split(" ").pop())}</em></div>
             <div class="gl-rts">
-              ${tile("dist", "km", n(lt.distance_km, 1))}
+              ${tile("dist", "km", n(lt.distance_km, 1, true))}
               ${tile("time", "min", n(lt.duration_min))}
               ${tile("speed", "Avg km/h", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—")}
               ${tile("whkm", "Wh/km", n(lt.wh_per_km, 1, true), ltTone)}
@@ -5892,7 +5892,7 @@ function renderGlance(d) {
         `<div class="gl-trip">
           <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
           <div class="gl-rts">
-            ${tile("dist", "km", n(t.distance_km, 1))}
+            ${tile("dist", "km", n(t.distance_km, 1, true))}
             ${tile("time", "min", n(t.duration_min))}
             ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
             ${tile("speed", "Max km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—", "")}
