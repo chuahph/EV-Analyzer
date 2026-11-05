@@ -1601,7 +1601,7 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
 .mx-bars { display: flex; flex-direction: column; gap: .1rem; }
 .mx-bar { display: flex; align-items: center; gap: .5rem; }
 .mx-bar-code {
-  width: 2.1rem; flex: none; font-size: .78rem; font-weight: 700;
+  width: 2.1rem; flex: none; font-size: .78rem; font-weight: 700; line-height: 1.15;
   color: var(--accent-2); letter-spacing: .04em;
 }
 .mx-bar-track {

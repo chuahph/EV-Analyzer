@@ -2678,7 +2678,7 @@ function renderMatrixSummary(d) {
     ${battFoot}
     ${bars.length ? `<div class="mx-bars">${bars.map((b) => `
       <div class="mx-bar${b.parked ? " is-parked" : ""}">
-        <span class="mx-bar-code">${b.code}</span>
+        <span class="mx-bar-code">${/^[A-Z]{4}$/.test(b.code) ? `${b.code.slice(0, 2)}<br>${b.code.slice(2)}` : b.code}</span>
         <span class="mx-bar-track"><span class="mx-bar-fill" style="width:${Math.max(b.pct / top * 100, 2)}%"></span></span>
         <span class="mx-bar-pct">${num(b.pct, 1)}%</span>
       </div>
