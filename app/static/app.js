@@ -5576,7 +5576,7 @@ function glAltPage(skin, c) {
       </div>
       <div class="gl-rng-mid">${glBatteryShape(shown, shown < 20 ? "#ff6b70" : "var(--green)", pct != null ? n(pct, 1, true) + "%" : "—", "battery now")}</div>
       <div class="gl-rng-side">
-        <div class="gl-big"><span>${glIcon("batt")}Used ${t ? "this drive" : "last trip"}</span><strong>${c.usedPct != null ? n(c.usedPct, 1) : "—"}<small>%</small></strong></div>
+        <div class="gl-big"><span>${glIcon("batt")}Used ${t ? "this drive" : "last trip"}</span><strong>${c.usedPct != null ? n(c.usedPct, 2, true) : "—"}<small>%</small></strong></div>
         <div class="gl-big"><span>${glIcon("power")}Net used kWh</span><strong>${t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—"}</strong></div>
       </div>
     </div>`;
@@ -5680,7 +5680,7 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-rmix">
       <div class="gl-rmix-col">${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}</div>
       <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}<span class="gl-gearrow">${["P", "R", "N", "D"].map((x) => `<b class="${nw.shift === x ? "on" : ""}">${x}</b>`).join("")}</span></div>
-      <div class="gl-rmix-col">${stat("batt used %", c.usedPct != null ? n(c.usedPct, 1) : "—")}
+      <div class="gl-rmix-col">${stat("batt used %", c.usedPct != null ? n(c.usedPct, 2, true) : "—")}
         ${stat("net used kWh", t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—")}
         ${stat("top km/h", t && t.max_speed_kmh != null ? n(t.max_speed_kmh) : lt && lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—")}</div>
     </div>`;
@@ -5871,7 +5871,7 @@ function renderGlance(d) {
           <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
           <div class="gl-minis">
             <div class="gl-mini"><span data-short="Batt">Batt used</span>
-              <div><strong>${n(usedPct0, 1)}<small>%</small></strong>
+              <div><strong>${n(usedPct0, 2, true)}<small>%</small></strong>
               <em>${t.regen_kwh != null ? `regen ${n(t.regen_kwh, 2)}` : ""}</em></div></div>
             <div class="gl-mini regen"><span data-short="Net use">Net use</span>
               <div><strong>${t.energy_kwh != null ? n(t.energy_kwh, 2) : "—"}<small>kWh</small></strong>
@@ -5885,7 +5885,7 @@ function renderGlance(d) {
       const battBar = `<div class="gl-battbar">
           <div class="gl-battbar-top"><span>Battery${nw.range_km != null ? `<em class="gl-rated" data-opt="2">rated ${n(nw.range_km)}<i data-opt="1"> km</i></em>` : ""}</span><strong>${pct == null ? "—" : n(pct, 1, true)}<small>%</small></strong></div>
           <div class="gl-battbar-cell"><i style="width:${pct ?? 0}%;background:${(pct ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div>
-          <div class="gl-power-sub">used ${n(usedPct, 1)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
+          <div class="gl-power-sub">used ${n(usedPct, 2, true)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       const odoNow = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
       return page(

@@ -922,7 +922,8 @@ def live_trip(
         "max_speed_kmh": round(observed_max, 1),
         "start_soc": open_trip.get("soc"),
         "soc": snap.get("soc"),
-        "soc_used": round(soc_used, 1),
+        # Two decimals: Live shows battery used like its net kWh (2.24).
+        "soc_used": round(soc_used, 2),
         "km_per_soc": round(distance / soc_eff, 1) if soc_eff >= 0.2 and distance else None,
         "energy_kwh": round(energy_kwh, 2),
         "driving_energy_kwh": (
