@@ -16448,7 +16448,7 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     if go is not None and raw is not None and car.get("_sign"):
         # The drive's energy as the pack delivered it, summed second by second
         # (regen counted back in, a wait in P included, as the car counts
-        # it). Gaps longer than 10 s are not bridged.
+        # it). Longer gaps are bridged below.
         kw = raw if car["_sign"] > 0 else -raw
         last = go.get("_p")
         if last is None and go.get("e_int") is None:
@@ -16461,7 +16461,28 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             if last[1] < 0:
                 # Regen on its own as well: the energy braking put back.
                 go["e_regen"] = float(go.get("e_regen") or 0.0) - last[1] * (stamp - last[0]) / 3600.0
+        elif last and stamp - last[0] > 10.0:
+            # A gap in the power readings (weak signal): bridged, not dropped.
+            # 5 November, #3317: Live read 98.8 Wh/km against the car's 113.7
+            # after the signal faded, every unbridged gap's energy missing.
+            # The pack's own reading across the gap where it moved, else the
+            # mean of the power either side for a gap of up to two minutes.
+            gap = stamp - last[0]
+            pe, e_now = go.get("_pe"), snap.get("energy_kwh")
+            bridged = None
+            if pe is not None and e_now is not None and "EnergyRemaining" in fields:
+                # The pack's drop since its last reading, less what the power
+                # already counted since that reading: the part nobody saw.
+                bridged = max((pe[0] - float(e_now)) - (float(go.get("e_int") or 0.0) - pe[1]), 0.0)
+            if not bridged and gap <= 120.0:
+                bridged = max((last[1] + kw) / 2.0, 0.0) * gap / 3600.0
+            if bridged is not None:
+                go["e_int"] = float(go.get("e_int") or 0.0) + bridged
+                go["e_secs"] = float(go.get("e_secs") or 0.0) + gap
         go["_p"] = (stamp, kw)
+        if "EnergyRemaining" in fields and snap.get("energy_kwh") is not None:
+            # A fresh pack reading, paired with the power total at that moment.
+            go["_pe"] = (float(snap["energy_kwh"]), float(go.get("e_int") or 0.0))
     # Wh/km is held at the last odometer tick: energy now over distance as of
     # the tick would saw-tooth, because energy moves every second and the
     # distance only when the odometer does. Energy and distance as they stood
