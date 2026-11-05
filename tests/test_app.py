@@ -14055,3 +14055,22 @@ def test_live_bridges_a_gap_in_the_power_readings():
     # 159 s at 9 kW: 0.3975 kWh. Without the bridge it was 40 s short (0.2975).
     assert go["e_int"] == pytest.approx(0.3975, abs=0.012)
     routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_a_dry_run_promotion_leaves_the_live_queue_for_the_real_one():
+    """The health check runs a dry-run promotion every few minutes. Emptying
+    Live's finished-drive queue there consumed the signal that makes the
+    ingest promote at once, and the trip waited for the six-hourly sweep."""
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+
+    rec = {"vin": "Q", "start_ts": 1.0, "end_ts": 2.0, "start_odo": 1.0, "end_odo": 2.0,
+           "kwh": 0.2, "cover": 1.0}
+    with TestClient(app):
+        with SessionLocal() as s:
+            routes_mod._LIVE_DONE.append(rec)
+            routes_mod._promote_shadow_trips(s, apply=False)
+            assert routes_mod._LIVE_DONE == [rec]          # read, not consumed
+            routes_mod._promote_shadow_trips(s, apply=True)
+            assert routes_mod._LIVE_DONE == []             # saved by the real one
+            assert rec in routes_mod._live_drives_flush(write=False)

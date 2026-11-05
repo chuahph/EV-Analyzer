@@ -4591,6 +4591,10 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
     """
     import json as _json
 
+    # First, before any early return: a queue left full by a return below
+    # would ask the ingest to promote again on every batch.
+    live_drives = _live_drives_flush(write=apply)
+
     try:
         trips = _json.loads(state.get(session, state.TELEMETRY_TRIPS_KEY) or "[]") or []
     except ValueError:
@@ -4653,7 +4657,6 @@ def _promote_shadow_trips(session: Session, apply: bool = False,
     # below depends on it — an out-of-order trip would claim a drive from
     # under one that had a better right to it.
     trips = sorted(trips, key=lambda x: float(x.get("start_ts") or 0.0))
-    live_drives = _live_drives_flush()
 
     for t in trips:
         try:
@@ -16101,9 +16104,21 @@ def _live_finish(vin: str, car: dict, go: dict | None, last_ts: float | None = N
         _LIVE_DONE.append(rec)
 
 
-def _live_drives_flush() -> list[dict]:
+def _live_drives_flush(write: bool = True) -> list[dict]:
     """Save the queued Live drives and return every one on record. Own
-    session, so a dry run of the caller does not lose them. Never raises."""
+    session. With ``write`` false (a dry run: the health check runs one every
+    few minutes) the queue is only read, never emptied: emptying it there
+    consumed the very signal that tells the ingest to promote. Never raises."""
+    if not write:
+        with _LIVE_LOCK:
+            pending = _LIVE_DONE[:]
+        from ..database import SessionLocal
+        try:
+            with SessionLocal() as s:
+                saved = _json_mod.loads(state.get(s, state.TELEMETRY_LIVE_DRIVES_KEY) or "[]") or []
+        except Exception:   # noqa: BLE001
+            saved = []
+        return [r for r in saved if isinstance(r, dict)] + pending
     with _LIVE_LOCK:
         pending = _LIVE_DONE[:]
         _LIVE_DONE.clear()
