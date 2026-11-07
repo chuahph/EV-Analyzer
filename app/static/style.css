@@ -3359,7 +3359,13 @@ main > .card { max-width: 100%; }
 .gl-map-dest b { display: block; width: 18px; height: 18px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
   background: #ff3b6b; border: 2px solid #fff; box-shadow: 0 0 10px rgba(255, 59, 107, .8); }
 /* Dimmed, the map fades with everything else. */
-.gl-dim .gl-map-host { filter: brightness(.35) saturate(.6); }
+/* Dimmed: only the map underneath fades; the car arrow stays bright and the
+   route is redrawn brighter (CARTO's lines sit above its tiles; Google's are
+   brightened by the page, see setDim). */
+.gl-dim .gl-map-inner { filter: brightness(.55) saturate(.75); }
+.gl-dim .gl-map-leaflet .leaflet-tile-pane { filter: brightness(.8) contrast(1.05) saturate(.8); }
+.gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.55) saturate(.75); }
+.gl-dim .gl-map-carfix svg { filter: drop-shadow(0 0 10px rgba(34, 211, 238, 1)); }
 .gl-dim .gl-mapo { background: rgba(0, 0, 0, .6); border-color: transparent; }
 
 /* Round Mix: the six figures as three paired boxes on the left; the map on the right. */
@@ -3411,3 +3417,10 @@ main > .card { max-width: 100%; }
 .gl-map-note { position: absolute; left: 50%; top: calc(78% - 44px); transform: translateX(-50%); z-index: 6; white-space: nowrap;
   font: 600 10px system-ui, sans-serif; letter-spacing: .06em; color: #ffd27a; background: rgba(5, 10, 16, .85);
   border: 1px solid rgba(255, 210, 122, .35); border-radius: 8px; padding: 2px 8px; }
+
+/* Map design: battery % in the speed box; the bottom row leaves the middle
+   clear for the car. */
+.gl-mapo-batt2 { margin-left: 10px; font: 700 clamp(15px, calc(4.6 * var(--gh, 4px)), 22px)/1 "Chakra Petch", system-ui, sans-serif; color: var(--green); }
+.gl-mapo-batt2.warn { color: var(--amber); }
+.gl-mapo-row { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(70px, .9fr) repeat(2, minmax(0, 1fr)); }
+.gl-mapo-gap { display: block; }

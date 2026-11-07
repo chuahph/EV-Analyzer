@@ -5516,13 +5516,15 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-mapd">
       <div class="gl-map-slot" data-map="full">
         ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
-        <div class="gl-mapo gl-mapo-spd"><strong style="color:${col}">${num}</strong><small>km/h</small><span class="gl-mapo-gear">${gear}</span></div>
+        <div class="gl-mapo gl-mapo-spd"><strong style="color:${col}">${num}</strong><small>km/h</small><span class="gl-mapo-gear">${gear}</span>
+          <span class="gl-mapo-batt2 ${pct != null && pct < 20 ? "warn" : ""}">${pct != null ? n(pct, 1, true) : "—"}<small>%</small></span></div>
         ${navBox}
+        <!-- Two boxes either side of a gap in the middle, where the car is. -->
         <div class="gl-mapo gl-mapo-row">
           ${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}
+          <i class="gl-mapo-gap"></i>
           ${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}
           ${stat("kW", kwShown, kw != null && kw < 0 ? "good" : "")}
-          ${stat("Batt %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "")}
         </div>
       </div></div>`;
   }
@@ -6280,7 +6282,7 @@ function glMapGoogle(host) {
       : { styles: GL_GMAP_NIGHT }));
   // Live traffic on every road: green, orange, red.
   new g.TrafficLayer().setMap(map);
-  let car = null, dest = null, casing = null, line = null, lastHd;
+  let car = null, dest = null, casing = null, line = null, lineDim = null, lastHd;
   let heading = 0, tilt = 0;
   const ll = (p) => ({ lat: p[0], lng: p[1] });
   const ahead = (p, z) => {
@@ -6301,6 +6303,15 @@ function glMapGoogle(host) {
       }
       const path = pts.map(ll);
       casing.setPath(path); line.setPath(path);
+      lineDim = null;
+    },
+    // Dimmed, the map underneath fades and the route brightens and thickens,
+    // so it still stands out.
+    setDim(dim) {
+      if (!line || lineDim === dim) return;
+      lineDim = dim;
+      line.setOptions(dim ? { strokeColor: "#8cc2ff", strokeWeight: 8 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
+      casing.setOptions({ strokeWeight: dim ? 12 : 10 });
     },
     setDest(p) {
       if (!p) { if (dest) { dest.map = null; if (dest.setMap) dest.setMap(null); dest = null; } return; }
@@ -6455,6 +6466,7 @@ function glMapUpdate(mode) {
     }
   }
   eng.setDest(nav && nav.dest_lat != null ? [nav.dest_lat, nav.dest_lon] : null);
+  if (eng.setDim) eng.setDim(document.body.classList.contains("gl-dim"));
   // Navigating with no route line to draw: say why, on the map.
   if (!nav) glMapRouteNote("");
   else if (!rv) glMapRouteNote("No route from the car yet");
