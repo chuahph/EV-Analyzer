@@ -3303,3 +3303,57 @@ main > .card { max-width: 100%; }
   padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(245, 158, 11, .45);
   background: rgba(245, 158, 11, .1); color: var(--text, #e6e9ef); font-size: 13px; }
 .promote-waiting.hidden { display: none; }
+
+/* Live map: the Map design and the Cockpit's mini map while navigating.
+   The Leaflet map (.gl-map-host) is one element moved into each redraw's
+   slot; everything floating over it sits above its own stacking context. */
+.gl-map-slot { position: relative; min-height: 0; min-width: 0; overflow: hidden; border-radius: 12px;
+  background: #05080c; border: 1px solid color-mix(in srgb, var(--spd, #22d3ee) 45%, #1d2a38);
+  box-shadow: 0 0 18px -8px var(--spd, #22d3ee) inset; }
+.gl-alt.gl-mapd > .gl-map-slot { flex: 1 1 auto; transform: none; }
+.gl-map-host { position: absolute; inset: 0; z-index: 0; background: #05080c; pointer-events: none; }
+.gl-map-host .leaflet-container, .gl-map-host.leaflet-container { background: #05080c; font: 10px system-ui, sans-serif; }
+.gl-map-host .leaflet-control-attribution { pointer-events: auto; background: rgba(5, 8, 12, .6) !important;
+  color: #6b7a8e; font-size: 8.5px; line-height: 1.4; padding: 0 5px; }
+.gl-map-host .leaflet-control-attribution a { color: #8a98ad; }
+.gl-map-wait { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center;
+  color: var(--muted); font: 600 13px system-ui, sans-serif; letter-spacing: .04em; }
+.gl-mapo { position: absolute; z-index: 2; color: #e8fbff; border-radius: 10px; padding: 5px 10px;
+  background: rgba(5, 10, 16, .8); border: 1px solid rgba(34, 211, 238, .3); backdrop-filter: blur(3px); }
+.gl-mapo small { font-size: .45em; color: var(--muted); margin-left: 3px; letter-spacing: .04em; text-transform: uppercase; }
+.gl-mapo-spd { left: 8px; top: 8px; display: flex; align-items: baseline; gap: 4px; }
+.gl-mapo-spd strong { font: 700 clamp(30px, calc(11 * var(--gh, 4px)), 52px)/1 "Chakra Petch", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums; }
+.gl-mapo-gear { display: flex; gap: 3px; margin-left: 6px; font: 600 11px system-ui, sans-serif; color: #4a5768; }
+.gl-mapo-gear b.on { color: #061018; background: #22d3ee; border-radius: 3px; padding: 0 3px; }
+.gl-mapo-nav { right: 8px; top: 8px; max-width: 55%; display: grid; gap: 2px; text-align: right; }
+.gl-mapo-dest { font: 600 12px system-ui, sans-serif; color: #22d3ee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-mapo-nav em { font: italic 10.5px system-ui, sans-serif; color: var(--muted); }
+.gl-mapo-nav.idle .gl-mapo-dest { color: var(--muted); }
+.gl-mapo-nums { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.gl-mapo-nums b, .gl-mapo-mini b { font: 700 clamp(15px, calc(4.6 * var(--gh, 4px)), 22px)/1.1 "Chakra Petch", system-ui, sans-serif;
+  display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.gl-mapo-nums b small, .gl-mapo-mini b small { font-size: 8.5px; margin: 1px 0 0; white-space: nowrap; }
+.gl-mapo b.good { color: var(--green); } .gl-mapo b.warn { color: var(--amber); }
+.gl-mapo-row { left: 8px; right: 8px; bottom: 16px; padding: 0; background: none; border: 0; backdrop-filter: none;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.gl-mapo-row .gl-hud-stat { background: rgba(5, 10, 16, .82); padding: 3px 4px; }
+.gl-mapo-row .gl-hud-stat strong { font-size: clamp(14px, calc(4 * var(--gh, 4px)), 20px); }
+/* Cockpit while navigating: the map over the battery bar. */
+.gl-navside { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; }
+.gl-map-mini { flex: 1 1 auto; min-height: 90px; }
+.gl-mapo-mini { left: 6px; right: 6px; top: 6px; display: flex; justify-content: space-between; gap: 6px; padding: 4px 8px; }
+.gl-mapo-mini b { align-items: flex-start; font-size: clamp(13px, calc(3.8 * var(--gh, 4px)), 18px); }
+.gl-mapo-kw { left: 6px; bottom: 14px; font: 700 15px "Chakra Petch", system-ui, sans-serif; padding: 2px 8px; }
+.gl-mapo-kw.regen { color: var(--green); }
+/* The car and the destination. */
+.gl-map-car svg { width: 34px; height: 34px; transition: transform .6s linear; filter: drop-shadow(0 0 6px rgba(34, 211, 238, .8)); }
+.gl-map-car circle { fill: rgba(34, 211, 238, .18); stroke: rgba(34, 211, 238, .7); stroke-width: 1.5; }
+.gl-map-car path { fill: #e8fbff; stroke: #22d3ee; stroke-width: 1.5; stroke-linejoin: round; }
+.gl-map-car svg.nohd path { display: none; }
+.gl-map-car svg.nohd circle { fill: #22d3ee; r: 7; }
+.gl-map-dest b { display: block; width: 18px; height: 18px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: #ff3b6b; border: 2px solid #fff; box-shadow: 0 0 10px rgba(255, 59, 107, .8); }
+/* Dimmed, the map fades with everything else. */
+.gl-dim .gl-map-host { filter: brightness(.35) saturate(.6); }
+.gl-dim .gl-mapo { background: rgba(0, 0, 0, .6); border-color: transparent; }

@@ -27,6 +27,7 @@ from .. import alerts, auth, notifications, pricing_prefs, roads, services, stat
 # for the same module). Needed up here for now_local/to_epoch, which anything
 # comparing against a stored timestamp has to go through — see sync.now_local.
 from .. import sync as sync_mod
+from .. import navroute
 from ..analysis import has_valid_energy, haversine_km, percentile
 from ..analysis import narrative as narrative_engine
 from ..analysis import battery as battery_analysis
@@ -15982,7 +15983,16 @@ def telemetry_set_charge_end(
 # (pack voltage and current, for instant power) are kept here only and never
 # written anywhere. One worker process serves the app (run.py), so one dict is
 # the whole picture; after a restart it refills from the car's next record.
-LIVE_ONLY_FIELDS = frozenset({"PackVoltage", "PackCurrent", "BrakePedal"})
+LIVE_ONLY_FIELDS = frozenset({"PackVoltage", "PackCurrent", "BrakePedal", "RouteLine", "GpsHeading"})
+# The car's navigation, for the Live page's map. The car sends each of these
+# as invalid once the route ends (or none was set), which here clears it,
+# where any other field keeps its last reading. RouteLine is the route itself,
+# kilobytes of polyline: live-only, never stored.
+_LIVE_NAV_KEYS = frozenset({"DestinationName", "DestinationLocation", "OriginLocation",
+                            "MinutesToArrival", "MilesToArrival", "RouteLine",
+                            "ExpectedEnergyPercentAtTripArrival", "RouteTrafficMinutesDelay"})
+_LIVE_LOC_KEYS = frozenset({"Location", "DestinationLocation", "OriginLocation"})
+LIVE_NAV_STALE_SEC = 1800     # a destination not refreshed for this long is dropped
 _LIVE_MEM: dict[str, dict] = {}
 # A drive the live page tracks ends once the car has sat in Park this long:
 # the car's own "Current Drive" runs on through a wait in P until it powers
@@ -16027,9 +16037,12 @@ def _live_latest_vin() -> str | None:
     return max(items, key=lambda kv: float(kv[1].get("_seen") or 0.0))[0] if items else None
 
 
-_LIVE_TEXT_KEYS = frozenset({"Gear", "DetailedChargeState", "BMSState", "DoorState", "SentryMode"})
+_LIVE_TEXT_KEYS = frozenset({"Gear", "DetailedChargeState", "BMSState", "DoorState", "SentryMode",
+                             "DestinationName", "RouteLine"})
 _LIVE_NUM_KEYS = frozenset({"VehicleSpeed", "Odometer", "EnergyRemaining", "BatteryLevel", "Soc",
-                            "RatedRange", "PackVoltage", "PackCurrent", "OutsideTemp", "InsideTemp"})
+                            "RatedRange", "PackVoltage", "PackCurrent", "OutsideTemp", "InsideTemp",
+                            "GpsHeading", "MinutesToArrival", "MilesToArrival",
+                            "ExpectedEnergyPercentAtTripArrival", "RouteTrafficMinutesDelay"})
 
 
 def _live_clean(key: str, value):
@@ -16049,6 +16062,19 @@ def _live_clean(key: str, value):
         return x if math.isfinite(x) else None
     if key in _LIVE_TEXT_KEYS:
         return value if isinstance(value, str) else None
+    if key in _LIVE_LOC_KEYS:
+        # {"latitude": .., "longitude": ..}, both finite and on the globe; the
+        # car's (0, 0) is no fix, not a point in the Gulf of Guinea.
+        if not isinstance(value, dict):
+            return None
+        try:
+            la, lo = float(value.get("latitude")), float(value.get("longitude"))
+        except (TypeError, ValueError):
+            return None
+        if not (math.isfinite(la) and math.isfinite(lo) and -90 <= la <= 90 and -180 <= lo <= 180) \
+                or (la == 0.0 and lo == 0.0):
+            return None
+        return {"latitude": la, "longitude": lo}
     if key == "BrakePedal":
         # On or off; some firmware sends it as text.
         if isinstance(value, bool):
@@ -16348,10 +16374,27 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
     kt = car.setdefault("_kt", {})
     older = bool(ts and ts < float(car.get("_t") or 0.0))
     for k, v in fields.items():
-        if v is None:
-            continue
         if ts and ts < kt.get(k, 0.0):
             continue
+        if v is None:
+            # Invalid: for the navigation fields, the route has ended.
+            if k in _LIVE_NAV_KEYS and k in car:
+                car.pop(k, None)
+                if ts:
+                    kt[k] = ts
+            continue
+        if k == "Location":
+            # The direction of travel, for a car that does not stream
+            # GpsHeading (and between its readings): measured from the fix
+            # where the last bearing was taken, once the car is 12 m on, so
+            # a crawl of a few metres a second still turns the arrow.
+            anchor = car.get("_brg_at")
+            b = (v["latitude"], v["longitude"])
+            if not anchor:
+                car["_brg_at"] = b
+            elif (haversine_km(f"{anchor[0]}, {anchor[1]}", f"{b[0]}, {b[1]}") or 0.0) > 0.012:
+                car["_brg"] = navroute.bearing_deg(tuple(anchor), b)
+                car["_brg_at"] = b
         car[k] = v
         if ts:
             kt[k] = ts
@@ -16606,6 +16649,7 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
                        or time.time() - float((car.get("_kt") or {}).get("BrakePedal") or 0.0) < 120)
                   else None),
     }
+    now.update(_live_position(car))
     # Rounded to what the page shows: this goes to the phone every second.
     for k, nd in (("speed_kmh", 1), ("odo_km", 3), ("energy_kwh", 3), ("range_km", 1),
                   ("battery_level", 1), ("soc", 1), ("ts", 1)):
@@ -16648,7 +16692,78 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         trip["wh_per_km"] = _whkm_calibrated(trip["wh_per_km"])
         trip["driving_wh_per_km"] = trip["wh_per_km"]
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
-            "server_ts": round(time.time(), 1)}
+            "nav": _live_nav(car), "server_ts": round(time.time(), 1)}
+
+
+def _live_position(car: dict) -> dict:
+    """Where the car is and which way it points, for the Live page's map."""
+    loc = car.get("Location")
+    if not isinstance(loc, dict):
+        return {}
+    kt = car.get("_kt") or {}
+    out = {"lat": round(float(loc["latitude"]), 6), "lon": round(float(loc["longitude"]), 6),
+           "loc_age_sec": round(max(time.time() - float(kt.get("Location") or 0.0), 0.0))}
+    hd = car.get("GpsHeading")
+    # The car's own heading while it is fresh; else the bearing between its
+    # last two fixes.
+    if hd is not None and time.time() - float(kt.get("GpsHeading") or 0.0) < 120:
+        out["heading"] = round(float(hd) % 360.0, 1)
+    elif car.get("_brg") is not None:
+        out["heading"] = round(float(car["_brg"]), 1)
+    return out
+
+
+def _live_nav(car: dict) -> dict | None:
+    """The car's active navigation, or None: destination, time and distance
+    to go, the battery % the car expects on arrival, and a tag for the route
+    (the points themselves come from /api/live/route, only when it changes)."""
+    kt = car.get("_kt") or {}
+    have = [k for k in _LIVE_NAV_KEYS if car.get(k) is not None]
+    if not have:
+        return None
+    newest = max(float(kt.get(k) or 0.0) for k in have)
+    if time.time() - newest > LIVE_NAV_STALE_SEC:
+        return None
+    dest = car.get("DestinationLocation")
+    miles = car.get("MilesToArrival")
+    nav = {
+        "name": car.get("DestinationName") or None,
+        "dest_lat": round(float(dest["latitude"]), 6) if isinstance(dest, dict) else None,
+        "dest_lon": round(float(dest["longitude"]), 6) if isinstance(dest, dict) else None,
+        "minutes": round(float(car["MinutesToArrival"]), 1) if car.get("MinutesToArrival") is not None else None,
+        "km": round(float(miles) * sync_mod.MILES_TO_KM, 1) if miles is not None else None,
+        "arrive_pct": (round(float(car["ExpectedEnergyPercentAtTripArrival"]), 1)
+                       if car.get("ExpectedEnergyPercentAtTripArrival") is not None else None),
+        "delay_min": (round(float(car["RouteTrafficMinutesDelay"]), 1)
+                      if car.get("RouteTrafficMinutesDelay") is not None else None),
+        "route_v": navroute.route_version(car.get("RouteLine")),
+    }
+    # Navigation with nothing to show (only a stray origin, say) is none.
+    if nav["dest_lat"] is None and nav["minutes"] is None and nav["km"] is None and not nav["route_v"]:
+        return None
+    return nav
+
+
+_ROUTE_CACHE: dict[str, list] = {}
+
+
+@router.get("/live/route")
+def live_route(vin: str | None = Query(None)):
+    """The active navigation route as [[lat, lon], ...] (at most
+    navroute.ROUTE_MAX_POINTS), decoded once per route and kept in memory."""
+    target = vin or _live_latest_vin()
+    with _LIVE_LOCK:
+        car = (_LIVE_MEM.get(target) or {}) if target else {}
+        raw = car.get("RouteLine")
+    v = navroute.route_version(raw)
+    if not v:
+        return {"v": None, "points": []}
+    pts = _ROUTE_CACHE.get(v)
+    if pts is None:
+        pts = navroute.decode_route(raw) or []
+        _ROUTE_CACHE.clear()          # one route at a time is all the page needs
+        _ROUTE_CACHE[v] = pts
+    return {"v": v, "points": pts}
 
 
 @router.get("/live")

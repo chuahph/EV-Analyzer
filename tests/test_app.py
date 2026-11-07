@@ -14074,3 +14074,96 @@ def test_a_dry_run_promotion_leaves_the_live_queue_for_the_real_one():
             routes_mod._promote_shadow_trips(s, apply=True)
             assert routes_mod._LIVE_DONE == []             # saved by the real one
             assert rec in routes_mod._live_drives_flush(write=False)
+
+
+def _encode_polyline(pts, precision=6):
+    """Google's polyline encoding, for building a test RouteLine."""
+    out, plat, plon, f = [], 0, 0, 10 ** precision
+    for la, lo in pts:
+        ila, ilo = round(la * f), round(lo * f)
+        for d in (ila - plat, ilo - plon):
+            v = ~(d << 1) if d < 0 else d << 1
+            while v >= 0x20:
+                out.append(chr((0x20 | (v & 0x1F)) + 63))
+                v >>= 5
+            out.append(chr(v + 63))
+        plat, plon = ila, ilo
+    return "".join(out)
+
+
+def test_route_line_decodes_base64_polyline_at_precision_6():
+    import base64
+    from app import navroute
+
+    pts = [[3.139003, 101.686855], [3.140112, 101.690001], [3.152, 101.712345]]
+    raw = base64.b64encode(_encode_polyline(pts).encode()).decode()
+    assert navroute.decode_route(raw) == pts
+    # Unwrapped polyline is read too; junk and absurd lengths are no route.
+    assert navroute.decode_route(_encode_polyline(pts)) == pts
+    assert navroute.decode_route("not a route!!") is None
+    assert navroute.decode_route("") is None
+    assert navroute.decode_route(None) is None
+    assert navroute.route_version(raw) == navroute.route_version(raw)
+    assert navroute.route_version(raw) != navroute.route_version(raw + "A")
+    # A long route is thinned for the phone, keeping both ends.
+    many = [[round(3.0 + k * 1e-4, 6), round(101.0 + k * 1e-4, 6)] for k in range(5000)]
+    got = navroute.decode_route(base64.b64encode(_encode_polyline(many).encode()).decode())
+    assert len(got) == navroute.ROUTE_MAX_POINTS and got[0] == many[0] and got[-1] == many[-1]
+    assert round(navroute.bearing_deg((3.0, 101.0), (3.1, 101.0))) == 0
+    assert round(navroute.bearing_deg((3.0, 101.0), (3.0, 101.1))) == 90
+
+
+def test_live_reports_position_and_the_cars_navigation():
+    """The map's data: where the car is, which way it points, and the car's
+    own navigation (destination, minutes and km to go, arrival %, the route),
+    cleared when the car reports the route ended."""
+    import base64
+    import time as _t
+    from datetime import datetime, timezone
+    from app.api import routes
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    pts = [[3.1390, 101.6868], [3.1401, 101.6900], [3.1520, 101.7123]]
+    route = base64.b64encode(_encode_polyline(pts).encode()).decode()
+    routes._LIVE_MEM.clear()
+    try:
+        routes._live_mem_fold("VNAV", at(-5), {
+            "Gear": "ShiftStateD", "VehicleSpeed": 30.0, "Odometer": 100.0,
+            "Location": {"latitude": 3.1390, "longitude": 101.6868}})
+        routes._live_mem_fold("VNAV", at(-4), {
+            "Location": {"latitude": 3.1401, "longitude": 101.6900},
+            "DestinationName": "KLCC", "DestinationLocation": {"latitude": 3.1520, "longitude": 101.7123},
+            "MinutesToArrival": 12.5, "MilesToArrival": 5.0, "ExpectedEnergyPercentAtTripArrival": 61.0,
+            "RouteLine": route})
+        p = routes._live_payload("VNAV", None)
+        assert p["now"]["lat"] == 3.1401 and p["now"]["lon"] == 101.69
+        # No GpsHeading streamed: the bearing between the last two fixes (ENE).
+        assert 60 < p["now"]["heading"] < 80
+        nav = p["nav"]
+        assert nav["name"] == "KLCC" and nav["minutes"] == 12.5 and nav["arrive_pct"] == 61.0
+        assert nav["km"] == 8.0 and nav["dest_lat"] == 3.152 and nav["route_v"]
+        r = client.get("/api/live/route?vin=VNAV").json()
+        assert r["v"] == nav["route_v"] and r["points"] == pts
+        # The car's own heading wins while fresh; junk locations are ignored.
+        routes._live_mem_fold("VNAV", at(-3), {"GpsHeading": 181.0,
+                                                "Location": {"latitude": 0, "longitude": 0}})
+        p = routes._live_payload("VNAV", None)
+        assert p["now"]["heading"] == 181.0 and p["now"]["lat"] == 3.1401
+        # Route ended: the car sends the navigation fields as invalid.
+        routes._live_mem_fold("VNAV", at(-2), {k: None for k in (
+            "DestinationName", "DestinationLocation", "MinutesToArrival", "MilesToArrival",
+            "ExpectedEnergyPercentAtTripArrival", "RouteLine")})
+        assert routes._live_payload("VNAV", None)["nav"] is None
+        assert client.get("/api/live/route?vin=VNAV").json() == {"v": None, "points": []}
+        # An older record replayed late does not bring the route back.
+        routes._live_mem_fold("VNAV", at(-4), {"RouteLine": route, "MinutesToArrival": 12.5})
+        assert routes._live_payload("VNAV", None)["nav"] is None
+        assert "RouteLine" in routes.LIVE_ONLY_FIELDS
+    finally:
+        routes._LIVE_MEM.clear()

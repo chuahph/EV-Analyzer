@@ -335,10 +335,10 @@ fi
 # in bridge.py). An older bridge would pass the fast stream straight into the
 # database, so with one the classic intervals are kept.
 if grep -q '^DB_INTERVALS' /opt/tesla-bridge/bridge.py 2>/dev/null; then
-  FAST_DRIVE=1 FAST_LEVEL=10 FAST_RANGE=10 FAST_GEAR=1
-  say "Fast live stream: speed, distance, energy and gear every second (stored history stays at 10 s)"
+  FAST_DRIVE=1 FAST_LEVEL=10 FAST_RANGE=10 FAST_GEAR=1 FAST_LOC=1
+  say "Fast live stream: speed, distance, energy, gear and location every second (stored history stays at 10-30 s)"
 else
-  FAST_DRIVE=10 FAST_LEVEL=60 FAST_RANGE=300 FAST_GEAR=5
+  FAST_DRIVE=10 FAST_LEVEL=60 FAST_RANGE=300 FAST_GEAR=5 FAST_LOC=30
   say "Bridge has no pacer yet: keeping the classic intervals. Update it first:
      sudo curl -sL $APP_URL/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.py && sudo systemctl restart tesla-bridge"
 fi
@@ -358,7 +358,15 @@ cat > "$WORK/config.json" <<EOF
       "DoorState":                 {"interval_seconds": 10},
       "VehicleSpeed":              {"interval_seconds": $FAST_DRIVE},
       "Odometer":                  {"interval_seconds": $FAST_DRIVE},
-      "Location":                  {"interval_seconds": 30},
+      "Location":                  {"interval_seconds": $FAST_LOC},
+      "GpsHeading":                {"interval_seconds": $FAST_LOC},
+      "DestinationName":           {"interval_seconds": 10},
+      "DestinationLocation":       {"interval_seconds": 10},
+      "MinutesToArrival":          {"interval_seconds": 10},
+      "MilesToArrival":            {"interval_seconds": 10},
+      "RouteLine":                 {"interval_seconds": 10},
+      "RouteTrafficMinutesDelay":  {"interval_seconds": 30},
+      "ExpectedEnergyPercentAtTripArrival": {"interval_seconds": 30},
 $DEFAULT_DRIVE_COUNTER
       "EnergyRemaining":           {"interval_seconds": $FAST_DRIVE},
       "Soc":                       {"interval_seconds": $FAST_LEVEL},

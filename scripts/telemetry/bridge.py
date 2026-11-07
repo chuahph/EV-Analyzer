@@ -232,9 +232,15 @@ def parse(frames: list) -> dict | None:
 # from its own thread, so a slow app can never hold up the batches.
 LIVE_PUSH = os.environ.get("LIVE_PUSH", "1") != "0"
 LIVE_FIELDS = {"VehicleSpeed", "Gear", "Odometer", "EnergyRemaining", "BatteryLevel",
-               "Soc", "PackVoltage", "PackCurrent", "RatedRange", "BrakePedal"}
+               "Soc", "PackVoltage", "PackCurrent", "RatedRange", "BrakePedal",
+               # The Live page's map: where the car is, which way it points,
+               # and the route and destination the car is navigating to.
+               "Location", "GpsHeading", "RouteLine", "DestinationName", "DestinationLocation",
+               "MinutesToArrival", "MilesToArrival", "ExpectedEnergyPercentAtTripArrival",
+               "RouteTrafficMinutesDelay"}
 # Shown on the live page and nowhere else: kept out of the database batches.
-LIVE_ONLY_FIELDS = {"PackVoltage", "PackCurrent", "BrakePedal"}
+# RouteLine is kilobytes of polyline each time the route changes.
+LIVE_ONLY_FIELDS = {"PackVoltage", "PackCurrent", "BrakePedal", "RouteLine", "GpsHeading"}
 
 
 def _live_worker(box: dict) -> None:
@@ -280,7 +286,9 @@ def _keys(record: dict) -> set:
 # saw. 02-configure-vehicle.sh only asks the car for the fast intervals when
 # this bridge carries DB_INTERVALS.
 DB_INTERVALS = {"VehicleSpeed": 10, "Odometer": 10, "EnergyRemaining": 10,
-                "BatteryLevel": 60, "Soc": 60, "RatedRange": 300}
+                "BatteryLevel": 60, "Soc": 60, "RatedRange": 300,
+                # Every second for the map; stored at the 30 s it always was.
+                "Location": 30}
 # Read with BatteryLevel/Soc by the charge-capacity pairing: when one of them
 # is passed on, the energy reading from the same record goes with it.
 PAIR_WITH_LEVEL = "EnergyRemaining"

@@ -313,6 +313,36 @@ arrived 36 minutes late and rebuilt to within 0.4%), but once it has handed a
 record over it will never send it again, so a batch dropped between the bridge
 and the app is gone in a way no other failure here is.
 
+### Live map
+
+The Live page has a **Map** design (swipe left or right to it): the car as an
+arrow on a dark map, following it, with the speed, this drive's km, minutes,
+Wh/km, power and battery floating over it. When a destination is set in the
+car, the route the car is navigating is drawn, with the destination, the
+arrival time, minutes and km to go and the battery % the car expects on
+arrival. While navigating, the Cockpit swaps its right-hand panel for a small
+map of the same route (the drive's Wh/km moves to the left tiles).
+
+All of it is the car's own navigation, streamed: `Location` and `GpsHeading`
+every second, and `DestinationName`, `DestinationLocation`, `MinutesToArrival`,
+`MilesToArrival`, `RouteLine` (a base64 polyline, precision 6),
+`RouteTrafficMinutesDelay` and `ExpectedEnergyPercentAtTripArrival`. The car
+sends each as invalid when the route ends, which clears it; a destination not
+refreshed for 30 minutes is dropped. `RouteLine` and `GpsHeading` are
+live-only, never stored, and the stored history keeps `Location` at 30 s.
+
+To turn it on for a car set up before this, update the bridge and re-send the
+configuration on the relay VM:
+
+```bash
+sudo curl -sL $APP_URL/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.py && sudo systemctl restart tesla-bridge
+curl -sL $APP_URL/car -o c.sh && sudo bash c.sh
+```
+
+Tiles are CARTO's dark basemap (OpenStreetMap data), loaded only when a map
+is on screen; the map takes no touches, so a swipe over it still changes the
+design. Leaflet is served from `app/static/vendor/`.
+
 ### Setting it up
 
 Two scripts, plus one step only a human with a phone can do. Both are

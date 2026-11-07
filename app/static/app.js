@@ -5128,12 +5128,12 @@ function glAutoLive(d) {
 // the others show the same readings differently, each for a different glance:
 // a huge speed, the energy flow, or the trip in big figures. Swipe left or
 // right on the Live page, or tap the dots.
-const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph", "Digital Mix", "Power", "Efficiency"];
+const GL_SKINS = ["Cockpit", "HUD", "Energy", "Trip", "Night", "Dial", "Range", "Mix", "Round Mix", "Stack", "Lines", "Graph", "Digital Mix", "Power", "Efficiency", "Map"];
 // Two rows of designs. Up and down: the three GAUGE designs, each with the
 // odometer, a dial or ring and several readings together. Left and right: the
 // rest, one reading or one theme at a time.
 const GL_COMBO = [0, 8, 5];     // Cockpit, Round Mix, Dial
-const GL_SINGLE = [1, 4, 10, 6, 3, 13, 14, 12, 7, 9, 2, 11]; // HUD, Night, Lines, Range, Trip, Power, Efficiency, Digital Mix, Mix, Stack, Energy, Graph
+const GL_SINGLE = [1, 4, 10, 6, 3, 13, 14, 12, 7, 9, 2, 11, 15]; // HUD, Night, Lines, Range, Trip, Power, Efficiency, Digital Mix, Mix, Stack, Energy, Graph, Map
 let glLiveSkin = 0;
 function glSkinSet(id, from) {
   glLiveSkin = GL_SKINS[id] ? id : 0;
@@ -5177,7 +5177,11 @@ function glKeyBar(c) {
     `<span class="gl-kb"><em>Time</em><b>${hh}</b></span>`,
     c.rangeHere != null || c.range != null ? `<span class="gl-kb gl-opt"><em>Range</em><b>${c.n(c.rangeHere != null ? c.rangeHere : c.range)} km</b></span>` : "",
     nw.out_temp != null ? `<span class="gl-kb gl-opt"><em>Outside</em><b>${c.n(nw.out_temp, 0)}°C</b></span>` : "",
-    t && t.eta ? `<span class="gl-kb gl-opt"><em>ETA ${c.h(t.eta.place)}</em><b>${c.n(t.eta.eta_min)} min</b></span>` : "",
+    // The car's own navigation when a destination is set; else the app's
+    // guess at the nearest saved place.
+    c.nav && c.nav.minutes != null
+      ? `<span class="gl-kb gl-opt"><em>Arrive${c.nav.name ? " " + c.h(glNavName(c.nav.name)) : ""}</em><b>${glClockIn(c.nav.minutes)}</b></span>`
+      : t && t.eta ? `<span class="gl-kb gl-opt"><em>ETA ${c.h(t.eta.place)}</em><b>${c.n(t.eta.eta_min)} min</b></span>` : "",
     nw.climate_on != null ? `<span class="gl-kb gl-opt"><em>Climate</em><b>${nw.climate_on ? "on" : "off"}</b></span>` : "",
     // Not on designs that already show it (Energy's tile, Dial's and Round
     // Mix's side bars): the same figure twice on one screen.
@@ -5496,6 +5500,32 @@ function glAltPage(skin, c) {
   // Just after leaving, before the first kilometre, the trip has no Wh/km yet: the last trip's stands in.
   const whk = t ? (tw ?? (lt && lt.wh_per_km)) : lt && lt.wh_per_km;
   const sub = t ? "this drive" : lt ? "last trip" : "";
+  if (skin === 15) {
+    // Map: the car on a dark map, the route the car is navigating drawn on
+    // it, and the drive's figures floating over it. The map itself is one
+    // Leaflet map kept across redraws (glMapMount), set into this slot.
+    const nav = c.nav;
+    const navBox = nav ? `<div class="gl-mapo gl-mapo-nav">
+        <span class="gl-mapo-dest">${h(glNavName(nav.name) || "Navigating")}</span>
+        <div class="gl-mapo-nums">
+          ${nav.minutes != null ? `<b>${glClockIn(nav.minutes)}<small>arrive</small></b><b>${n(nav.minutes)}<small>min</small></b>` : ""}
+          ${nav.km != null ? `<b>${n(nav.km, 1, true)}<small>km</small></b>` : ""}
+          ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% on arrival</small></b>` : ""}
+        </div>${nav.delay_min >= 1 ? `<em>+${n(nav.delay_min)} min traffic</em>` : ""}</div>`
+      : `<div class="gl-mapo gl-mapo-nav idle"><span class="gl-mapo-dest">No destination</span><em>Set one in the car to see the route</em></div>`;
+    return `<div class="gl-page gl-alt gl-mapd">
+      <div class="gl-map-slot" data-map="full">
+        ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
+        <div class="gl-mapo gl-mapo-spd"><strong style="color:${col}">${num}</strong><small>km/h</small><span class="gl-mapo-gear">${gear}</span></div>
+        ${navBox}
+        <div class="gl-mapo gl-mapo-row">
+          ${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}
+          ${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}
+          ${stat("kW", kwShown, kw != null && kw < 0 ? "good" : "")}
+          ${stat("Batt %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "")}
+        </div>
+      </div></div>`;
+  }
   if (skin === 1) {
     return `<div class="gl-page gl-alt gl-hud">
       <div class="gl-hud-top"><span class="gl-hud-gear">${gear}</span>${batt}</div>
@@ -5809,6 +5839,7 @@ function renderGlance(d) {
             return lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null;
           })(),
           cur: (lastData && lastData.currency) || "RM",
+          nav: (L && L.nav) || null,
         }), foot };
       }
       if (!t) {
@@ -5888,6 +5919,37 @@ function renderGlance(d) {
           <div class="gl-power-sub">used ${n(usedPct, 2, true)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       const odoNow = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
+      // Navigating: the right side becomes a small map of the route with the
+      // car's arrival figures over it, and the battery bar under it. The
+      // drive's Wh/km takes the Max km/h tile's place on the left, and the
+      // power sits on the map.
+      const navC = L && L.nav;
+      if (navC) {
+        const mini = `<div class="gl-map-slot gl-map-mini" data-map="mini">
+            ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
+            <div class="gl-mapo gl-mapo-mini">
+              ${navC.minutes != null ? `<b>${glClockIn(navC.minutes)}<small>${h(glNavName(navC.name) || "arrive")}</small></b>` : ""}
+              ${navC.km != null ? `<b>${n(navC.km, 1, true)}<small>km</small></b>` : ""}
+              ${navC.arrive_pct != null ? `<b class="${navC.arrive_pct < 15 ? "warn" : "good"}">${n(navC.arrive_pct)}<small>% arrive</small></b>` : ""}
+            </div>
+            <div class="gl-mapo gl-mapo-kw ${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></div>
+          </div>`;
+        return page(
+          `<div class="gl-trip">
+            <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
+            <div class="gl-rts">
+              ${tile("dist", "km", n(t.distance_km, 1, true))}
+              ${tile("time", "min", n(t.duration_min))}
+              ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
+              ${tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone)}
+            </div>
+            <div class="gl-odo"><span>Odo km</span>
+              <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
+          </div>`,
+          glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
+          `<div class="gl-navside">${mini}${battBar}</div>`,
+          foot);
+      }
       return page(
         `<div class="gl-trip">
           <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
@@ -6085,6 +6147,121 @@ function renderGlance(d) {
     <div class="gl-body">${rail}${pg.body}</div>
     ${pg.foot ? `<div class="gl-foot">${pg.foot}</div>` : ""}</div>`;
   glFit(el);
+  glMapMount(el);
+}
+
+// The Live page's map. One Leaflet map for the whole session, made the first
+// time a page asks for one and moved into each redraw's slot: the page is
+// rebuilt up to five times a second, and a map rebuilt that often would
+// reload its tiles every time. Leaflet itself is loaded only then, so no
+// other page pays for it. Dark raster tiles from CARTO (OpenStreetMap data);
+// the map takes no touches, so a swipe over it still changes the design.
+const GL_MAP = { loading: false, host: null, map: null, car: null, dest: null, line: null,
+  routeV: null, routeAsk: null, zoomKey: null, mode: null };
+const GL_MAP_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+function glNavName(name) {
+  // The car sends the full address; the first part is the place.
+  return name ? String(name).split(",")[0].trim().slice(0, 40) : "";
+}
+function glClockIn(min) {
+  const t = new Date(Date.now() + (+min || 0) * 60000);
+  return String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
+}
+function glMapLib() {
+  if (window.L && window.L.map) return true;
+  if (!GL_MAP.loading) {
+    GL_MAP.loading = true;
+    const css = document.createElement("link");
+    css.rel = "stylesheet"; css.href = "/static/vendor/leaflet.css";
+    document.head.appendChild(css);
+    const js = document.createElement("script");
+    js.src = "/static/vendor/leaflet.js";
+    js.onload = () => { if (lastData && glanceTab === "live" && glanceVisible()) renderGlance(lastData); };
+    js.onerror = () => { GL_MAP.loading = false; };
+    document.head.appendChild(js);
+  }
+  return false;
+}
+function glMapMount(root) {
+  const slot = root && root.querySelector(".gl-map-slot");
+  if (!slot) return;
+  if (!glMapLib()) return;
+  const L = window.L;
+  if (!GL_MAP.map) {
+    const host = document.createElement("div");
+    host.className = "gl-map-host";
+    slot.prepend(host);
+    const map = L.map(host, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
+      doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false,
+      attributionControl: true });
+    map.attributionControl.setPrefix(false);
+    L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 19, detectRetina: true,
+      attribution: "© OpenStreetMap contributors © CARTO" }).addTo(map);
+    map.setView([0, 0], 2);
+    GL_MAP.host = host; GL_MAP.map = map;
+  } else {
+    slot.prepend(GL_MAP.host);
+  }
+  const sz = GL_MAP.map.getSize();
+  if (sz.x !== GL_MAP.host.clientWidth || sz.y !== GL_MAP.host.clientHeight) GL_MAP.map.invalidateSize(false);
+  glMapUpdate(slot.dataset.map || "full");
+}
+function glMapUpdate(mode) {
+  const L = window.L, map = GL_MAP.map, D = glLiveState.data;
+  if (!map || !D) return;
+  const nw = D.now || {}, nav = D.nav;
+  // The route: fetched again only when the car's route changes.
+  const rv = nav && nav.route_v;
+  if (rv !== GL_MAP.routeV && GL_MAP.routeAsk !== rv) {
+    GL_MAP.routeAsk = rv;
+    if (!rv) {
+      if (GL_MAP.line) { GL_MAP.line.remove(); GL_MAP.line = null; }
+      GL_MAP.routeV = null;
+    } else {
+      fetch("/api/live/route?" + new URLSearchParams(D.vin ? { vin: D.vin } : {}), { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null)).then((r) => {
+          if (!r || r.v !== GL_MAP.routeAsk) return;
+          GL_MAP.routeV = r.v;
+          if (!GL_MAP.line) GL_MAP.line = L.polyline([], { color: "#22d3ee", weight: 6, opacity: 0.85, interactive: false }).addTo(map);
+          GL_MAP.line.setLatLngs(r.points || []);
+        }).catch(() => { GL_MAP.routeAsk = null; });
+    }
+  }
+  // The destination flag.
+  if (nav && nav.dest_lat != null) {
+    const at = [nav.dest_lat, nav.dest_lon];
+    if (!GL_MAP.dest) GL_MAP.dest = L.marker(at, { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "gl-map-dest", iconSize: [18, 18], iconAnchor: [9, 9], html: "<b></b>" }) }).addTo(map);
+    else GL_MAP.dest.setLatLng(at);
+  } else if (GL_MAP.dest) { GL_MAP.dest.remove(); GL_MAP.dest = null; }
+  if (nw.lat == null) {
+    if (nav && nav.dest_lat != null && GL_MAP.zoomKey !== "dest") { map.setView([nav.dest_lat, nav.dest_lon], 13, { animate: false }); GL_MAP.zoomKey = "dest"; }
+    return;
+  }
+  // The car: an arrow pointing the way it is heading.
+  const pos = [nw.lat, nw.lon];
+  if (!GL_MAP.car) {
+    GL_MAP.car = L.marker(pos, { interactive: false, keyboard: false, zIndexOffset: 1000,
+      icon: L.divIcon({ className: "gl-map-car", iconSize: [34, 34], iconAnchor: [17, 17],
+        html: '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>' }) }).addTo(map);
+  } else GL_MAP.car.setLatLng(pos);
+  const svg = GL_MAP.car.getElement() && GL_MAP.car.getElement().querySelector("svg");
+  if (svg) {
+    svg.style.transform = nw.heading != null ? `rotate(${nw.heading}deg)` : "";
+    svg.classList.toggle("nohd", nw.heading == null);
+  }
+  // Follow the car, closer in town and further out on the highway; the zoom
+  // changes only when the speed crosses a band, so it does not breathe.
+  const v = +nw.speed_kmh || 0;
+  const z = (v < 35 ? 17 : v < 70 ? 16 : v < 100 ? 15 : 14) - (mode === "mini" ? 1 : 0);
+  const key = mode + z;
+  if (key !== GL_MAP.zoomKey) {
+    GL_MAP.zoomKey = key;
+    map.setView(pos, z, { animate: false });
+  } else {
+    const dx = map.latLngToContainerPoint(pos).distanceTo(map.getSize().divideBy(2));
+    if (dx > 1) map.panTo(pos, { animate: dx < 400, duration: 0.8, easeLinearity: 1, noMoveStart: true });
+  }
 }
 
 // Shrink to fit: any figure or heading wider than the box it sits in gets a
