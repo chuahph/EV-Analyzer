@@ -3358,22 +3358,18 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-map-host { filter: brightness(.35) saturate(.6); }
 .gl-dim .gl-mapo { background: rgba(0, 0, 0, .6); border-color: transparent; }
 
-/* Round Mix: six figures in the left column, three in view, dragged up and
-   down (GL_VSCROLL); the map in the right column. */
-.gl-rmix .gl-vscroll { position: relative; display: block; overflow: hidden; touch-action: none; cursor: ns-resize; }
-.gl-vtrack { display: flex; flex-direction: column; gap: 8px; height: calc(200% + 8px);
-  transform: translateY(calc(var(--f, 0) * (-50% - 4px))); will-change: transform; }
-.gl-vtrack.glide { transition: transform .22s ease-out; }
-.gl-vtrack > .gl-hud-stat { flex: 1 1 0; min-height: 0; }
-.gl-vtrack > .gl-hud-stat:nth-child(4) { --ac: #f59e0b; }
-.gl-vtrack > .gl-hud-stat:nth-child(5) { --ac: #2dd4bf; }
-.gl-vtrack > .gl-hud-stat:nth-child(6) { --ac: #22c55e; }
-/* A hint that there is more above or below. */
-.gl-vscroll::before, .gl-vscroll::after { content: ""; position: absolute; left: 50%; z-index: 2; width: 26px; height: 4px;
-  margin-left: -13px; border-radius: 3px; background: #22d3ee; box-shadow: 0 0 8px #22d3ee; opacity: 0; transition: opacity .2s; }
-.gl-vscroll::before { top: 1px; } .gl-vscroll::after { bottom: 1px; }
-.gl-vscroll.up::before, .gl-vscroll.down::after { opacity: .75; }
+/* Round Mix: the six figures as three paired boxes on the left; the map on the right. */
+.gl-rmix-pairs .gl-pair { display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 4px 4px; }
+.gl-rmix-pairs .gl-pair > div { min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.gl-rmix-pairs .gl-pair > div + div { border-left: 1px solid color-mix(in srgb, var(--ac) 30%, #1d2a38); }
+.gl-rmix .gl-rmix-pairs .gl-pair span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; letter-spacing: .06em; }
+.gl-rmix .gl-rmix-pairs .gl-pair strong { line-height: 1.05; text-align: center; white-space: nowrap; }
+.gl-rmix .gl-rmix-pairs .gl-pair strong small { display: block; font-size: 9px; font-weight: 600; letter-spacing: .06em;
+  color: var(--muted); text-transform: uppercase; text-shadow: none; margin: 1px 0 0; }
+.gl-rmix .gl-rmix-pairs .gl-pair strong { font-size: clamp(14px, min(calc(5.4 * var(--gh)), calc(2.4 * var(--gw))), 26px); }
+.gl-rmix-pairs .gl-pair:nth-child(1) { --ac: #f59e0b; }
+.gl-rmix-pairs .gl-pair:nth-child(2) { --ac: #22c55e; }
+.gl-rmix-pairs .gl-pair:nth-child(3) { --ac: #22d3ee; }
 .gl-rmix .gl-rmix-map { display: flex; }
 .gl-rmix .gl-rmix-map > .gl-map-slot { flex: 1 1 auto; transform: none; }
 .gl-mapo-stack { flex-direction: column; align-items: flex-start; right: auto; gap: 4px; }
-.gl-dim .gl-vscroll::before, .gl-dim .gl-vscroll::after { opacity: 0; }

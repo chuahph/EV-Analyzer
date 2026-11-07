@@ -5707,19 +5707,21 @@ function glAltPage(skin, c) {
     // Round Mix: a round speed ring with the odometer set into it, the trip
     // on its left and power and battery on its right.
     const round = glGauge3D(spd, col, nw, odo, false);
-    // Left: all six figures in one column, three in view, dragged up or
-    // down (glVScroll). Right: the map, with the car's arrival figures over
-    // it while navigating.
+    // Left: the six figures as three pairs (speed, energy, the trip so far).
+    // Right: the map, with the car's arrival figures over it while navigating.
     const nav = c.nav;
-    const f = GL_VSCROLL.f;
+    // Each half: a short name, the figure, its unit under it, so two fit
+    // side by side in the column's width.
+    const half = ([name, value, unit]) => `<div><span>${name}</span><strong>${value}<small>${unit}</small></strong></div>`;
+    const pair = (a, b) => `<div class="gl-hud-stat gl-pair">${half(a)}${half(b)}</div>`;
+    const top = t && t.max_speed_kmh != null ? n(t.max_speed_kmh) : lt && lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—";
+    const net = t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—";
     return `<div class="gl-page gl-alt gl-rmix">
-      <div class="gl-rmix-col gl-vscroll${f > 0.02 ? " up" : ""}${f < 0.98 ? " down" : ""}" data-vscroll>
-        <div class="gl-vtrack" style="--f:${f.toFixed(3)}">
-        ${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("avg km/h", avg != null ? n(avg) : "—")}
-        ${stat("batt used %", c.usedPct != null ? n(c.usedPct, 2, true) : "—")}
-        ${stat("net used kWh", t && t.energy_kwh != null ? n(t.energy_kwh, 2) : lt && lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—")}
-        ${stat("top km/h", t && t.max_speed_kmh != null ? n(t.max_speed_kmh) : lt && lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—")}
-        </div></div>
+      <div class="gl-rmix-col gl-rmix-pairs">
+        ${pair(["Top", top, "km/h"], ["Avg", avg != null ? n(avg) : "—", "km/h"])}
+        ${pair(["Used", c.usedPct != null ? n(c.usedPct, 2, true) : "—", "% batt"], ["Net", net, "kWh"])}
+        ${pair(["Time", mins != null ? n(mins) : "—", "min"], ["Dist", dist != null ? n(dist, 1, true) : "—", "km"])}
+      </div>
       <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}<span class="gl-gearrow">${["P", "R", "N", "D"].map((x) => `<b class="${nw.shift === x ? "on" : ""}">${x}</b>`).join("")}</span></div>
       <div class="gl-rmix-col gl-rmix-map">
         <div class="gl-map-slot gl-map-mini" data-map="mini">
@@ -7673,50 +7675,6 @@ showHome();
   }, { passive: false });
 })();
 
-// A column of figures that scrolls inside the page (Round Mix's left side).
-// The page is rebuilt up to five times a second, which would cut a native
-// scroll off mid-drag, so the position lives here (0 = top, 1 = bottom) and
-// every redraw draws the column where it was. Dragged with a finger or the
-// mouse wheel; on release it settles on a whole box.
-const GL_VSCROLL = { f: 0, drag: null };
-function glVScrollSet(f, snap) {
-  const steps = 3;   // six boxes, three in view: three box-heights of travel
-  f = Math.max(0, Math.min(1, f));
-  if (snap) f = Math.round(f * steps) / steps;
-  GL_VSCROLL.f = f;
-  const col = document.querySelector("#glance [data-vscroll]");
-  const tr = col && col.querySelector(".gl-vtrack");
-  if (tr) {
-    tr.classList.toggle("glide", !!snap);
-    tr.style.setProperty("--f", f.toFixed(3));
-    col.classList.toggle("up", f > 0.02);
-    col.classList.toggle("down", f < 0.98);
-  }
-}
-document.addEventListener("pointerdown", (e) => {
-  const col = e.target.closest && e.target.closest("#glance [data-vscroll]");
-  GL_VSCROLL.drag = col ? { y: e.clientY, f0: GL_VSCROLL.f, span: col.clientHeight + 8, id: e.pointerId } : null;
-}, { passive: true });
-document.addEventListener("pointermove", (e) => {
-  const d = GL_VSCROLL.drag;
-  if (!d || e.pointerId !== d.id) return;
-  glVScrollSet(d.f0 - (e.clientY - d.y) / d.span, false);
-}, { passive: true });
-const glVScrollEnd = (e) => {
-  const d = GL_VSCROLL.drag;
-  if (!d || e.pointerId !== d.id) return;
-  GL_VSCROLL.drag = null;
-  glVScrollSet(GL_VSCROLL.f, true);
-};
-document.addEventListener("pointerup", glVScrollEnd, { passive: true });
-document.addEventListener("pointercancel", glVScrollEnd, { passive: true });
-document.addEventListener("wheel", (e) => {
-  const col = e.target.closest && e.target.closest("#glance [data-vscroll]");
-  if (!col) return;
-  e.preventDefault();
-  glVScrollSet(GL_VSCROLL.f + Math.sign(e.deltaY) / 3, true);
-}, { passive: false });
-
 // Swipe across the Live page to change its design: left or right for the
 // single designs, up or down for the combinations. A swipe has to be mostly
 // along one axis and a good length, and not start at a screen edge (where the
@@ -7726,7 +7684,7 @@ document.addEventListener("wheel", (e) => {
   document.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest("#glance");
     const edge = 28;
-    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select, [data-vscroll]")
+    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select")
       && e.clientX > edge && e.clientX < innerWidth - edge && e.clientY > edge && e.clientY < innerHeight - edge
       ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId } : null;
   }, { passive: true });

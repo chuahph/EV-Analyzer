@@ -322,9 +322,9 @@ car, the route the car is navigating is drawn, with the destination, the
 arrival time, minutes and km to go and the battery % the car expects on
 arrival. While navigating, the Cockpit swaps its right-hand panel for a small
 map of the same route (the drive's Wh/km moves to the left tiles). Round Mix
-keeps a map in its right-hand column at all times; its six figures (km, min,
-average, battery used, net kWh, top speed) share the left column, three in
-view, dragged up or down to see the rest.
+keeps a map in its right-hand column at all times; its six figures sit on the
+left as three paired boxes: top and average km/h, battery used % and net kWh,
+time and distance.
 
 All of it is the car's own navigation, streamed: `Location` and `GpsHeading`
 every second, and `DestinationName`, `DestinationLocation`, `MinutesToArrival`,
