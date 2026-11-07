@@ -3362,9 +3362,9 @@ main > .card { max-width: 100%; }
 /* Dimmed: only the map underneath fades; the car arrow stays bright and the
    route is redrawn brighter (CARTO's lines sit above its tiles; Google's are
    brightened by the page, see setDim). */
-.gl-dim .gl-map-google .gl-map-inner { filter: brightness(.55) saturate(.75); }
+.gl-dim .gl-map-google .gl-map-inner { filter: brightness(.62) saturate(.85); }
 .gl-dim .gl-map-leaflet .leaflet-tile-pane { filter: brightness(.8) contrast(1.05) saturate(.8); }
-.gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.55) saturate(.75); }
+.gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.62) saturate(.85); }
 .gl-dim .gl-map-carfix svg { filter: drop-shadow(0 0 10px rgba(34, 211, 238, 1)); }
 .gl-dim .gl-mapo { background: rgba(0, 0, 0, .6); border-color: transparent; }
 /* The bottom row is only a grid of tiles: its gap over the car stays clear. */

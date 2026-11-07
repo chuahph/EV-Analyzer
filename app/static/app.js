@@ -6294,12 +6294,13 @@ function glMapGoogle(host) {
       casing.setPath(path); line.setPath(path);
       lineDim = null;
     },
-    // Dimmed, the map underneath fades and the route brightens and thickens,
-    // so it still stands out.
+    // Dimmed, the map fades and the route brightens and thickens, so it still
+    // stands out. The dimming filter covers the route too (Google draws it in
+    // the map), so its colour is set paler to come out brighter.
     setDim(dim) {
       if (!line || lineDim === dim) return;
       lineDim = dim;
-      line.setOptions(dim ? { strokeColor: "#8cc2ff", strokeWeight: 8 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
+      line.setOptions(dim ? { strokeColor: "#b4dcff", strokeWeight: 8 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
       casing.setOptions({ strokeWeight: dim ? 12 : 10 });
     },
     setDest(p) {
@@ -6376,7 +6377,7 @@ function glMapLeaflet(host) {
   // shrinking every street name to half size).
   L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false }).addTo(map);
   map.setView([0, 0], 2);
-  let dest = null, line = null, rot = 0, sizeKey = "";
+  let dest = null, line = null, lineDim = null, rot = 0, sizeKey = "";
   const layout = () => {
     const w = host.clientWidth, h = host.clientHeight;
     if (!w || !h) return;
@@ -6397,6 +6398,14 @@ function glMapLeaflet(host) {
           L.polyline([], { color: "#3b8bff", weight: 6, opacity: 1, interactive: false }).addTo(map)];
       }
       line.forEach((l) => l.setLatLngs(pts));
+      lineDim = null;
+    },
+    // Dimmed, the tiles fade and the route brightens a little.
+    setDim(dim) {
+      if (!line || lineDim === dim) return;
+      lineDim = dim;
+      line[1].setStyle(dim ? { color: "#6fb2ff", weight: 7 } : { color: "#3b8bff", weight: 6 });
+      line[0].setStyle({ weight: dim ? 11 : 10 });
     },
     setDest(p) {
       if (!p) { if (dest) { dest.remove(); dest = null; } return; }
