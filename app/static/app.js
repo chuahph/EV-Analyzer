@@ -6185,6 +6185,7 @@ function glMapScript(id, src, css) {
 // shrinks), over the whole route the first time. Off the route by more than
 // 80 m (a missed turn, before the car sends the new route) nothing more is
 // cut. Redrawn about once a second, not on every frame.
+const ROUTE_SHORT_CHARS = 64;
 function glRouteTrim(eng, pos) {
   const r = GL_MAP.route, pts = r && r.points;
   if (!pts || pts.length < 2) return;
@@ -6508,8 +6509,11 @@ function glMapUpdate(mode) {
           if (r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
           GL_MAP.routeV = r.v; GL_MAP.route = r; GL_MAP.cut = null; GL_MAP.trimAt = 0;
           GL_MAP.eng.setRoute(r.points || []);
+          // A very short RouteLine (a point or two, as near the destination)
+          // is nothing to draw, not a fault: no note for it.
           glMapRouteNote(r.points && r.points.length ? ""
             : /km from the car/.test(r.format || "") ? "Route doesn't pass the car"
+            : (r.raw_chars || 0) <= ROUTE_SHORT_CHARS ? ""
             : `Route unreadable (${r.raw_chars || 0} chars)`);
         }).catch(() => { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; });
     }

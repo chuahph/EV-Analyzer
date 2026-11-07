@@ -16841,6 +16841,7 @@ def _live_nav(car: dict) -> dict | None:
 
 _ROUTE_CACHE: dict[str, tuple] = {}
 ROUTE_NEAR_CAR_KM = 20.0
+ROUTE_SHORT_CHARS = 64        # a RouteLine this short is a point or two, not a route
 
 
 @router.get("/live/route")
@@ -16878,6 +16879,10 @@ def live_route(vin: str | None = Query(None)):
     out = {"v": v, "points": pts, "raw_chars": len(raw), "format": how}
     if not pts:
         out["reason"] = "RouteLine arrived but did not decode as a route"
+        # A short value (a point or two) is shown as sent, so what the car
+        # sends near the end of a route can be read off this page.
+        if len(raw) <= ROUTE_SHORT_CHARS:
+            out["raw"] = raw
     return out
 
 
