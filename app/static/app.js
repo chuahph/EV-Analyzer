@@ -6253,6 +6253,7 @@ const GL_GMAP_NIGHT = [
 const GL_CAR_ARROW = "M0,-11 L8,9 L0,4 L-8,9 Z";
 // The car's arrow and the destination pin as page elements, for the vector
 // map's markers (which stay upright on screen while the map turns).
+const GL_CAR_LOW = 0.78;   // how far down the turning map the car sits
 const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>';
 function glMapGoogle(host) {
   const g = window.google.maps;
@@ -6261,9 +6262,9 @@ function glMapGoogle(host) {
   // Vector (Map ID): Google's own dark scheme, and the map turns with the car,
   // the road ahead up, as the car's screen does. Raster (no Map ID): a dark
   // style of our own, north up.
-  // On the turning map the car is drawn by the page, not by Google: the view
-  // is always centred on it, so the arrow sits at the centre of the map,
-  // pointing up (a dot until the car has a heading).
+  // On the turning map the car is drawn by the page, not by Google, low in
+  // the map (GL_CAR_LOW of the way down) with the road ahead above it: the
+  // view is centred that far ahead of the car, along its heading.
   let mapDiv = host, fixCar = null;
   if (vec) {
     mapDiv = document.createElement("div");
@@ -6282,6 +6283,11 @@ function glMapGoogle(host) {
   let car = null, dest = null, casing = null, line = null, lastHd;
   let heading = 0, tilt = 0;
   const ll = (p) => ({ lat: p[0], lng: p[1] });
+  const ahead = (p, z) => {
+    const mPerPx = 156543.03 * Math.cos(p[0] * Math.PI / 180) / Math.pow(2, z);
+    const m = (mapDiv.clientHeight || host.clientHeight) * (GL_CAR_LOW - 0.5) * mPerPx, rad = heading * Math.PI / 180;
+    return [p[0] + (m * Math.cos(rad)) / 111320, p[1] + (m * Math.sin(rad)) / (111320 * Math.cos(p[0] * Math.PI / 180))];
+  };
   return {
     setRoute(pts) {
       if (!pts || !pts.length) {
@@ -6334,13 +6340,13 @@ function glMapGoogle(host) {
     },
     jump(p, z, mode) {
       if (vec) {
-        // The full Map design leans back a little, like a navigation view.
-        tilt = mode === "full" ? 40 : 0;
-        map.moveCamera({ center: ll(p), zoom: z, heading, tilt });
+        // Flat, so the car's place on screen is exact.
+        tilt = 0;
+        map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
       } else { map.setZoom(z); map.setCenter(ll(p)); }
     },
     follow(p) {
-      if (vec) map.moveCamera({ center: ll(p), heading, tilt });
+      if (vec) map.moveCamera({ center: ll(ahead(p, map.getZoom() || 16)), heading, tilt });
       else map.panTo(ll(p));
     },
     resize() {},

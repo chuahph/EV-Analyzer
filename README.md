@@ -371,8 +371,8 @@ drawn wide and translucent so the traffic shows through it). To get a key:
 
 **Heading-up (optional):** with a Map ID as well, the map is Google's vector
 map and turns with the car, the road ahead up, the car's arrow drawn by the
-page at the centre of the map; the
-full Map design leans back a little like a navigation view. Without one the
+page low in the map (78% of the way down) so most of the view is the road
+ahead. Without one the
 map stays north up. Google Cloud → **Google Maps Platform → Map management →
 Create Map ID**: any name, Map type **JavaScript**, **Vector** (tick Tilt and
 Rotation) → Save, then add its ID to Render as `GOOGLE_MAPS_MAP_ID`.

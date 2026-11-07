@@ -3407,7 +3407,7 @@ main > .card { max-width: 100%; }
 /* The turning map: Google's map in an inner layer, the car drawn by the page
    at the centre (the view is always centred on it). */
 .gl-map-inner { position: absolute; inset: 0; }
-.gl-map-carfix { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; z-index: 5; pointer-events: none; }
-.gl-map-note { position: absolute; left: 50%; top: calc(50% + 24px); transform: translateX(-50%); z-index: 6; white-space: nowrap;
+.gl-map-carfix { position: absolute; left: 50%; top: 78%; width: 34px; height: 34px; margin: -17px 0 0 -17px; z-index: 5; pointer-events: none; }
+.gl-map-note { position: absolute; left: 50%; top: calc(78% - 44px); transform: translateX(-50%); z-index: 6; white-space: nowrap;
   font: 600 10px system-ui, sans-serif; letter-spacing: .06em; color: #ffd27a; background: rgba(5, 10, 16, .85);
   border: 1px solid rgba(255, 210, 122, .35); border-radius: 8px; padding: 2px 8px; }
