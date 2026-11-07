@@ -5894,49 +5894,22 @@ function renderGlance(d) {
             </div>
           </div>`,
           glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
-          lt ? `<div class="gl-trip">
-            <div class="gl-trip-h">Last trip<em>${lt.id != null ? "#" + lt.id + " · " : ""}${h(tripWhen(lt.start_time).split(" ").pop())}</em></div>
-            <div class="gl-rts">
-              ${tile("dist", "km", n(lt.distance_km, 1, true))}
-              ${tile("time", "min", n(lt.duration_min))}
-              ${tile("speed", "Avg km/h", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—")}
-              ${tile("whkm", "Wh/km", n(lt.wh_per_km, 1, true), ltTone)}
-            </div>
-          </div>` : "",
+          // The map of where the car stands, the last trip over it.
+          `<div class="gl-navside"><div class="gl-map-slot gl-map-mini" data-map="mini">
+            ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
+            ${lt ? `<div class="gl-mapo gl-mapo-mini gl-mapo-last">
+              <em>Last trip${lt.id != null ? " #" + lt.id : ""} · ${h(tripWhen(lt.start_time).split(" ").pop())}</em>
+              <div><b>${n(lt.distance_km, 1, true)}<small>km</small></b><b>${n(lt.duration_min)}<small>min</small></b>
+              <b>${lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—"}<small>avg km/h</small></b>
+              <b class="${ltTone}">${n(lt.wh_per_km, 1, true)}<small>Wh/km</small></b></div>
+            </div>` : ""}
+          </div></div>`,
           foot);
       }
       // Energy over distance, as the car's "Current Drive" shows it.
       const tw = t.wh_per_km ?? t.driving_wh_per_km;
-      // Left: a trip computer of icon tiles. Right: a power meter, a trace of
-      // the last few minutes and a battery bar, so neither side repeats the
-      // Drive page's LED meters.
+      // Left: a trip computer of icon tiles. Right: the map and the battery bar.
       const kw = inst && inst.kw != null ? inst.kw : null;
-      // How far the energy left would go at this drive's Wh/km, beside the
-      // car's own rated figure; and what braking has put back this drive.
-      const rangeHere = nw.energy_kwh != null && tw > 0 ? nw.energy_kwh * 1000 / tw : null;
-      const regenPct = t.regen_kwh > 0 && t.energy_kwh > 0
-        ? t.regen_kwh / (t.energy_kwh + t.regen_kwh) * 100 : null;
-      const kwMin = -60, kwMax = 150, zero = -kwMin / (kwMax - kwMin) * 100;
-      const kwPos = kw == null ? null : Math.max(0, Math.min(100, (kw - kwMin) / (kwMax - kwMin) * 100));
-      const packKwh0 = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
-      const usedPct0 = Math.max(+t.soc_used || 0, packKwh0 && t.energy_kwh > 0 ? t.energy_kwh / packKwh0 * 100 : 0);
-      const powerBar = `<div class="gl-power">
-          <div class="gl-power-top"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span>
-            <strong class="${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></strong></div>
-          <div class="gl-power-track">
-            ${kwPos == null ? "" : `<i class="gl-power-fill ${kw < 0 ? "regen" : kw > 60 ? "hard" : ""}"
-              style="left:${Math.min(zero, kwPos).toFixed(1)}%;width:${Math.abs(kwPos - zero).toFixed(1)}%"></i>`}
-            <b style="left:${zero.toFixed(1)}%"></b></div>
-          <div class="gl-power-scale"><span>regen</span><span>0</span><span>${kwMax} kW</span></div>
-          <div class="gl-minis">
-            <div class="gl-mini"><span data-short="Batt">Batt used</span>
-              <div><strong>${n(usedPct0, 2, true)}<small>%</small></strong>
-              <em>${t.regen_kwh != null ? `regen ${n(t.regen_kwh, 2)}` : ""}</em></div></div>
-            <div class="gl-mini regen"><span data-short="Net use">Net use</span>
-              <div><strong>${t.energy_kwh != null ? n(t.energy_kwh, 2) : "—"}<small>kWh</small></strong>
-              <em>${regenPct != null ? `${n(regenPct)}% back` : ""}</em></div></div>
-          </div>
-        </div>`;
       // The car's battery % moves in whole steps, which barely register on a short
       // drive: take the larger of that and the energy used over the pack size.
       const packKwh = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
@@ -5947,19 +5920,19 @@ function renderGlance(d) {
           <div class="gl-power-sub">used ${n(usedPct, 2, true)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       const odoNow = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
-      // Navigating: the right side becomes a small map of the route with the
-      // car's arrival figures over it, and the battery bar under it. The
-      // drive's Wh/km takes the Max km/h tile's place on the left, and the
-      // power sits on the map.
+      // The right side is a small map following the car (the route and the
+      // car's arrival figures on it while navigating), the battery bar under
+      // it. The drive's Wh/km takes the Max km/h tile's place on the left,
+      // and the power sits on the map.
       const navC = L && L.nav;
-      if (navC) {
+      {
         const mini = `<div class="gl-map-slot gl-map-mini" data-map="mini">
             ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
-            <div class="gl-mapo gl-mapo-mini">
+            ${navC ? `<div class="gl-mapo gl-mapo-mini">
               ${navC.minutes != null ? `<b>${glClockIn(navC.minutes)}<small>${h(glNavName(navC.name) || "arrive")}</small></b>` : ""}
               ${navC.km != null ? `<b>${n(navC.km, 1, true)}<small>km</small></b>` : ""}
               ${navC.arrive_pct != null ? `<b class="${navC.arrive_pct < 15 ? "warn" : "good"}">${n(navC.arrive_pct)}<small>% arrive</small></b>` : ""}
-            </div>
+            </div>` : ""}
             <div class="gl-mapo gl-mapo-kw ${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></div>
           </div>`;
         return page(
@@ -5978,23 +5951,6 @@ function renderGlance(d) {
           `<div class="gl-navside">${mini}${battBar}</div>`,
           foot);
       }
-      return page(
-        `<div class="gl-trip">
-          <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
-          <div class="gl-rts">
-            ${tile("dist", "km", n(t.distance_km, 1, true))}
-            ${tile("time", "min", n(t.duration_min))}
-            ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
-            ${tile("speed", "Max km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—", "")}
-          </div>
-          <div class="gl-odo"><span>Odo km</span>
-            <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
-        </div>`,
-        glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
-        `${powerBar}
-         ${tw != null ? glWhBar(tw, rated, glLiveState.maxWh, "trip") : glWhBar(inst && inst.whkm != null ? inst.whkm : null, rated, glLiveState.maxWh)}
-         ${battBar}`,
-        foot);
     },
     // Drive: boxes, the Wh/km dial, and how the distance splits by speed.
     drive: () => {

@@ -320,8 +320,9 @@ arrow on a dark map, following it, with the speed, this drive's km, minutes,
 Wh/km, power and battery floating over it. When a destination is set in the
 car, the route the car is navigating is drawn, with the destination, the
 arrival time, minutes and km to go and the battery % the car expects on
-arrival. While navigating, the Cockpit swaps its right-hand panel for a small
-map of the same route (the drive's Wh/km moves to the left tiles). Round Mix
+arrival. The Cockpit's right-hand side is a small map at all times: driving,
+with the power on it and the battery bar under it (the drive's Wh/km is in the
+left tiles); parked, with the last trip over it. Round Mix
 keeps a map in its right-hand column at all times; its six figures sit on the
 left as three paired boxes: top and average km/h, battery used % and net kWh,
 time and distance. Dial has the map where its Battery bar was, with the

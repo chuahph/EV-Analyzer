@@ -3383,3 +3383,10 @@ main > .card { max-width: 100%; }
 .gl-mapo-batt { right: 6px; bottom: 14px; padding: 2px 8px; }
 .gl-mapo-batt b { font: 700 clamp(15px, calc(4.6 * var(--gh, 4px)), 22px)/1.05 "Chakra Petch", system-ui, sans-serif; color: var(--c); }
 .gl-mapo-batt b small { font-size: 8.5px; margin-left: 3px; }
+
+/* Cockpit parked: the last trip over the map. */
+.gl-mapo-last { flex-direction: column; align-items: stretch; gap: 3px; }
+.gl-mapo-last em { font: 600 10px system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; font-style: normal; }
+.gl-mapo-last > div { display: flex; justify-content: space-between; gap: 6px; }
+.gl-mapo-last b.tone-good, .gl-mapo-last b.good { color: var(--green); }
+.gl-mapo-last b.tone-warn, .gl-mapo-last b.warn { color: var(--amber); }
