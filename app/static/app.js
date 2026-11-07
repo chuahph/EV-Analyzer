@@ -6300,8 +6300,8 @@ function glMapGoogle(host) {
     setDim(dim) {
       if (!line || lineDim === dim) return;
       lineDim = dim;
-      line.setOptions(dim ? { strokeColor: "#b4dcff", strokeWeight: 8 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
-      casing.setOptions({ strokeWeight: dim ? 12 : 10 });
+      line.setOptions(dim ? { strokeColor: "#9ccbff", strokeWeight: 7 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
+      casing.setOptions({ strokeWeight: dim ? 11 : 10 });
     },
     setDest(p) {
       if (!p) { if (dest) { if (dest.setMap) dest.setMap(null); else dest.map = null; dest = null; } return; }
@@ -6404,8 +6404,8 @@ function glMapLeaflet(host) {
     setDim(dim) {
       if (!line || lineDim === dim) return;
       lineDim = dim;
-      line[1].setStyle(dim ? { color: "#6fb2ff", weight: 7 } : { color: "#3b8bff", weight: 6 });
-      line[0].setStyle({ weight: dim ? 11 : 10 });
+      line[1].setStyle(dim ? { color: "#559fff", weight: 6 } : { color: "#3b8bff", weight: 6 });
+      line[0].setStyle({ weight: 10 });
     },
     setDest(p) {
       if (!p) { if (dest) { dest.remove(); dest = null; } return; }
