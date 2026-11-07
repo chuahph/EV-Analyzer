@@ -16869,8 +16869,11 @@ def live_route(vin: str | None = Query(None)):
     pts, how = got
     # The car is on its own route: a reading that passes nowhere near where
     # the car is (with a fix from the last 10 minutes) is not its route.
-    if pts and isinstance(loc, dict) and time.time() - loc_t < 600:
-        here = (float(loc["latitude"]), float(loc["longitude"]))
+    try:
+        here = (float(loc["latitude"]), float(loc["longitude"])) if isinstance(loc, dict) else None
+    except (KeyError, TypeError, ValueError):
+        here = None                   # a location missing a coordinate: no check, no error
+    if pts and here and time.time() - loc_t < 600:
         step = max(1, len(pts) // 400)
         near = min((haversine_km(f"{here[0]}, {here[1]}", f"{p[0]}, {p[1]}") or 1e9)
                    for p in pts[::step] + [pts[-1]])
