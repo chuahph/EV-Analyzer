@@ -2877,7 +2877,7 @@ main > .card { max-width: 100%; }
 .gl-mix-trip .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.4 * var(--gh)), calc(3.4 * var(--gw))), 26px); }
 .gl-dim .gl-night-speed, .gl-dim .gl-mix-speed { opacity: .8; }
 .gl-dim .gl-pbar, .gl-dim .gl-mix-pw { border-color: #12181f; }
-.gl-dim .gl-dialbox svg { opacity: .55; }
+.gl-dim .gl-dialbox svg > :not(.gl-g3-spd) { opacity: .55; }
 .gl-dim .gl-rng-mid { opacity: .6; }
 .gl-dim .gl-mix-trace { opacity: .35; }
 .gl-mix-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; }
@@ -2905,7 +2905,9 @@ main > .card { max-width: 100%; }
 .gl-stk-trip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gl-stk-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; padding: 3px 4px; }
 .gl-stk-trip .gl-hud-stat strong { font-size: clamp(15px, min(calc(5 * var(--gh)), calc(3 * var(--gw))), 24px); }
-.gl-dim .gl-rmix-mid svg { opacity: .6; } .gl-dim .gl-stk-trace { opacity: .35; }
+.gl-dim .gl-rmix-mid svg > :not(.gl-g3-spd) { opacity: .6; }
+/* Dimmed, the speed in the middle dial stays a little brighter than the rest. */
+.gl-dim .gl-g3-spd { opacity: .9; } .gl-dim .gl-stk-trace { opacity: .35; }
 
 /* ---- 3D surfaces for the swipeable designs ------------------------------ */
 /* Every panel: a lit top edge, a dark underside, depth below it. */
@@ -3362,9 +3364,9 @@ main > .card { max-width: 100%; }
 /* Dimmed: only the map underneath fades; the car arrow stays bright and the
    route is redrawn brighter (CARTO's lines sit above its tiles; Google's are
    brightened by the page, see setDim). */
-.gl-dim .gl-map-google .gl-map-inner { filter: brightness(.58) saturate(.8); }
+.gl-dim .gl-map-google .gl-map-inner { filter: brightness(.58); }
 .gl-dim .gl-map-leaflet .leaflet-tile-pane { filter: brightness(.8) contrast(1.05) saturate(.8); }
-.gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.58) saturate(.8); }
+.gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.58); }
 .gl-dim .gl-map-carfix svg { filter: drop-shadow(0 0 10px rgba(34, 211, 238, 1)); }
 .gl-dim .gl-mapo { background: rgba(0, 0, 0, .6); border-color: transparent; }
 /* The bottom row is only a grid of tiles: its gap over the car stays clear. */

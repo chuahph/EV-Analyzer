@@ -5330,7 +5330,7 @@ function glGauge3D(spd, col, nw, odo, needle) {
     <g clip-path="url(#${uid}-cp)"><ellipse cx="82" cy="58" rx="48" ry="26" fill="url(#${uid}-gl)" transform="rotate(-18 82 58)"/></g>
     <text x="101.6" y="${(needle ? 41 : 0) + (num.length >= 3 ? 101 : 105)}" text-anchor="middle" font-size="${needle ? (num.length >= 3 ? 40 : 48) : (num.length >= 3 ? 50 : 62)}" font-weight="800" fill="#000" opacity=".7"
       style="font-variant-numeric:tabular-nums">${num}</text>
-    <text x="100" y="${(needle ? 41 : 0) + (num.length >= 3 ? 98.5 : 102.5)}" text-anchor="middle" font-size="${needle ? (num.length >= 3 ? 40 : 48) : (num.length >= 3 ? 50 : 62)}" font-weight="800" fill="${col}" filter="url(#${uid}-glow)"
+    <text class="gl-g3-spd" x="100" y="${(needle ? 41 : 0) + (num.length >= 3 ? 98.5 : 102.5)}" text-anchor="middle" font-size="${needle ? (num.length >= 3 ? 40 : 48) : (num.length >= 3 ? 50 : 62)}" font-weight="800" fill="${col}" filter="url(#${uid}-glow)"
       style="font-variant-numeric:tabular-nums">${num}</text>
     <text x="100" y="${needle ? 158 : 118}" text-anchor="middle" font-size="8" font-weight="650" letter-spacing="2" fill="#7e93ab">KM/H</text>
     ${needle ? needleSvg : `
@@ -6300,7 +6300,7 @@ function glMapGoogle(host) {
     setDim(dim) {
       if (!line || lineDim === dim) return;
       lineDim = dim;
-      line.setOptions(dim ? { strokeColor: "#9ccbff", strokeWeight: 7 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
+      line.setOptions(dim ? { strokeColor: "#1fd6ff", strokeWeight: 7 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
       casing.setOptions({ strokeWeight: dim ? 11 : 10 });
     },
     setDest(p) {
