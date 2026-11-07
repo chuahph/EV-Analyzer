@@ -6261,23 +6261,27 @@ function glMapGoogle(host) {
   // Vector (Map ID): Google's own dark scheme, and the map turns with the car,
   // the road ahead up, as the car's screen does. Raster (no Map ID): a dark
   // style of our own, north up.
-  const map = new g.Map(host, Object.assign({ center: { lat: 3.14, lng: 101.69 }, zoom: 3, disableDefaultUI: true,
+  // On the turning map the car is drawn by the page, not by Google: the view
+  // is always centred on it, so the arrow sits at the centre of the map,
+  // pointing up (a dot until the car has a heading).
+  let mapDiv = host, fixCar = null;
+  if (vec) {
+    mapDiv = document.createElement("div");
+    mapDiv.className = "gl-map-inner";
+    fixCar = document.createElement("div");
+    fixCar.className = "gl-map-car gl-map-carfix";
+    fixCar.innerHTML = GL_CAR_SVG;
+    host.append(mapDiv, fixCar);
+  }
+  const map = new g.Map(mapDiv, Object.assign({ center: { lat: 3.14, lng: 101.69 }, zoom: 3, disableDefaultUI: true,
     gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false, backgroundColor: "#11161c" },
     vec ? { mapId, colorScheme: "DARK", renderingType: "VECTOR", headingInteractionEnabled: false, tiltInteractionEnabled: false }
       : { styles: GL_GMAP_NIGHT }));
   // Live traffic on every road: green, orange, red.
   new g.TrafficLayer().setMap(map);
-  let car = null, carEl = null, dest = null, casing = null, line = null, lastHd;
+  let car = null, dest = null, casing = null, line = null, lastHd;
   let heading = 0, tilt = 0;
   const ll = (p) => ({ lat: p[0], lng: p[1] });
-  // Where to centre the view so the car sits low on the screen with the road
-  // ahead above it: a quarter of the view's height ahead of the car.
-  const ahead = (p, z) => {
-    if (!vec) return p;
-    const mPerPx = 156543.03 * Math.cos(p[0] * Math.PI / 180) / Math.pow(2, z);
-    const m = host.clientHeight * 0.25 * mPerPx, rad = heading * Math.PI / 180;
-    return [p[0] + (m * Math.cos(rad)) / 111320, p[1] + (m * Math.sin(rad)) / (111320 * Math.cos(p[0] * Math.PI / 180))];
-  };
   return {
     setRoute(pts) {
       if (!pts || !pts.length) {
@@ -6310,17 +6314,10 @@ function glMapGoogle(host) {
     setCar(p, hd) {
       if (hd != null) heading = hd;
       if (vec) {
-        if (!car) {
-          carEl = document.createElement("div");
-          carEl.className = "gl-map-car"; carEl.innerHTML = GL_CAR_SVG;
-          carEl.style.transform = "translateY(50%)";   // a marker stands on its point: centre it
-          car = new g.marker.AdvancedMarkerElement({ map, content: carEl, zIndex: 1000 });
-        }
-        car.position = ll(p);
         // The map turns with the car, so the arrow points straight up; with
         // no heading yet it is a dot.
-        const svg = carEl.querySelector("svg");
-        svg.style.transform = `rotate(${hd == null ? 0 : (hd - (map.getHeading() || 0))}deg)`;
+        const svg = fixCar.querySelector("svg");
+        svg.style.transform = "";
         svg.classList.toggle("nohd", hd == null);
         return;
       }
@@ -6339,11 +6336,11 @@ function glMapGoogle(host) {
       if (vec) {
         // The full Map design leans back a little, like a navigation view.
         tilt = mode === "full" ? 40 : 0;
-        map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
+        map.moveCamera({ center: ll(p), zoom: z, heading, tilt });
       } else { map.setZoom(z); map.setCenter(ll(p)); }
     },
     follow(p) {
-      if (vec) map.moveCamera({ center: ll(ahead(p, map.getZoom() || 16)), heading, tilt });
+      if (vec) map.moveCamera({ center: ll(p), heading, tilt });
       else map.panTo(ll(p));
     },
     resize() {},
@@ -6400,6 +6397,17 @@ function glMapLeaflet(host) {
     },
   };
 }
+// A small note on the map while a destination is set but no route line can
+// be drawn, so the reason shows without opening anything.
+function glMapRouteNote(text) {
+  GL_MAP.note = text;
+  const host = GL_MAP.host;
+  if (!host) return;
+  let el = host.querySelector(".gl-map-note");
+  if (!text) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.className = "gl-map-note"; host.append(el); }
+  el.textContent = text;
+}
 function glMapMount(root) {
   const slot = root && root.querySelector(".gl-map-slot");
   if (!slot) return;
@@ -6436,10 +6444,14 @@ function glMapUpdate(mode) {
           if (!r || r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
           GL_MAP.routeV = r.v; GL_MAP.route = r;
           GL_MAP.eng.setRoute(r.points || []);
+          glMapRouteNote(r.points && r.points.length ? "" : `Route unreadable (${r.raw_chars || 0} chars)`);
         }).catch(() => { GL_MAP.routeAsk = null; });
     }
   }
   eng.setDest(nav && nav.dest_lat != null ? [nav.dest_lat, nav.dest_lon] : null);
+  // Navigating with no route line to draw: say why, on the map.
+  if (!nav) glMapRouteNote("");
+  else if (!rv) glMapRouteNote("No route from the car yet");
   if (nw.lat == null) {
     if (nav && nav.dest_lat != null && GL_MAP.zoomKey !== "dest") { eng.jump([nav.dest_lat, nav.dest_lon], 13); GL_MAP.zoomKey = "dest"; }
     return;

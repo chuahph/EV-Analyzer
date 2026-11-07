@@ -370,15 +370,16 @@ drawn wide and translucent so the traffic shows through it). To get a key:
    save (Render redeploys).
 
 **Heading-up (optional):** with a Map ID as well, the map is Google's vector
-map and turns with the car, the road ahead up, the car low on the screen; the
+map and turns with the car, the road ahead up, the car's arrow drawn by the
+page at the centre of the map; the
 full Map design leans back a little like a navigation view. Without one the
 map stays north up. Google Cloud → **Google Maps Platform → Map management →
 Create Map ID**: any name, Map type **JavaScript**, **Vector** (tick Tilt and
 Rotation) → Save, then add its ID to Render as `GOOGLE_MAPS_MAP_ID`.
 
-The route is drawn solid blue with a dark edge. `/api/live/route` says why
-there is none when there is none: no RouteLine from the car, or one that did
-not decode.
+The route is drawn solid blue with a dark edge. While a destination is set
+and no line can be drawn, a note on the map says why ("No route from the car
+yet", or "Route unreadable"), as does `/api/live/route`.
 
 The key reaches the browser (that is how Google's maps work), which is why it
 is restricted to this site. Without a key, or if Google refuses it or cannot
