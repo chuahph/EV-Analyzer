@@ -3436,3 +3436,21 @@ main > .card { max-width: 100%; }
 
 /* No position known: no car arrow on the map. */
 .gl-map-nocar .gl-map-carfix { display: none; }
+
+/* A narrow map (an iPhone SE, or the side map of a design): the overlays
+   follow the map's own width, not the screen's. The arrival strip tightens
+   and shortens the destination's name so the arrival % stays in view, and
+   the battery badge drops its label so it clears the car. */
+.gl-map-slot { container-type: inline-size; }
+@container (max-width: 240px) {
+  .gl-mapo-mini { gap: 4px; padding: 3px 6px; }
+  .gl-mapo-mini b { font-size: 14px; min-width: 0; }
+  .gl-mapo-mini b small { font-size: 7.5px; }
+  .gl-mapo-mini > b:first-child { flex: 1 1 auto; overflow: hidden; }
+  .gl-mapo-mini > b:first-child small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gl-mapo-mini > b:not(:first-child) { flex: 0 0 auto; }
+  .gl-mapo-batt { right: 4px; padding: 2px 6px; }
+  .gl-mapo-batt b { font-size: 15px; }
+  .gl-mapo-batt b small { font-size: 0; margin-left: 1px; }
+  .gl-mapo-batt b small::before { content: "%"; font-size: 9px; }
+}
