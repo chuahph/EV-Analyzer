@@ -14160,6 +14160,10 @@ def test_live_reports_position_and_the_cars_navigation():
                                                 "Location": {"latitude": 0, "longitude": 0}})
         p = routes._live_payload("VNAV", None)
         assert p["now"]["heading"] == 181.0 and p["now"]["lat"] == 3.1401
+        # Parked, a heading minutes old still says which way the car faces.
+        routes._LIVE_MEM["VNAV"]["_kt"]["GpsHeading"] = _t.time() - 900
+        routes._LIVE_MEM["VNAV"]["_brg_t"] = _t.time() - 1200
+        assert routes._live_payload("VNAV", None)["now"]["heading"] == 181.0
         # Route ended: the car sends the navigation fields as invalid.
         routes._live_mem_fold("VNAV", at(-2), {k: None for k in (
             "DestinationName", "DestinationLocation", "MinutesToArrival", "MilesToArrival",

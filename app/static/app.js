@@ -6467,7 +6467,17 @@ function glMapUpdate(mode) {
     pos = [nw.lat + (m * Math.cos(rad)) / 111320,
       nw.lon + (m * Math.sin(rad)) / (111320 * Math.cos(nw.lat * Math.PI / 180))];
   }
-  eng.setCar(pos, nw.heading != null ? +nw.heading : null);
+  // The way the car points: the car's own figure, else the last one this
+  // phone saw (a parked car still faces that way, even after the server has
+  // restarted), else north. Always an arrow, never a bare dot.
+  let hd = nw.heading != null ? +nw.heading : null;
+  if (hd != null) {
+    if (hd !== GL_MAP.lastHd) { GL_MAP.lastHd = hd; try { localStorage.setItem("glLastHeading", String(hd)); } catch (_) { /* private mode */ } }
+  } else {
+    if (GL_MAP.lastHd == null) { try { const v = parseFloat(localStorage.getItem("glLastHeading")); if (Number.isFinite(v)) GL_MAP.lastHd = v; } catch (_) { /* none */ } }
+    hd = GL_MAP.lastHd != null ? GL_MAP.lastHd : 0;
+  }
+  eng.setCar(pos, hd);
   // Follow the car, closer in town and further out on the highway; the zoom
   // changes only when the speed crosses a band, so it does not breathe.
   const v = +nw.speed_kmh || 0;

@@ -16451,6 +16451,7 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             elif (haversine_km(f"{anchor[0]}, {anchor[1]}", f"{b[0]}, {b[1]}") or 0.0) > 0.012:
                 car["_brg"] = navroute.bearing_deg(tuple(anchor), b)
                 car["_brg_at"] = b
+                car["_brg_t"] = ts or time.time()
         if k == "MilesToArrival":
             # The odometer when the car last said how far is left: the km to
             # go then counts down with the odometer between its updates
@@ -16768,9 +16769,12 @@ def _live_position(car: dict) -> dict:
            # To a tenth: the page moves the arrow on from the fix by this much.
            "loc_age_sec": round(max(time.time() - float(kt.get("Location") or 0.0), 0.0), 1)}
     hd = car.get("GpsHeading")
-    # The car's own heading while it is fresh; else the bearing between its
-    # last two fixes.
-    if hd is not None and time.time() - float(kt.get("GpsHeading") or 0.0) < 120:
+    # The car's own heading, however old: a parked car still faces the way
+    # it last reported (the car sends the field only when it changes); else
+    # the bearing between its last fixes. A fresh bearing from moving wins
+    # over a heading from before the car moved.
+    hd_t, brg_t = float(kt.get("GpsHeading") or 0.0), float(car.get("_brg_t") or 0.0)
+    if hd is not None and (car.get("_brg") is None or hd_t >= brg_t - 5):
         out["heading"] = round(float(hd) % 360.0, 1)
     elif car.get("_brg") is not None:
         out["heading"] = round(float(car["_brg"]), 1)
