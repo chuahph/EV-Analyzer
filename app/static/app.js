@@ -6179,6 +6179,37 @@ function glMapScript(id, src, css) {
   };
   document.head.appendChild(js);
 }
+// The route ahead of the car only: the stretch already driven drops off, as
+// in the car. The car is placed on the nearest segment of the route; the
+// line then starts there. Searched forward from the last spot (a route only
+// shrinks), over the whole route the first time. Off the route by more than
+// 80 m (a missed turn, before the car sends the new route) nothing more is
+// cut. Redrawn about once a second, not on every frame.
+function glRouteTrim(eng, pos) {
+  const r = GL_MAP.route, pts = r && r.points;
+  if (!pts || pts.length < 2) return;
+  const now = Date.now();
+  if (now - (GL_MAP.trimAt || 0) < 1000) return;
+  GL_MAP.trimAt = now;
+  const k = Math.cos(pos[0] * Math.PI / 180) * 111320, M = 110540;
+  const from = GL_MAP.cut == null ? 0 : Math.max(0, GL_MAP.cut - 2);
+  const to = GL_MAP.cut == null ? pts.length - 1 : Math.min(pts.length - 1, GL_MAP.cut + 80);
+  let best = Infinity, bi = -1, bt = 0;
+  for (let i = from; i < to; i++) {
+    const ax = (pts[i][1] - pos[1]) * k, ay = (pts[i][0] - pos[0]) * M;
+    const dx = (pts[i + 1][1] - pts[i][1]) * k, dy = (pts[i + 1][0] - pts[i][0]) * M;
+    const L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / L2)) : 0;
+    const ex = ax + t * dx, ey = ay + t * dy, d = ex * ex + ey * ey;
+    if (d < best) { best = d; bi = i; bt = t; }
+  }
+  if (bi < 0 || best > 80 * 80) return;
+  GL_MAP.cut = bi;
+  const a = pts[bi], b = pts[bi + 1];
+  const at = [a[0] + (b[0] - a[0]) * bt, a[1] + (b[1] - a[1]) * bt];
+  eng.setRoute([at, ...pts.slice(bi + 1)]);
+}
+
 function glMapGoogleFailed() {
   // A refused key (Google calls gm_authFailure) or no script: CARTO instead,
   // for the rest of this visit.
@@ -6451,7 +6482,7 @@ function glMapMount(root) {
     slot.prepend(host);
     GL_MAP.host = host; GL_MAP.kind = kind; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_MAP.routeAsk = null;
     GL_MAP.eng = kind === "google" ? glMapGoogle(host) : glMapLeaflet(host);
-    if (GL_MAP.route) GL_MAP.eng.setRoute(GL_MAP.route.points);
+    if (GL_MAP.route) { GL_MAP.eng.setRoute(GL_MAP.route.points); GL_MAP.trimAt = 0; }
   } else {
     slot.prepend(GL_MAP.host);
   }
@@ -6475,7 +6506,7 @@ function glMapUpdate(mode) {
           // An error answer: ask again in 5 s (else not until the route changed).
           if (!r) { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; return; }
           if (r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
-          GL_MAP.routeV = r.v; GL_MAP.route = r;
+          GL_MAP.routeV = r.v; GL_MAP.route = r; GL_MAP.cut = null; GL_MAP.trimAt = 0;
           GL_MAP.eng.setRoute(r.points || []);
           glMapRouteNote(r.points && r.points.length ? ""
             : /km from the car/.test(r.format || "") ? "Route doesn't pass the car"
@@ -6517,6 +6548,7 @@ function glMapUpdate(mode) {
     hd = GL_MAP.lastHd != null ? GL_MAP.lastHd : 0;
   }
   eng.setCar(pos, hd);
+  glRouteTrim(eng, pos);
   // Follow the car, closer in town and further out on the highway; the zoom
   // changes only when the speed crosses a band, so it does not breathe.
   const v = +nw.speed_kmh || 0;
