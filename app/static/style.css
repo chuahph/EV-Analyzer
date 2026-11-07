@@ -3487,3 +3487,17 @@ main > .card { max-width: 100%; }
 .gl-mapo-mini:not(.gl-mapo-stack):not(.gl-mapo-last) > b:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .gl-mapo-mini:not(.gl-mapo-stack):not(.gl-mapo-last) > b:first-child small { display: block; max-width: 100%; align-self: stretch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gl-mapo-mini:not(.gl-mapo-stack):not(.gl-mapo-last) > b:not(:first-child) { flex: 0 0 auto; margin-left: 6px; }
+
+/* Calmer glow on the Live page's big numbers: the halos are smaller and
+   fainter (the colour stays), so a bright screen at night does not glare. */
+.gl-hud-speed { text-shadow: 0 0 12px color-mix(in srgb, currentColor 55%, transparent); }
+.gl-hud-speed, .gl-mix-speed, .gl-night-speed {
+  text-shadow: 0 1px 0 #1d2a3a, 0 2px 0 #172232, 0 3px 0 #111b28, 0 4px 0 #0c141f, 0 5px 0 #070d15,
+    0 9px 12px rgba(0,0,0,.85), 0 0 16px color-mix(in srgb, currentColor 45%, transparent);
+}
+.gl-dm-speed b { text-shadow: 0 0 12px color-mix(in srgb, var(--c) 55%, transparent), 0 3px 0 rgba(0,0,0,.7); }
+.gl-p1-num { text-shadow: 0 0 18px color-mix(in srgb, var(--c) 50%, transparent), 0 0 4px color-mix(in srgb, var(--c) 60%, transparent), 0 4px 0 rgba(0,0,0,.7); }
+.gl-digi b { text-shadow: 0 0 8px color-mix(in srgb, var(--c) 55%, transparent); }
+.gl-gr-h strong { text-shadow: 0 0 8px color-mix(in srgb, currentColor 50%, transparent); }
+.gl-ln-num { text-shadow: 0 0 14px color-mix(in srgb, var(--c) 50%, transparent); }
+.gl-rt strong { color: #d9e8f1; text-shadow: 0 0 6px color-mix(in srgb, var(--rc) 40%, transparent); }
