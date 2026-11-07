@@ -3471,3 +3471,12 @@ main > .card { max-width: 100%; }
   .gl-vpage > .gl-rt > strong { font-size: 18px; }
   .gl-vpage > .gl-rt > span { font-size: 8px; }
 }
+
+/* Mix and Stack: the speed fits its box, so it never spills over the
+   readings around it, whatever the screen's height (Safari's bars). Mix's
+   box is set by the layout and the figure sizes to it (digits are about
+   0.75 of the font size); Stack's box grows with its figure, a little
+   smaller than before so it fits with its label. */
+.gl-mix-speed { container-type: size; overflow: hidden; }
+.gl-spdn { font: inherit; line-height: .85; }
+.gl-mix-speed > .gl-spdn { font-size: min(calc(26 * var(--gh)), calc(15 * var(--gw)), calc((100cqh - 20px) * 1.3)); }

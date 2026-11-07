@@ -5730,7 +5730,7 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-stackpage">
       <div class="gl-stk-top">${stat(kw != null && kw < 0 ? "regen kW" : "power kW", kwShown)}${stat("Wh/km now", c.nowWh != null ? n(c.nowWh) : "—")}
         ${stat("battery %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good")}${stat("range km", range != null ? n(range) : "—")}</div>
-      <div class="gl-hud-speed" style="color:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>
+      <div class="gl-hud-speed" style="color:${col}"><b class="gl-spdn">${num}</b><small>km/h · ${nw.shift || "P"}</small></div>
       <div class="gl-stk-bot"><div class="gl-stk-trace">${c.trace}</div>
         <div class="gl-stk-trip">${stat("km", dist != null ? n(dist, 1, true) : "—")}${stat("min", mins != null ? n(mins) : "—")}${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}</div></div>
     </div>`;
@@ -5738,7 +5738,7 @@ function glAltPage(skin, c) {
   if (skin === 7) {
     // Mix: speed, power, the trace and the trip, all at once.
     return `<div class="gl-page gl-alt gl-mixpage">
-      <div class="gl-mix-speed" style="color:${col}">${num}<small>km/h · ${nw.shift || "P"}</small></div>
+      <div class="gl-mix-speed" style="color:${col}"><b class="gl-spdn">${num}</b><small>km/h · ${nw.shift || "P"}</small></div>
       <div class="gl-mix-pw"><div class="gl-mix-kw ${kw != null && kw < 0 ? "regen" : ""}"><span>${kw != null && kw < 0 ? "Regen" : "Power"}</span><strong>${kwShown}<small>kW</small></strong></div>${bar}
         <div class="gl-mix-batt"><span>Battery</span><strong>${pct != null ? n(pct, 1, true) : "—"}%</strong><em>${range != null ? n(range) + " km" : ""}</em></div></div>
       <div class="gl-mix-trace">${c.trace}</div>
