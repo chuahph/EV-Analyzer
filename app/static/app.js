@@ -6365,17 +6365,41 @@ function glMapGoogle(host) {
 }
 function glMapLeaflet(host) {
   const L = window.L;
-  const map = L.map(host, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
+  // CARTO's tiles are flat pictures, so the map turns as a whole: a square
+  // big enough to cover the view at any angle, centred on the car's place on
+  // screen (GL_CAR_LOW of the way down) and rotated against the car's heading,
+  // so the road ahead is up as on Google's map. The car is drawn by the page
+  // at that place; the credit line sits outside the turning square.
+  const inner = document.createElement("div");
+  inner.className = "gl-map-inner gl-map-rot";
+  const fixCar = document.createElement("div");
+  fixCar.className = "gl-map-car gl-map-carfix";
+  fixCar.innerHTML = GL_CAR_SVG;
+  const credit = document.createElement("div");
+  credit.className = "gl-map-credit";
+  credit.textContent = "© OpenStreetMap contributors © CARTO";
+  host.append(inner, fixCar, credit);
+  const map = L.map(inner, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
     doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false,
-    attributionControl: true });
-  map.attributionControl.setPrefix(false);
+    attributionControl: false });
   // {r} asks CARTO for its sharp @2x tiles on a high-density screen, at the
   // normal label size (detectRetina would also step the zoom up a level,
   // shrinking every street name to half size).
-  L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false,
-    attribution: "© OpenStreetMap contributors © CARTO" }).addTo(map);
+  L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false }).addTo(map);
   map.setView([0, 0], 2);
-  let car = null, dest = null, line = null;
+  let dest = null, line = null, rot = 0, sizeKey = "";
+  const layout = () => {
+    const w = host.clientWidth, h = host.clientHeight;
+    if (!w || !h) return;
+    const cx = w / 2, cy = h * GL_CAR_LOW;
+    const r = Math.ceil(Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy))) + 4;
+    const key = `${w}x${h}`;
+    if (key === sizeKey) return;
+    sizeKey = key;
+    Object.assign(inner.style, { width: 2 * r + "px", height: 2 * r + "px", left: (cx - r) + "px", top: (cy - r) + "px" });
+    map.invalidateSize(false);
+  };
+  layout();
   return {
     setRoute(pts) {
       if (!pts || !pts.length) { if (line) { line.forEach((l) => l.remove()); line = null; } return; }
@@ -6392,26 +6416,18 @@ function glMapLeaflet(host) {
       else dest.setLatLng(p);
     },
     setCar(p, hd) {
-      if (!car) {
-        car = L.marker(p, { interactive: false, keyboard: false, zIndexOffset: 1000,
-          icon: L.divIcon({ className: "gl-map-car", iconSize: [34, 34], iconAnchor: [17, 17],
-            html: '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>' }) }).addTo(map);
-      } else car.setLatLng(p);
-      const svg = car.getElement() && car.getElement().querySelector("svg");
-      if (svg) {
-        svg.style.transform = hd != null ? `rotate(${hd}deg)` : "";
-        svg.classList.toggle("nohd", hd == null);
-      }
+      if (hd == null) return;
+      // Turn the short way round (350 to 10 degrees is 20, not 340).
+      let d = ((-hd - rot) % 360 + 540) % 360 - 180;
+      rot += d;
+      inner.style.transform = `rotate(${rot.toFixed(1)}deg)`;
     },
-    jump(p, z) { map.setView(p, z, { animate: false }); },
+    jump(p, z) { layout(); map.setView(p, z, { animate: false }); },
     follow(p) {
       const dx = map.latLngToContainerPoint(p).distanceTo(map.getSize().divideBy(2));
       if (dx > 1) map.panTo(p, { animate: dx < 400, duration: 0.2, easeLinearity: 1, noMoveStart: true });
     },
-    resize() {
-      const sz = map.getSize();
-      if (sz.x !== host.clientWidth || sz.y !== host.clientHeight) map.invalidateSize(false);
-    },
+    resize() { layout(); },
   };
 }
 // A small note on the map while a destination is set but no route line can

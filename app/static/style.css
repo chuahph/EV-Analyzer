@@ -3362,7 +3362,7 @@ main > .card { max-width: 100%; }
 /* Dimmed: only the map underneath fades; the car arrow stays bright and the
    route is redrawn brighter (CARTO's lines sit above its tiles; Google's are
    brightened by the page, see setDim). */
-.gl-dim .gl-map-inner { filter: brightness(.55) saturate(.75); }
+.gl-dim .gl-map-google .gl-map-inner { filter: brightness(.55) saturate(.75); }
 .gl-dim .gl-map-leaflet .leaflet-tile-pane { filter: brightness(.8) contrast(1.05) saturate(.8); }
 .gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.55) saturate(.75); }
 .gl-dim .gl-map-carfix svg { filter: drop-shadow(0 0 10px rgba(34, 211, 238, 1)); }
@@ -3424,3 +3424,8 @@ main > .card { max-width: 100%; }
 .gl-mapo-batt2.warn { color: var(--amber); }
 .gl-mapo-row { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(70px, .9fr) repeat(2, minmax(0, 1fr)); }
 .gl-mapo-gap { display: block; }
+
+/* CARTO's map turned to the road ahead: the square turns about the car. */
+.gl-map-rot { position: absolute; inset: auto; transform-origin: 50% 50%; transition: transform .35s linear; will-change: transform; }
+.gl-map-credit { position: absolute; right: 4px; bottom: 2px; z-index: 6; font: 8.5px system-ui, sans-serif; color: #6b7a8e;
+  background: rgba(5, 8, 12, .6); padding: 0 5px; border-radius: 3px; pointer-events: none; }

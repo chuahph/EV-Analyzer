@@ -385,7 +385,8 @@ The key reaches the browser (that is how Google's maps work), which is why it
 is restricted to this site. Without a key, or if Google refuses it or cannot
 be reached, the map falls back to CARTO by itself.
 
-Without Google, tiles are CARTO's dark basemap (OpenStreetMap data), its sharp @2x tiles on a
+Without Google the map is CARTO's, turned the same way (road ahead up, the car
+low in the view; its street names turn with it). Its tiles are CARTO's dark basemap (OpenStreetMap data), its sharp @2x tiles on a
 high-density screen, lifted in brightness so streets and names read in a car,
 loaded only when a map is on screen; the map takes no touches, so a swipe over it still changes the
 design. Leaflet is served from `app/static/vendor/`.
