@@ -342,8 +342,15 @@ sudo curl -sL $APP_URL/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.p
 curl -sL $APP_URL/car -o c.sh && sudo bash c.sh
 ```
 
-Tiles are CARTO's dark basemap (OpenStreetMap data), loaded only when a map
-is on screen; the map takes no touches, so a swipe over it still changes the
+**Refresh:** the car's position arrives every second; between fixes the
+arrow and the view glide on at the car's speed and heading (five steps a
+second, at most 1.5 s ahead), so the map moves smoothly. The car sends minutes
+and miles to arrival every 10 s at best; between them the km to go counts
+down with the odometer and the minutes with the clock.
+
+Tiles are CARTO's dark basemap (OpenStreetMap data), its sharp @2x tiles on a
+high-density screen, lifted in brightness so streets and names read in a car,
+loaded only when a map is on screen; the map takes no touches, so a swipe over it still changes the
 design. Leaflet is served from `app/static/vendor/`.
 
 ### Setting it up

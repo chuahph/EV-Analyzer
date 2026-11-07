@@ -16395,6 +16395,12 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             elif (haversine_km(f"{anchor[0]}, {anchor[1]}", f"{b[0]}, {b[1]}") or 0.0) > 0.012:
                 car["_brg"] = navroute.bearing_deg(tuple(anchor), b)
                 car["_brg_at"] = b
+        if k == "MilesToArrival":
+            # The odometer when the car last said how far is left: the km to
+            # go then counts down with the odometer between its updates
+            # (the car sends them every 10 s at best).
+            odo = fields.get("Odometer", car.get("Odometer"))
+            car["_nav_odo"] = float(odo) if odo is not None else None
         car[k] = v
         if ts:
             kt[k] = ts
@@ -16702,7 +16708,8 @@ def _live_position(car: dict) -> dict:
         return {}
     kt = car.get("_kt") or {}
     out = {"lat": round(float(loc["latitude"]), 6), "lon": round(float(loc["longitude"]), 6),
-           "loc_age_sec": round(max(time.time() - float(kt.get("Location") or 0.0), 0.0))}
+           # To a tenth: the page moves the arrow on from the fix by this much.
+           "loc_age_sec": round(max(time.time() - float(kt.get("Location") or 0.0), 0.0), 1)}
     hd = car.get("GpsHeading")
     # The car's own heading while it is fresh; else the bearing between its
     # last two fixes.
@@ -16726,11 +16733,18 @@ def _live_nav(car: dict) -> dict | None:
         return None
     dest = car.get("DestinationLocation")
     miles = car.get("MilesToArrival")
+    # Counted down between the car's updates: km by the odometer since the
+    # car's figure, minutes by the clock, so the page moves every second.
+    if miles is not None and car.get("_nav_odo") is not None and car.get("Odometer") is not None:
+        miles = max(0.0, float(miles) - max(0.0, float(car["Odometer"]) - float(car["_nav_odo"])))
+    mins = car.get("MinutesToArrival")
+    if mins is not None:
+        mins = max(0.0, float(mins) - max(0.0, time.time() - float(kt.get("MinutesToArrival") or time.time())) / 60.0)
     nav = {
         "name": car.get("DestinationName") or None,
         "dest_lat": round(float(dest["latitude"]), 6) if isinstance(dest, dict) else None,
         "dest_lon": round(float(dest["longitude"]), 6) if isinstance(dest, dict) else None,
-        "minutes": round(float(car["MinutesToArrival"]), 1) if car.get("MinutesToArrival") is not None else None,
+        "minutes": round(mins, 1) if mins is not None else None,
         "km": round(float(miles) * sync_mod.MILES_TO_KM, 1) if miles is not None else None,
         "arrive_pct": (round(float(car["ExpectedEnergyPercentAtTripArrival"]), 1)
                        if car.get("ExpectedEnergyPercentAtTripArrival") is not None else None),

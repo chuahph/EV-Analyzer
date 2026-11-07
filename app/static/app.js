@@ -6214,7 +6214,10 @@ function glMapMount(root) {
       doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false,
       attributionControl: true });
     map.attributionControl.setPrefix(false);
-    L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 19, detectRetina: true,
+    // {r} asks CARTO for its sharp @2x tiles on a high-density screen, at the
+    // normal label size (detectRetina would also step the zoom up a level,
+    // shrinking every street name to half size).
+    L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false,
       attribution: "© OpenStreetMap contributors © CARTO" }).addTo(map);
     map.setView([0, 0], 2);
     GL_MAP.host = host; GL_MAP.map = map;
@@ -6257,8 +6260,17 @@ function glMapUpdate(mode) {
     if (nav && nav.dest_lat != null && GL_MAP.zoomKey !== "dest") { map.setView([nav.dest_lat, nav.dest_lon], 13, { animate: false }); GL_MAP.zoomKey = "dest"; }
     return;
   }
-  // The car: an arrow pointing the way it is heading.
-  const pos = [nw.lat, nw.lon];
+  // The car: an arrow pointing the way it is heading. Between the car's
+  // fixes (one a second) it moves on at the car's speed along its heading,
+  // for at most 1.5 s, so the map glides instead of stepping.
+  let pos = [nw.lat, nw.lon];
+  const fixAt = (glLiveState.recvAt || Date.now()) - (+nw.loc_age_sec || 0) * 1000;
+  const ahead = Math.min(Math.max((Date.now() - fixAt) / 1000, 0), 1.5);
+  if (nw.heading != null && +nw.speed_kmh > 3 && ahead > 0 && (+nw.loc_age_sec || 0) < 5) {
+    const m = (+nw.speed_kmh / 3.6) * ahead, rad = nw.heading * Math.PI / 180;
+    pos = [nw.lat + (m * Math.cos(rad)) / 111320,
+      nw.lon + (m * Math.sin(rad)) / (111320 * Math.cos(nw.lat * Math.PI / 180))];
+  }
   if (!GL_MAP.car) {
     GL_MAP.car = L.marker(pos, { interactive: false, keyboard: false, zIndexOffset: 1000,
       icon: L.divIcon({ className: "gl-map-car", iconSize: [34, 34], iconAnchor: [17, 17],
@@ -6272,16 +6284,25 @@ function glMapUpdate(mode) {
   // Follow the car, closer in town and further out on the highway; the zoom
   // changes only when the speed crosses a band, so it does not breathe.
   const v = +nw.speed_kmh || 0;
-  const z = (v < 35 ? 17 : v < 70 ? 16 : v < 100 ? 15 : 14) - (mode === "mini" ? 1 : 0);
+  const z = v < 35 ? 17 : v < 70 ? 16 : v < 100 ? 15 : 14;
   const key = mode + z;
   if (key !== GL_MAP.zoomKey) {
     GL_MAP.zoomKey = key;
     map.setView(pos, z, { animate: false });
   } else {
     const dx = map.latLngToContainerPoint(pos).distanceTo(map.getSize().divideBy(2));
-    if (dx > 1) map.panTo(pos, { animate: dx < 400, duration: 0.8, easeLinearity: 1, noMoveStart: true });
+    if (dx > 1) map.panTo(pos, { animate: dx < 400, duration: 0.2, easeLinearity: 1, noMoveStart: true });
   }
 }
+// Five steps a second between redraws while a map is on screen and the car
+// is moving: only the arrow and the view move, nothing is rebuilt.
+setInterval(() => {
+  const D = glLiveState.data, nw = D && D.now;
+  if (!GL_MAP.map || !GL_MAP.host || !GL_MAP.host.isConnected || document.hidden
+    || !nw || !(+nw.speed_kmh > 3)) return;
+  const slot = GL_MAP.host.parentElement;
+  glMapUpdate((slot && slot.dataset.map) || "full");
+}, 200);
 
 // Shrink to fit: any figure or heading wider than the box it sits in gets a
 // smaller font until it fits (down to 8 px), so no phone size clips a number or

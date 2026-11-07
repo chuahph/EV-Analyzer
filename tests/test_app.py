@@ -14146,8 +14146,13 @@ def test_live_reports_position_and_the_cars_navigation():
         # No GpsHeading streamed: the bearing between the last two fixes (ENE).
         assert 60 < p["now"]["heading"] < 80
         nav = p["nav"]
-        assert nav["name"] == "KLCC" and nav["minutes"] == 12.5 and nav["arrive_pct"] == 61.0
+        # Minutes count down by the clock since the car's figure (4 s ago).
+        assert nav["name"] == "KLCC" and 12.3 <= nav["minutes"] <= 12.5 and nav["arrive_pct"] == 61.0
         assert nav["km"] == 8.0 and nav["dest_lat"] == 3.152 and nav["route_v"]
+        # And km by the odometer: a mile on, a mile less to go, before the
+        # car sends its next figure.
+        routes._live_mem_fold("VNAV", at(-3.5), {"Odometer": 101.0})
+        assert routes._live_payload("VNAV", None)["nav"]["km"] == 6.4
         r = client.get("/api/live/route?vin=VNAV").json()
         assert r["v"] == nav["route_v"] and r["points"] == pts
         # The car's own heading wins while fresh; junk locations are ignored.

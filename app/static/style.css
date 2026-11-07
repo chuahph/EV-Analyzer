@@ -3313,6 +3313,9 @@ main > .card { max-width: 100%; }
 .gl-alt.gl-mapd > .gl-map-slot { flex: 1 1 auto; transform: none; }
 .gl-map-host { position: absolute; inset: 0; z-index: 0; background: #05080c; pointer-events: none; }
 .gl-map-host .leaflet-container, .gl-map-host.leaflet-container { background: #05080c; font: 10px system-ui, sans-serif; }
+/* CARTO's dark map is very dark on a phone in a car: lifted so the streets,
+   their names and the buildings read at a glance. */
+.gl-map-host .leaflet-tile-pane { filter: brightness(1.75) contrast(1.12) saturate(1.3); }
 .gl-map-host .leaflet-control-attribution { pointer-events: auto; background: rgba(5, 8, 12, .6) !important;
   color: #6b7a8e; font-size: 8.5px; line-height: 1.4; padding: 0 5px; }
 .gl-map-host .leaflet-control-attribution a { color: #8a98ad; }
