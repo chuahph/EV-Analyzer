@@ -5590,10 +5590,19 @@ function glAltPage(skin, c) {
       <span>${label}</span>
       <div class="gl-led-bar"><div class="gl-led-segs">${segs}</div><div class="gl-led-scale">${scale}</div></div>
       <div class="gl-digi" style="--c:${tone}"><i>${ghost}</i><b>${value}</b><small>${unit}</small></div></div>`;
-    return `<div class="gl-page gl-alt gl-dialpage">
+    const nav = c.nav;
+    return `<div class="gl-page gl-alt gl-dialpage gl-dialmap">
       ${led(regen ? "Regen" : "Power", pseg, "88.8", kwShown, "kW", pwTone, "<em>150</em><em>75</em><em>0</em><em>regen</em>")}
       <div class="gl-dialbox">${glLadder("regen", c)}${glGauge3D(spd, col, nw, null, true)}${glLadder("whkm", { ...c, whk })}</div>
-      ${led("Battery", bseg, "888", pct != null ? n(pct, 1, true) : "—", "%", bTone, "<em>100</em><em>75</em><em>50</em><em>25</em><em>0</em>")}
+      <div class="gl-map-slot gl-map-mini gl-dial-map" data-map="mini">
+        ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
+        ${nav ? `<div class="gl-mapo gl-mapo-mini gl-mapo-stack">
+          ${nav.minutes != null ? `<b>${glClockIn(nav.minutes)}<small>${h(glNavName(nav.name) || "arrive")}</small></b>` : ""}
+          ${nav.km != null ? `<b>${n(nav.km, 1, true)}<small>km to go</small></b>` : ""}
+          ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% arrive</small></b>` : ""}
+        </div>` : ""}
+        <div class="gl-mapo gl-mapo-batt" style="--c:${bTone}"><b>${pct != null ? n(pct, 1, true) : "—"}<small>% batt</small></b></div>
+      </div>
     </div>`;
   }
   if (skin === 6) {

@@ -324,7 +324,8 @@ arrival. While navigating, the Cockpit swaps its right-hand panel for a small
 map of the same route (the drive's Wh/km moves to the left tiles). Round Mix
 keeps a map in its right-hand column at all times; its six figures sit on the
 left as three paired boxes: top and average km/h, battery used % and net kWh,
-time and distance.
+time and distance. Dial has the map where its Battery bar was, with the
+battery % on the map in the bar's colours.
 
 All of it is the car's own navigation, streamed: `Location` and `GpsHeading`
 every second, and `DestinationName`, `DestinationLocation`, `MinutesToArrival`,

@@ -3377,3 +3377,9 @@ main > .card { max-width: 100%; }
 .gl-rmix .gl-rmix-map { display: flex; }
 .gl-rmix .gl-rmix-map > .gl-map-slot { flex: 1 1 auto; transform: none; }
 .gl-mapo-stack { flex-direction: column; align-items: flex-start; right: auto; gap: 4px; }
+
+/* Dial with the map in the Battery bar's place; the battery % sits on the map. */
+.gl-dialmap .gl-dial-map { flex: 0 0 34%; transform: none; }
+.gl-mapo-batt { right: 6px; bottom: 14px; padding: 2px 8px; }
+.gl-mapo-batt b { font: 700 clamp(15px, calc(4.6 * var(--gh, 4px)), 22px)/1.05 "Chakra Petch", system-ui, sans-serif; color: var(--c); }
+.gl-mapo-batt b small { font-size: 8.5px; margin-left: 3px; }
