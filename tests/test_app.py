@@ -14188,3 +14188,34 @@ def test_map_config_names_the_google_key_only_when_set():
         assert client.get("/api/map-config").json() == {"google_key": "AIzaTestKey", "traffic": True}
     finally:
         settings.google_maps_key = old
+
+
+def test_live_map_starts_from_the_cars_last_known_position():
+    """After a restart the car may be asleep and send nothing: the map starts
+    from the stored composite's Location instead of waiting, and a reading
+    from the car itself still replaces it."""
+    import json
+    import time as _t
+    from datetime import datetime, timezone
+    from app import state
+    from app.api import routes
+    from app.database import SessionLocal
+
+    with SessionLocal() as s:
+        old = state.get(s, state.TELEMETRY_LATEST_KEY)
+        state.put(s, state.TELEMETRY_LATEST_KEY, json.dumps({"VPARK": {
+            "Location": {"latitude": 3.1201, "longitude": 101.6544},
+            "_ts": datetime.fromtimestamp(_t.time() - 3600, timezone.utc).isoformat()}}))
+    routes._LIVE_MEM.clear()
+    try:
+        routes._live_mem_fold("VPARK", datetime.fromtimestamp(_t.time() - 60, timezone.utc).isoformat(),
+                              {"Gear": "ShiftStateP", "VehicleSpeed": 0.0, "Odometer": 100.0})
+        now = routes._live_payload("VPARK", None)["now"]
+        assert now["lat"] == 3.1201 and now["lon"] == 101.6544 and now["loc_age_sec"] >= 3500
+        routes._live_mem_fold("VPARK", datetime.fromtimestamp(_t.time() - 1, timezone.utc).isoformat(),
+                              {"Location": {"latitude": 3.2, "longitude": 101.7}})
+        assert routes._live_payload("VPARK", None)["now"]["lat"] == 3.2
+    finally:
+        routes._LIVE_MEM.clear()
+        with SessionLocal() as s:
+            state.put(s, state.TELEMETRY_LATEST_KEY, old or "{}")

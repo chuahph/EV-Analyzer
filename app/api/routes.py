@@ -16209,6 +16209,51 @@ def _live_energy_for(t: dict, live: list[dict]) -> float | None:
     return None
 
 
+_LIVE_LOC_SEEN: set[str] = set()
+
+
+def _live_loc_restore(vin: str) -> None:
+    """After a restart, the car's last known position (once per process), so
+    the Live map shows where the car is parked instead of waiting for it to
+    move: the stored composite's Location (sent every 30 s while awake), else
+    where the last saved drive ended. Kept with its own time, so a fresher
+    reading from the car always wins."""
+    if not vin or vin in _LIVE_LOC_SEEN:
+        return
+    _LIVE_LOC_SEEN.add(vin)
+    try:
+        import json as _j
+
+        from ..database import SessionLocal
+        from ..models import Drive, Vehicle
+        lat = lon = None
+        ts = 0.0
+        with SessionLocal() as s:
+            latest = (_j.loads(state.get(s, state.TELEMETRY_LATEST_KEY) or "{}") or {}).get(vin) or {}
+            loc = latest.get("Location") if isinstance(latest, dict) else None
+            if isinstance(loc, dict) and loc.get("latitude") is not None:
+                lat, lon = float(loc["latitude"]), float(loc["longitude"])
+                ts = _telemetry_ts(latest.get("_ts")) or 0.0
+            else:
+                d = s.scalars(select(Drive).join(Vehicle, Drive.vehicle_id == Vehicle.id)
+                              .where(Vehicle.vin == vin, Drive.end_coords.is_not(None), Drive.end_coords != "")
+                              .order_by(Drive.end_time.desc()).limit(1)).first()
+                if d and d.end_coords:
+                    a, b = (x.strip() for x in str(d.end_coords).split(",")[:2])
+                    lat, lon = float(a), float(b)
+                    ts = sync_mod.to_epoch(d.end_time) if d.end_time else 0.0
+        clean = _live_clean("Location", {"latitude": lat, "longitude": lon}) if lat is not None else None
+        if clean:
+            with _LIVE_LOCK:
+                car = _LIVE_MEM.setdefault(vin, {})
+                kt = car.setdefault("_kt", {})
+                if car.get("Location") is None:
+                    car["Location"] = clean
+                    kt["Location"] = float(ts or 0.0)
+    except Exception:   # noqa: BLE001 - the map just waits for the car, as before
+        pass
+
+
 def _live_sign_restore(vin: str) -> None:
     """After a restart, take the car's power sign from the store (once per
     process) so power shows at once; see state.TELEMETRY_POWER_SIGN_KEY."""
@@ -16625,6 +16670,7 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     """The live page's whole answer, built from memory only."""
     if not vin:
         vin = _live_latest_vin()
+    _live_loc_restore(vin)
     cap = capacity_kwh or 75.0
     # A copy taken under the lock: a record folding in on another thread
     # meanwhile could otherwise change the drive mid-read (energy summed to
