@@ -6217,9 +6217,13 @@ function glMapReady() {
     return null;
   }
   if (GL_MAP.cfg.google_key && !GL_MAP.gFailed) {
-    if (window.google && window.google.maps && window.google.maps.Map) return "google";
+    const vec = !!GL_MAP.cfg.map_id;
+    if (window.google && window.google.maps && window.google.maps.Map
+      && (!vec || (window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement))) return "google";
+    // With a Map ID the map is Google's vector map, which can turn to face
+    // the way the car is heading; its markers come from the marker library.
     glMapScript("google", "https://maps.googleapis.com/maps/api/js?v=weekly&key="
-      + encodeURIComponent(GL_MAP.cfg.google_key) + "&language=en&region=MY");
+      + encodeURIComponent(GL_MAP.cfg.google_key) + "&language=en&region=MY" + (vec ? "&libraries=marker" : ""));
     return null;
   }
   if (window.L && window.L.map) return "leaflet";
@@ -6247,29 +6251,79 @@ const GL_GMAP_NIGHT = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6a86" }] },
 ];
 const GL_CAR_ARROW = "M0,-11 L8,9 L0,4 L-8,9 Z";
+// The car's arrow and the destination pin as page elements, for the vector
+// map's markers (which stay upright on screen while the map turns).
+const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>';
 function glMapGoogle(host) {
   const g = window.google.maps;
-  const map = new g.Map(host, { center: { lat: 3.14, lng: 101.69 }, zoom: 3, disableDefaultUI: true,
-    gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false, backgroundColor: "#11161c",
-    styles: GL_GMAP_NIGHT });
-  // Live traffic on every road, the route included: green, orange, red.
+  const mapId = GL_MAP.cfg && GL_MAP.cfg.map_id;
+  const vec = !!(mapId && g.marker && g.marker.AdvancedMarkerElement);
+  // Vector (Map ID): Google's own dark scheme, and the map turns with the car,
+  // the road ahead up, as the car's screen does. Raster (no Map ID): a dark
+  // style of our own, north up.
+  const map = new g.Map(host, Object.assign({ center: { lat: 3.14, lng: 101.69 }, zoom: 3, disableDefaultUI: true,
+    gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false, backgroundColor: "#11161c" },
+    vec ? { mapId, colorScheme: "DARK", renderingType: "VECTOR", headingInteractionEnabled: false, tiltInteractionEnabled: false }
+      : { styles: GL_GMAP_NIGHT }));
+  // Live traffic on every road: green, orange, red.
   new g.TrafficLayer().setMap(map);
-  let car = null, dest = null, line = null, lastHd;
+  let car = null, carEl = null, dest = null, casing = null, line = null, lastHd;
+  let heading = 0, tilt = 0;
   const ll = (p) => ({ lat: p[0], lng: p[1] });
+  // Where to centre the view so the car sits low on the screen with the road
+  // ahead above it: a quarter of the view's height ahead of the car.
+  const ahead = (p, z) => {
+    if (!vec) return p;
+    const mPerPx = 156543.03 * Math.cos(p[0] * Math.PI / 180) / Math.pow(2, z);
+    const m = host.clientHeight * 0.25 * mPerPx, rad = heading * Math.PI / 180;
+    return [p[0] + (m * Math.cos(rad)) / 111320, p[1] + (m * Math.sin(rad)) / (111320 * Math.cos(p[0] * Math.PI / 180))];
+  };
   return {
     setRoute(pts) {
-      if (!pts || !pts.length) { if (line) { line.setMap(null); line = null; } return; }
-      // Wide and translucent, so the traffic colours on the road show through.
-      if (!line) line = new g.Polyline({ map, clickable: false, strokeColor: "#22d3ee", strokeOpacity: 0.4, strokeWeight: 11, zIndex: 1 });
-      line.setPath(pts.map(ll));
+      if (!pts || !pts.length) {
+        if (line) { line.setMap(null); casing.setMap(null); line = casing = null; }
+        return;
+      }
+      // Solid blue with a dark edge, over the traffic, as the car draws it.
+      if (!line) {
+        casing = new g.Polyline({ map, clickable: false, strokeColor: "#0a1a33", strokeOpacity: 0.9, strokeWeight: 10, zIndex: 1 });
+        line = new g.Polyline({ map, clickable: false, strokeColor: "#3b8bff", strokeOpacity: 1, strokeWeight: 6, zIndex: 2 });
+      }
+      const path = pts.map(ll);
+      casing.setPath(path); line.setPath(path);
     },
     setDest(p) {
-      if (!p) { if (dest) { dest.setMap(null); dest = null; } return; }
-      if (!dest) dest = new g.Marker({ map, clickable: false, zIndex: 900, icon: { path: g.SymbolPath.CIRCLE, scale: 8,
-        fillColor: "#ff3b6b", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } });
-      dest.setPosition(ll(p));
+      if (!p) { if (dest) { dest.map = null; if (dest.setMap) dest.setMap(null); dest = null; } return; }
+      if (!dest) {
+        if (vec) {
+          const el = document.createElement("div");
+          el.className = "gl-map-dest"; el.innerHTML = "<b></b>";
+          el.style.transform = "translateY(50%)";
+          dest = new g.marker.AdvancedMarkerElement({ map, content: el, zIndex: 900 });
+        } else {
+          dest = new g.Marker({ map, clickable: false, zIndex: 900, icon: { path: g.SymbolPath.CIRCLE, scale: 8,
+            fillColor: "#ff3b6b", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } });
+        }
+      }
+      if (vec) dest.position = ll(p); else dest.setPosition(ll(p));
     },
     setCar(p, hd) {
+      if (hd != null) heading = hd;
+      if (vec) {
+        if (!car) {
+          carEl = document.createElement("div");
+          carEl.className = "gl-map-car"; carEl.innerHTML = GL_CAR_SVG;
+          carEl.style.transform = "translateY(50%)";   // a marker stands on its point: centre it
+          car = new g.marker.AdvancedMarkerElement({ map, content: carEl, zIndex: 1000 });
+        }
+        car.position = ll(p);
+        // The map turns with the car, so the arrow points straight up; with
+        // no heading yet it is a dot.
+        const svg = carEl.querySelector("svg");
+        svg.style.transform = `rotate(${hd == null ? 0 : (hd - (map.getHeading() || 0))}deg)`;
+        svg.classList.toggle("nohd", hd == null);
+        return;
+      }
       if (!car) car = new g.Marker({ map, clickable: false, zIndex: 1000 });
       car.setPosition(ll(p));
       const key = hd == null ? null : Math.round(hd);
@@ -6281,8 +6335,17 @@ function glMapGoogle(host) {
             strokeColor: "#22d3ee", strokeWeight: 2, anchor: new g.Point(0, 0) });
       }
     },
-    jump(p, z) { map.setZoom(z); map.setCenter(ll(p)); },
-    follow(p) { map.panTo(ll(p)); },
+    jump(p, z, mode) {
+      if (vec) {
+        // The full Map design leans back a little, like a navigation view.
+        tilt = mode === "full" ? 40 : 0;
+        map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
+      } else { map.setZoom(z); map.setCenter(ll(p)); }
+    },
+    follow(p) {
+      if (vec) map.moveCamera({ center: ll(ahead(p, map.getZoom() || 16)), heading, tilt });
+      else map.panTo(ll(p));
+    },
     resize() {},
   };
 }
@@ -6301,9 +6364,12 @@ function glMapLeaflet(host) {
   let car = null, dest = null, line = null;
   return {
     setRoute(pts) {
-      if (!pts || !pts.length) { if (line) { line.remove(); line = null; } return; }
-      if (!line) line = L.polyline([], { color: "#22d3ee", weight: 6, opacity: 0.85, interactive: false }).addTo(map);
-      line.setLatLngs(pts);
+      if (!pts || !pts.length) { if (line) { line.forEach((l) => l.remove()); line = null; } return; }
+      if (!line) {
+        line = [L.polyline([], { color: "#0a1a33", weight: 10, opacity: 0.9, interactive: false }).addTo(map),
+          L.polyline([], { color: "#3b8bff", weight: 6, opacity: 1, interactive: false }).addTo(map)];
+      }
+      line.forEach((l) => l.setLatLngs(pts));
     },
     setDest(p) {
       if (!p) { if (dest) { dest.remove(); dest = null; } return; }
@@ -6397,7 +6463,7 @@ function glMapUpdate(mode) {
   const key = mode + z;
   if (key !== GL_MAP.zoomKey) {
     GL_MAP.zoomKey = key;
-    eng.jump(pos, z);
+    eng.jump(pos, z, mode);
   } else eng.follow(pos);
 }
 // Five steps a second between redraws while a map is on screen and the car

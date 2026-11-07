@@ -7482,7 +7482,9 @@ def map_config():
     set (a browser key, restricted to this site in Google Cloud, so it is
     public by design), else none and the page uses CARTO's tiles."""
     key = (get_settings().google_maps_key or "").strip()
-    return {"google_key": key or None, "traffic": bool(key)}
+    map_id = (get_settings().google_maps_map_id or "").strip()
+    return {"google_key": key or None, "traffic": bool(key),
+            "map_id": (map_id or None) if key else None, "heading_up": bool(key and map_id)}
 
 
 @router.get("/push/vapid-public-key")
@@ -16826,13 +16828,19 @@ def live_route(vin: str | None = Query(None)):
         raw = car.get("RouteLine")
     v = navroute.route_version(raw)
     if not v:
-        return {"v": None, "points": []}
+        # Why there is no line: the car has sent no route (none set, or the
+        # car's configuration has no RouteLine yet), as opposed to one that
+        # could not be read.
+        return {"v": None, "points": [], "raw_chars": 0, "reason": "no RouteLine from the car"}
     pts = _ROUTE_CACHE.get(v)
     if pts is None:
         pts = navroute.decode_route(raw) or []
         _ROUTE_CACHE.clear()          # one route at a time is all the page needs
         _ROUTE_CACHE[v] = pts
-    return {"v": v, "points": pts}
+    out = {"v": v, "points": pts, "raw_chars": len(raw)}
+    if not pts:
+        out["reason"] = "RouteLine arrived but did not decode as a route"
+    return out
 
 
 @router.get("/live")

@@ -14154,7 +14154,7 @@ def test_live_reports_position_and_the_cars_navigation():
         routes._live_mem_fold("VNAV", at(-3.5), {"Odometer": 101.0})
         assert routes._live_payload("VNAV", None)["nav"]["km"] == 6.4
         r = client.get("/api/live/route?vin=VNAV").json()
-        assert r["v"] == nav["route_v"] and r["points"] == pts
+        assert r["v"] == nav["route_v"] and r["points"] == pts and r["raw_chars"] == len(route)
         # The car's own heading wins while fresh; junk locations are ignored.
         routes._live_mem_fold("VNAV", at(-3), {"GpsHeading": 181.0,
                                                 "Location": {"latitude": 0, "longitude": 0}})
@@ -14165,7 +14165,7 @@ def test_live_reports_position_and_the_cars_navigation():
             "DestinationName", "DestinationLocation", "MinutesToArrival", "MilesToArrival",
             "ExpectedEnergyPercentAtTripArrival", "RouteLine")})
         assert routes._live_payload("VNAV", None)["nav"] is None
-        assert client.get("/api/live/route?vin=VNAV").json() == {"v": None, "points": []}
+        assert client.get("/api/live/route?vin=VNAV").json()["points"] == []
         # An older record replayed late does not bring the route back.
         routes._live_mem_fold("VNAV", at(-4), {"RouteLine": route, "MinutesToArrival": 12.5})
         assert routes._live_payload("VNAV", None)["nav"] is None
@@ -14183,11 +14183,17 @@ def test_map_config_names_the_google_key_only_when_set():
     try:
         client = TestClient(app)
         settings.google_maps_key = ""
-        assert client.get("/api/map-config").json() == {"google_key": None, "traffic": False}
+        assert client.get("/api/map-config").json() == {"google_key": None, "traffic": False,
+                                                         "map_id": None, "heading_up": False}
         settings.google_maps_key = " AIzaTestKey "
-        assert client.get("/api/map-config").json() == {"google_key": "AIzaTestKey", "traffic": True}
+        assert client.get("/api/map-config").json() == {"google_key": "AIzaTestKey", "traffic": True,
+                                                         "map_id": None, "heading_up": False}
+        settings.google_maps_map_id = "abc123"
+        assert client.get("/api/map-config").json()["heading_up"] is True
+        assert client.get("/api/map-config").json()["map_id"] == "abc123"
     finally:
         settings.google_maps_key = old
+        settings.google_maps_map_id = ""
 
 
 def test_live_map_starts_from_the_cars_last_known_position():

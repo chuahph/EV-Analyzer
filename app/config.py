@@ -206,6 +206,10 @@ class Settings(BaseSettings):
     # address (HTTP referrers) and to the Maps JavaScript API. Empty = the
     # map uses CARTO's dark tiles instead.
     google_maps_key: str = ""
+    # Optional Map ID (Google Cloud → Google Maps Platform → Map management,
+    # JavaScript, Vector). With it the map is Google's vector map and turns
+    # with the car, the road ahead up; without it the map stays north up.
+    google_maps_map_id: str = ""
     vapid_private_key_pem: str = ""
     vapid_public_key_pem: str = ""
     vapid_subject_email: str = "admin@example.com"
