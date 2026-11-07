@@ -14172,6 +14172,8 @@ def test_live_reports_position_and_the_cars_navigation():
         routes._LIVE_MEM["VNAV"]["_kt"]["GpsHeading"] = _t.time() - 900
         routes._LIVE_MEM["VNAV"]["_brg_t"] = _t.time() - 1200
         assert routes._live_payload("VNAV", None)["now"]["heading"] == 181.0
+        # The route text is never copied into the page's answer; its tag is.
+        assert "RouteLine" not in str(p.keys()) and routes._LIVE_MEM["VNAV"]["_route_v"] == nav["route_v"]
         # Route ended: the car sends the navigation fields as invalid.
         routes._live_mem_fold("VNAV", at(-2), {k: None for k in (
             "DestinationName", "DestinationLocation", "MinutesToArrival", "MilesToArrival",
@@ -14265,3 +14267,28 @@ def test_route_line_is_read_in_the_forms_a_car_may_send():
     assert got == pts and "coordinate pairs" in how
     got, how = navroute.decode_route_info(base64.b64encode(bytes(range(200, 230))).decode())
     assert got is None and how.startswith("not readable: base64 to 30 bytes, starting c8 c9")
+
+
+def test_live_navigation_ends_when_parked_at_the_destination():
+    """A car that goes to sleep on arrival may never send the route as ended:
+    in Park within 200 m of the end, the arrival box is dropped."""
+    import time as _t
+    from datetime import datetime, timezone
+    from app.api import routes
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
+    routes._LIVE_MEM.clear()
+    try:
+        routes._live_mem_fold("VARR", at(-5), {"Gear": "ShiftStateD", "VehicleSpeed": 20.0, "Odometer": 50.0,
+                                               "DestinationName": "Home", "MilesToArrival": 0.05,
+                                               "MinutesToArrival": 0.5})
+        assert routes._live_payload("VARR", None)["nav"]["name"] == "Home"     # still driving
+        routes._live_mem_fold("VARR", at(-1), {"Gear": "ShiftStateP", "VehicleSpeed": 0.0})
+        assert routes._live_payload("VARR", None)["nav"] is None
+        # Parked far from it (a stop on the way), the route stays.
+        routes._live_mem_fold("VARR", at(0), {"MilesToArrival": 3.0})
+        assert routes._live_payload("VARR", None)["nav"]["km"] == 4.8
+    finally:
+        routes._LIVE_MEM.clear()

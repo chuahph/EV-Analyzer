@@ -6220,6 +6220,8 @@ window.gm_authFailure = glMapGoogleFailed;
 // Which engine, once the server has said whether it has a Google key; null
 // while that question or the library is still on its way.
 function glMapReady() {
+  // The static demo has no server to ask: CARTO, from its own folder.
+  if (GL_MAP.cfg === undefined && STATIC_MODE) GL_MAP.cfg = {};
   if (GL_MAP.cfg === undefined) {
     if (!GL_MAP.cfgAsked) {
       GL_MAP.cfgAsked = true;
@@ -6240,7 +6242,8 @@ function glMapReady() {
     return null;
   }
   if (window.L && window.L.map) return "leaflet";
-  glMapScript("leaflet", "/static/vendor/leaflet.js", "/static/vendor/leaflet.css");
+  const vend = STATIC_MODE ? "vendor/" : "/static/vendor/";
+  glMapScript("leaflet", vend + "leaflet.js", vend + "leaflet.css");
   return null;
 }
 // Google's dark "night" style, quieter: the car's map at night.
@@ -6478,7 +6481,7 @@ function glMapUpdate(mode) {
   const nw = D.now || {}, nav = D.nav;
   // The route: fetched again only when the car's route changes.
   const rv = nav && nav.route_v;
-  if (rv !== GL_MAP.routeV && GL_MAP.routeAsk !== rv) {
+  if (rv !== GL_MAP.routeV && GL_MAP.routeAsk !== rv && Date.now() >= (GL_MAP.routeRetryAt || 0)) {
     GL_MAP.routeAsk = rv;
     if (!rv) {
       eng.setRoute(null);
@@ -6486,11 +6489,13 @@ function glMapUpdate(mode) {
     } else {
       fetch("/api/live/route?" + new URLSearchParams(D.vin ? { vin: D.vin } : {}), { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null)).then((r) => {
-          if (!r || r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
+          // An error answer: ask again in 5 s (else not until the route changed).
+          if (!r) { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; return; }
+          if (r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
           GL_MAP.routeV = r.v; GL_MAP.route = r;
           GL_MAP.eng.setRoute(r.points || []);
           glMapRouteNote(r.points && r.points.length ? "" : `Route unreadable (${r.raw_chars || 0} chars)`);
-        }).catch(() => { GL_MAP.routeAsk = null; });
+        }).catch(() => { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; });
     }
   }
   eng.setDest(nav && nav.dest_lat != null ? [nav.dest_lat, nav.dest_lon] : null);

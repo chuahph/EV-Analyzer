@@ -59,6 +59,9 @@ def build(out_dir: Path) -> None:
     (out_dir / "vendor").mkdir(exist_ok=True)
     shutil.copy(STATIC / "vendor" / "chart.umd.js", out_dir / "vendor" / "chart.umd.js")
     shutil.copy(STATIC / "vendor" / "jszip.min.js", out_dir / "vendor" / "jszip.min.js")
+    # The Live map's library, loaded by the page only when a map is on screen.
+    shutil.copy(STATIC / "vendor" / "leaflet.js", out_dir / "vendor" / "leaflet.js")
+    shutil.copy(STATIC / "vendor" / "leaflet.css", out_dir / "vendor" / "leaflet.css")
 
     # PWA icons (copied as-is) and a manifest tailored to the Pages subpath.
     shutil.copytree(STATIC / "icons", out_dir / "icons", dirs_exist_ok=True)

@@ -16441,6 +16441,8 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             # Invalid: for the navigation fields, the route has ended.
             if k in _LIVE_NAV_KEYS and k in car:
                 car.pop(k, None)
+                if k == "RouteLine":
+                    car.pop("_route_v", None)
                 if ts:
                     kt[k] = ts
             continue
@@ -16466,6 +16468,10 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
                 odo = car.get("Odometer")
             car["_nav_odo"] = float(odo) if odo is not None else None
         car[k] = v
+        if k == "RouteLine":
+            # Its tag, kept here so the page's answer never has to copy or
+            # hash the route itself (tens of kB on a long trip) every second.
+            car["_route_v"] = navroute.route_version(v)
         if ts:
             kt[k] = ts
     car["_seen"] = time.time()
@@ -16687,7 +16693,8 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     # one second, power still from the one before) or fail the whole frame,
     # which the page then shows as "not driving" for a moment.
     with _LIVE_LOCK:
-        car = copy.deepcopy(_LIVE_MEM.get(vin)) if vin else None
+        mem = _LIVE_MEM.get(vin) if vin else None
+        car = copy.deepcopy({k: v for k, v in mem.items() if k != "RouteLine"}) if mem else None
     ts = _telemetry_ts(car.get("_ts")) if car else None
     if not car or not ts:
         return {"driving": False, "vin": vin, "trip": None, "now": None,
@@ -16793,7 +16800,8 @@ def _live_nav(car: dict) -> dict | None:
     to go, the battery % the car expects on arrival, and a tag for the route
     (the points themselves come from /api/live/route, only when it changes)."""
     kt = car.get("_kt") or {}
-    have = [k for k in _LIVE_NAV_KEYS if car.get(k) is not None]
+    have = [k for k in _LIVE_NAV_KEYS if car.get(k) is not None
+            or (k == "RouteLine" and car.get("_route_v"))]
     if not have:
         return None
     newest = max(float(kt.get(k) or 0.0) for k in have)
@@ -16818,8 +16826,13 @@ def _live_nav(car: dict) -> dict | None:
                        if car.get("ExpectedEnergyPercentAtTripArrival") is not None else None),
         "delay_min": (round(float(car["RouteTrafficMinutesDelay"]), 1)
                       if car.get("RouteTrafficMinutesDelay") is not None else None),
-        "route_v": navroute.route_version(car.get("RouteLine")),
+        "route_v": car.get("_route_v") or navroute.route_version(car.get("RouteLine")),
     }
+    # Arrived: the car normally ends the route itself, but one that goes to
+    # sleep first leaves it standing. In Park within 200 m of the end, it is over.
+    if (nav["km"] is not None and nav["km"] <= 0.2
+            and (car.get("Gear") or "") in ("ShiftStateP", "P")):
+        return None
     # Navigation with nothing to show (only a stray origin, say) is none.
     if nav["dest_lat"] is None and nav["minutes"] is None and nav["km"] is None and not nav["route_v"]:
         return None
