@@ -16840,6 +16840,7 @@ def _live_nav(car: dict) -> dict | None:
 
 
 _ROUTE_CACHE: dict[str, tuple] = {}
+ROUTE_NEAR_CAR_KM = 20.0
 
 
 @router.get("/live/route")
@@ -16850,6 +16851,8 @@ def live_route(vin: str | None = Query(None)):
     with _LIVE_LOCK:
         car = (_LIVE_MEM.get(target) or {}) if target else {}
         raw = car.get("RouteLine")
+        loc = car.get("Location")
+        loc_t = float((car.get("_kt") or {}).get("Location") or 0.0)
     v = navroute.route_version(raw)
     if not v:
         # Why there is no line: the car has sent no route (none set, or the
@@ -16863,6 +16866,15 @@ def live_route(vin: str | None = Query(None)):
         _ROUTE_CACHE.clear()          # one route at a time is all the page needs
         _ROUTE_CACHE[v] = got
     pts, how = got
+    # The car is on its own route: a reading that passes nowhere near where
+    # the car is (with a fix from the last 10 minutes) is not its route.
+    if pts and isinstance(loc, dict) and time.time() - loc_t < 600:
+        here = (float(loc["latitude"]), float(loc["longitude"]))
+        step = max(1, len(pts) // 400)
+        near = min((haversine_km(f"{here[0]}, {here[1]}", f"{p[0]}, {p[1]}") or 1e9)
+                   for p in pts[::step] + [pts[-1]])
+        if near > ROUTE_NEAR_CAR_KM:
+            pts, how = [], f"{how}, but it passes {near:.0f} km from the car"
     out = {"v": v, "points": pts, "raw_chars": len(raw), "format": how}
     if not pts:
         out["reason"] = "RouteLine arrived but did not decode as a route"

@@ -55,12 +55,17 @@ def _decode_polyline(text: str, precision: int) -> list[list[float]] | None:
     return None
 
 
+ROUTE_MAX_STEP_DEG = 0.5   # ~55 km: a road route's points are far closer than this
+
+
 def _plausible(pts: list[list[float]] | None) -> bool:
-    """Consecutive points of a road route are never continents apart."""
-    if not pts:
+    """A road route: at least three points, none a long jump from the last.
+    Random bytes read as a polyline make wild jumps, and a line drawn from
+    them would be a route the car never planned."""
+    if not pts or len(pts) < 3:
         return False
     for a, b in zip(pts, pts[1:]):
-        if abs(a[0] - b[0]) > 5.0 or abs(a[1] - b[1]) > 5.0:
+        if abs(a[0] - b[0]) > ROUTE_MAX_STEP_DEG or abs(a[1] - b[1]) > ROUTE_MAX_STEP_DEG:
             return False
     return True
 

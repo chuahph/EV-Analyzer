@@ -14163,6 +14163,12 @@ def test_live_reports_position_and_the_cars_navigation():
         assert routes._live_payload("VNAV", None)["nav"]["km"] == 4.8
         r = client.get("/api/live/route?vin=VNAV").json()
         assert r["v"] == nav["route_v"] and r["points"] == pts and r["raw_chars"] == len(route)
+        # A reading that passes nowhere near the car is not its route.
+        far = base64.b64encode(_encode_polyline([[5.4, 100.3], [5.41, 100.31], [5.42, 100.33]]).encode()).decode()
+        routes._LIVE_MEM["VNAV"]["RouteLine"] = far
+        r = client.get("/api/live/route?vin=VNAV").json()
+        assert r["points"] == [] and "km from the car" in r["format"]
+        routes._LIVE_MEM["VNAV"]["RouteLine"] = route
         # The car's own heading wins while fresh; junk locations are ignored.
         routes._live_mem_fold("VNAV", at(-3), {"GpsHeading": 181.0,
                                                 "Location": {"latitude": 0, "longitude": 0}})

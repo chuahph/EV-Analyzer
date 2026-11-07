@@ -4713,27 +4713,6 @@ function glTrace(hist) {
 // Wh/km over the last three minutes, each point averaged over the 15 s
 // before it (energy over distance, not a one-second ratio), against the rated
 // line: green under it, amber over it.
-// Wh/km as a bar of LED dots: low on the left, high on the right, green up to
-// the rated figure, amber to one and a half times it, red beyond. The lit
-// part is the figure now; a white tick marks the drive's highest.
-// The cockpit's Wh/km dots. On a drive it is the trip's Wh/km, as the car's
-// trip card shows it; the instant figure stands in only before there is one.
-function glWhBar(now, rated, max, label = "now") {
-  const R = rated || 150, N = 36, TOP = R * 2.5;
-  const lit = now != null ? Math.max(0, Math.min(N, Math.round(Math.max(0, now) / TOP * N))) : 0;
-  const mk = max != null ? Math.max(0, Math.min(N - 1, Math.round(max / TOP * N) - 1)) : -1;
-  let dots = "";
-  for (let i = 0; i < N; i++) {
-    const v = (i + 0.5) / N * TOP;
-    const c = v <= R ? "#2ee86a" : v <= R * 1.5 ? "#ffb020" : "#ff3b3b";
-    dots += `<i class="${i < lit ? "on" : ""}${i === mk ? " mk" : ""}" style="--c:${c}"></i>`;
-  }
-  const n0 = (v) => Math.round(v).toLocaleString("en-US");
-  return `<div class="gl-trace"><div class="gl-trace-h"><span>Wh/km<i data-opt="1"> · low to high</i></span>
-    <span>${now != null ? `<strong class="${now > R ? "warn" : "good"}">${label === "trip" ? fmt(now, 1, true) : n0(now)}</strong><i data-opt="2"> ${label}</i> · ` : ""}<i data-opt="3">rated </i>${n0(R)}</span></div>
-    <div class="gl-whbar">${dots}</div></div>`;
-}
-
 function glEffTrace(hist, rated) {
   const W = 300, H = 92, R = rated || 150;
   const n = (v) => Math.round(v).toLocaleString("en-US");
@@ -5586,11 +5565,6 @@ function glAltPage(skin, c) {
       const on = i >= ZERO ? i < ZERO + litDrive : i >= ZERO - litRegen && regen;
       const col = i >= ZERO ? powerCol((i - ZERO + 1) / (NSEG - ZERO)) : "#2ee86a";
       pseg += `<i class="${on ? "on" : ""}${i === ZERO ? " zero" : ""}" style="--c:${col}"></i>`;
-    }
-    const litB = pct != null ? Math.round(pct / 100 * NSEG) : 0;
-    let bseg = "";
-    for (let i = 0; i < NSEG; i++) {
-      bseg += `<i class="${i < litB ? "on" : ""}" style="--c:${battCol((i + 0.5) / NSEG * 100)}"></i>`;
     }
     const pwTone = kw == null ? "#7e93ab" : regen ? "#2ee86a" : powerCol(Math.min(1, kw / 150));
     const bTone = pct == null ? "#7e93ab" : battCol(pct);
@@ -6494,7 +6468,9 @@ function glMapUpdate(mode) {
           if (r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
           GL_MAP.routeV = r.v; GL_MAP.route = r;
           GL_MAP.eng.setRoute(r.points || []);
-          glMapRouteNote(r.points && r.points.length ? "" : `Route unreadable (${r.raw_chars || 0} chars)`);
+          glMapRouteNote(r.points && r.points.length ? ""
+            : /km from the car/.test(r.format || "") ? "Route doesn't pass the car"
+            : `Route unreadable (${r.raw_chars || 0} chars)`);
         }).catch(() => { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; });
     }
   }
