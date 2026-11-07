@@ -3453,21 +3453,23 @@ main > .card { max-width: 100%; }
   .gl-mapo-batt b { font-size: 15px; }
   .gl-mapo-batt b small { font-size: 0; margin-left: 1px; }
   .gl-mapo-batt b small::before { content: "%"; font-size: 9px; }
+  .gl-mapo-kw { left: 4px; padding: 1px 6px; font-size: 12px; }
 }
 
 /* The Cockpit's paged trip tiles take their height from the panel, which
    varies with the phone (and Safari's bars, and the Dynamic Island's
-   margins). Each tile sizes to itself: short, the icon goes so the figure
-   stays whole; shorter still, the figure shrinks. Never clipped. */
+   margins). Each tile sizes to itself (heights are its inner space, inside
+   the padding): short, the icon goes so the figure stays whole; shorter
+   still, the figure shrinks. Never clipped; on a usual phone, unchanged. */
 .gl-vpage > .gl-rt { container-type: size; overflow: hidden; }
-@container (max-height: 78px) {
+@container (max-height: 44px) {
   .gl-vpage > .gl-rt > i { display: none; }
   .gl-vpage > .gl-rt > span { grid-column: 1 / -1; }
 }
-@container (max-height: 62px) {
+@container (max-height: 38px) {
   .gl-vpage > .gl-rt > strong { font-size: 22px; }
 }
-@container (max-height: 50px) {
+@container (max-height: 32px) {
   .gl-vpage > .gl-rt > strong { font-size: 18px; }
   .gl-vpage > .gl-rt > span { font-size: 8px; }
 }
