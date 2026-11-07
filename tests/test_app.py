@@ -14103,6 +14103,11 @@ def test_route_line_decodes_base64_polyline_at_precision_6():
     assert navroute.decode_route(raw) == pts
     # Unwrapped polyline is read too; junk and absurd lengths are no route.
     assert navroute.decode_route(_encode_polyline(pts)) == pts
+    # Near the destination the car sends a two-point route (24 characters);
+    # it is still a route.
+    two = [[3.123456, 101.654321], [3.124456, 101.655321]]
+    raw2 = base64.b64encode(_encode_polyline(two).encode()).decode()
+    assert len(raw2) == 24 and navroute.decode_route(raw2) == two
     assert navroute.decode_route("not a route!!") is None
     assert navroute.decode_route("") is None
     assert navroute.decode_route(None) is None

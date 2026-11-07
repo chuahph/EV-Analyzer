@@ -3367,6 +3367,8 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-map-google:not(:has(.gl-map-inner)) { filter: brightness(.55) saturate(.75); }
 .gl-dim .gl-map-carfix svg { filter: drop-shadow(0 0 10px rgba(34, 211, 238, 1)); }
 .gl-dim .gl-mapo { background: rgba(0, 0, 0, .6); border-color: transparent; }
+/* The bottom row is only a grid of tiles: its gap over the car stays clear. */
+.gl-dim .gl-mapo-row { background: none; }
 
 /* Round Mix: the six figures as three paired boxes on the left; the map on the right. */
 .gl-rmix-pairs .gl-pair { display: grid; grid-template-columns: 1fr 1fr; align-items: center; padding: 4px 4px; }
