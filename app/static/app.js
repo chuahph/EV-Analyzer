@@ -5839,6 +5839,9 @@ function renderGlance(d) {
         batt: '<rect x="3" y="7" width="16" height="10" rx="2.5"/><path d="M22 11v2M7 10v4M11 10v4"/>',
         range: '<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.2"/>',
         odo: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M11 10v4M15 10v4"/>',
+        regen: '<path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M20 4v4h-4"/>',
+        cost: '<circle cx="12" cy="12" r="8.5"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5v11"/>',
+        temp: '<path d="M10 14V5a2 2 0 1 1 4 0v9a4 4 0 1 1-4 0Z"/>',
       };
       // The unit is the tile's label (km, min, Wh/km), so the number alone
       // fills the width and can be drawn much larger.
@@ -5920,6 +5923,11 @@ function renderGlance(d) {
           <div class="gl-power-sub">used ${n(usedPct, 2, true)}% this drive · ${n(t.energy_kwh, 2)} kWh</div></div>`;
       const twTone = rated && tw ? (tw > rated ? "warn" : "good") : "";
       const odoNow = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
+      // How far the energy left would go at this drive's Wh/km, and what a kWh
+      // out of the pack cost at the last charge (its charger loss included).
+      const estRange = nw.energy_kwh != null && tw > 0 ? nw.energy_kwh * 1000 / tw : null;
+      const lc = (lastData && lastData.last_charge) || {};
+      const costRate = lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null;
       // The right side is a small map following the car (the route and the
       // car's arrival figures on it while navigating), the battery bar under
       // it. The drive's Wh/km takes the Max km/h tile's place on the left,
@@ -5938,12 +5946,22 @@ function renderGlance(d) {
         return page(
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
-            <div class="gl-rts">
-              ${tile("dist", "km", n(t.distance_km, 1, true))}
-              ${tile("time", "min", n(t.duration_min))}
-              ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
-              ${tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone)}
-            </div>
+            ${glVPages([[
+              tile("dist", "km", n(t.distance_km, 1, true)),
+              tile("time", "min", n(t.duration_min)),
+              tile("speed", "Avg km/h", n(t.avg_speed_kmh)),
+              tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone),
+            ], [
+              tile("speed", "Top km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—"),
+              tile("range", "Range km", estRange != null ? n(estRange) : "—"),
+              tile("batt", "Used %", n(usedPct, 2, true)),
+              tile("whkm", "Net kWh", t.energy_kwh != null ? n(t.energy_kwh, 2) : "—"),
+            ], [
+              tile("regen", "Regen kWh", t.regen_kwh != null ? n(t.regen_kwh, 2) : "—", "good"),
+              tile("cost", `Cost ${cur || "RM"}`, costRate != null && t.energy_kwh != null ? n(t.energy_kwh * costRate, 2, true) : "—"),
+              tile("range", "Rated km", nw.range_km != null ? n(nw.range_km) : "—"),
+              tile("temp", "Outside °C", nw.out_temp != null ? n(nw.out_temp, 0) : "—"),
+            ]])}
             <div class="gl-odo"><span>Odo km</span>
               <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
           </div>`,
@@ -7781,6 +7799,60 @@ showHome();
   }, { passive: false });
 })();
 
+// Pages of tiles that scroll inside the page (the Cockpit's trip computer):
+// two rows in view, dragged up or down a row at a time. The page is rebuilt
+// up to five times a second, which would cut a native scroll off mid-drag,
+// so the position lives here (0 = first page, 1 = last) and every redraw
+// draws the pages where they were. Each page is a 2 x 2 grid stacked in one
+// cell and moved by its own height, so no size has to be measured.
+const GL_VSCROLL = { f: 0, drag: null };
+function glVPages(pages) {
+  const f = GL_VSCROLL.f, N = pages.length;
+  const steps = (N - 1) * 2;
+  return `<div class="gl-vpages${f > 0.02 ? " up" : ""}${f < 0.98 ? " down" : ""}" data-vscroll data-steps="${steps}" style="--f:${f.toFixed(3)};--n:${N - 1}">
+    ${pages.map((p, i) => `<div class="gl-rts gl-vpage" style="--i:${i}">${p.join("")}</div>`).join("")}
+    <span class="gl-vdots">${pages.map((_, i) => `<i class="${Math.round(f * (N - 1)) === i ? "on" : ""}"></i>`).join("")}</span></div>`;
+}
+function glVScrollSet(f, snap) {
+  const box = document.querySelector("#glance [data-vscroll]");
+  const steps = (box && +box.dataset.steps) || 1;
+  f = Math.max(0, Math.min(1, f));
+  if (snap) f = Math.round(f * steps) / steps;
+  GL_VSCROLL.f = f;
+  if (!box) return;
+  box.classList.toggle("glide", !!snap);
+  box.style.setProperty("--f", f.toFixed(3));
+  box.classList.toggle("up", f > 0.02);
+  box.classList.toggle("down", f < 0.98);
+  const dots = [...box.querySelectorAll(".gl-vdots i")];
+  const on = Math.round(f * (dots.length - 1));
+  dots.forEach((d, i) => d.classList.toggle("on", i === on));
+}
+document.addEventListener("pointerdown", (e) => {
+  const box = e.target.closest && e.target.closest("#glance [data-vscroll]");
+  // One full drag of the box's height moves one page.
+  GL_VSCROLL.drag = box ? { y: e.clientY, f0: GL_VSCROLL.f, span: (box.clientHeight + 8) * Math.max(1, (+box.dataset.steps || 2) / 2), id: e.pointerId } : null;
+}, { passive: true });
+document.addEventListener("pointermove", (e) => {
+  const d = GL_VSCROLL.drag;
+  if (!d || e.pointerId !== d.id) return;
+  glVScrollSet(d.f0 - (e.clientY - d.y) / d.span, false);
+}, { passive: true });
+const glVScrollEnd = (e) => {
+  const d = GL_VSCROLL.drag;
+  if (!d || e.pointerId !== d.id) return;
+  GL_VSCROLL.drag = null;
+  glVScrollSet(GL_VSCROLL.f, true);
+};
+document.addEventListener("pointerup", glVScrollEnd, { passive: true });
+document.addEventListener("pointercancel", glVScrollEnd, { passive: true });
+document.addEventListener("wheel", (e) => {
+  const box = e.target.closest && e.target.closest("#glance [data-vscroll]");
+  if (!box) return;
+  e.preventDefault();
+  glVScrollSet(GL_VSCROLL.f + Math.sign(e.deltaY) / ((+box.dataset.steps) || 1), true);
+}, { passive: false });
+
 // Swipe across the Live page to change its design: left or right for the
 // single designs, up or down for the combinations. A swipe has to be mostly
 // along one axis and a good length, and not start at a screen edge (where the
@@ -7790,7 +7862,7 @@ showHome();
   document.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest("#glance");
     const edge = 28;
-    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select")
+    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select, [data-vscroll]")
       && e.clientX > edge && e.clientX < innerWidth - edge && e.clientY > edge && e.clientY < innerHeight - edge
       ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId } : null;
   }, { passive: true });
