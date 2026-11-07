@@ -5947,19 +5947,22 @@ function renderGlance(d) {
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
             ${glVPages([[
+              // The drive: distance, time and speed.
               tile("dist", "km", n(t.distance_km, 1, true)),
               tile("time", "min", n(t.duration_min)),
               tile("speed", "Avg km/h", n(t.avg_speed_kmh)),
-              tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone),
-            ], [
               tile("speed", "Top km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—"),
-              tile("range", "Range km", estRange != null ? n(estRange) : "—"),
-              tile("batt", "Used %", n(usedPct, 2, true)),
+            ], [
+              // Its energy.
+              tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone),
+              tile("regen", "Regen kWh", t.regen_kwh != null ? n(t.regen_kwh, 2) : "—", "good"),
+              tile("batt", "Batt used %", n(usedPct, 2, true)),
               tile("whkm", "Net kWh", t.energy_kwh != null ? n(t.energy_kwh, 2) : "—"),
             ], [
-              tile("regen", "Regen kWh", t.regen_kwh != null ? n(t.regen_kwh, 2) : "—", "good"),
+              // What is left, and what it cost.
+              tile("range", "Range km now", nw.range_km != null ? n(nw.range_km) : "—"),
+              tile("range", "Range at rate", estRange != null ? n(estRange) : "—"),
               tile("cost", `Cost ${cur || "RM"}`, costRate != null && t.energy_kwh != null ? n(t.energy_kwh * costRate, 2, true) : "—"),
-              tile("range", "Rated km", nw.range_km != null ? n(nw.range_km) : "—"),
               tile("temp", "Outside °C", nw.out_temp != null ? n(nw.out_temp, 0) : "—"),
             ]])}
             <div class="gl-odo"><span>Odo km</span>

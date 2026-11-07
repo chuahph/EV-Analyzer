@@ -322,9 +322,10 @@ car, the route the car is navigating is drawn, with the destination, the
 arrival time, minutes and km to go and the battery % the car expects on
 arrival. The Cockpit's right-hand side is a small map at all times: driving,
 with the power on it and the battery bar under it; its trip computer on the
-left holds three pages of four tiles (km, min, average, Wh/km; top speed,
-range at this drive's rate, battery used, net kWh; regen, cost, rated range,
-outside temperature), dragged up or down a row at a time; parked, with the last trip over it. Round Mix
+left holds three pages of four tiles (km, min, average and top speed; Wh/km,
+regen, battery used and net kWh; the car's range now, the range at this
+drive's rate, cost and outside temperature), dragged up or down a row at a
+time; parked, with the last trip over it. Round Mix
 keeps a map in its right-hand column at all times; its six figures sit on the
 left as three paired boxes: top and average km/h, battery used % and net kWh,
 time and distance. Dial has the map where its Battery bar was, with the
