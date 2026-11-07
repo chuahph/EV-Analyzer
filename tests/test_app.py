@@ -9016,16 +9016,19 @@ def test_telemetry_config_separates_a_quiet_field_from_a_missing_one():
             fake = {"synced": True, "config": {
                 "hostname": "telemetry.example",
                 "fields": {"Soc": {"interval_seconds": 60}, "Gear": {},
-                           "LifetimeEnergyChargedKwh": {}}}}
+                           "LifetimeEnergyChargedKwh": {}, "RouteLine": {}}}}
             with mock.patch(
                     "app.tesla_client.TeslaClient.telemetry_config",
                     lambda self, v: fake):
                 out = client.get("/api/telemetry/config").json()
 
             assert out["synced"] is True
-            assert out["count"] == 3
+            assert out["count"] == 4
             # The car holds it; it just has not moved. Not a failed deploy.
             assert out["configured_but_quiet"] == ["LifetimeEnergyChargedKwh"]
+            # A live-only field is never stored: unseen since the restart is
+            # reported apart, not as a field the car is holding back.
+            assert out["live_only_not_seen_since_restart"] == ["RouteLine"]
             # Nothing should arrive that was never asked for.
             assert out["arriving_unconfigured"] == []
             # What each field was actually told, so a changed interval can be
@@ -14153,6 +14156,11 @@ def test_live_reports_position_and_the_cars_navigation():
         # car sends its next figure.
         routes._live_mem_fold("VNAV", at(-3.5), {"Odometer": 101.0})
         assert routes._live_payload("VNAV", None)["nav"]["km"] == 6.4
+        # A distance sent with an invalid odometer in the same record counts
+        # down from the odometer the car last sent.
+        routes._live_mem_fold("VNAV", at(-3.4), {"MilesToArrival": 4.0, "Odometer": None})
+        routes._live_mem_fold("VNAV", at(-3.3), {"Odometer": 102.0})
+        assert routes._live_payload("VNAV", None)["nav"]["km"] == 4.8
         r = client.get("/api/live/route?vin=VNAV").json()
         assert r["v"] == nav["route_v"] and r["points"] == pts and r["raw_chars"] == len(route)
         # The car's own heading wins while fresh; junk locations are ignored.

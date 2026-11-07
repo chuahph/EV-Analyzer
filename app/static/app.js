@@ -4931,6 +4931,12 @@ window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
 // One reading from the server, pushed or polled: fold it into the page.
 function glLiveApply(L) {
   const nw = L.now || {};
+  // A new drive opens the Cockpit's trip computer on its first page.
+  const tripStart = L.trip && L.trip.start_time;
+  if (tripStart && tripStart !== glLiveState.tripStart) {
+    glLiveState.tripStart = tripStart;
+    if (typeof GL_VSCROLL !== "undefined") GL_VSCROLL.f = 0;
+  }
   const p = glLiveState.prev;
   // Power and Wh/km from the energy reading over 20 s or more: the fallback
   // when the car does not stream pack voltage and current (then power_kw,
@@ -5902,7 +5908,11 @@ function renderGlance(d) {
           // The map of where the car stands, the last trip over it.
           `<div class="gl-navside"><div class="gl-map-slot gl-map-mini" data-map="mini">
             ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
-            ${lt ? `<div class="gl-mapo gl-mapo-mini gl-mapo-last">
+            ${L && L.nav ? `<div class="gl-mapo gl-mapo-mini">
+              ${L.nav.minutes != null ? `<b>${glClockIn(L.nav.minutes)}<small>${h(glNavName(L.nav.name) || "arrive")}</small></b>` : ""}
+              ${L.nav.km != null ? `<b>${n(L.nav.km, 1, true)}<small>km</small></b>` : ""}
+              ${L.nav.arrive_pct != null ? `<b class="${L.nav.arrive_pct < 15 ? "warn" : "good"}">${n(L.nav.arrive_pct)}<small>% arrive</small></b>` : ""}
+            </div>` : lt ? `<div class="gl-mapo gl-mapo-mini gl-mapo-last">
               <em>Last trip${lt.id != null ? " #" + lt.id : ""} · ${h(tripWhen(lt.start_time).split(" ").pop())}</em>
               <div><b>${n(lt.distance_km, 1, true)}<small>km</small></b><b>${n(lt.duration_min)}<small>min</small></b>
               <b>${lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—"}<small>avg km/h</small></b>
@@ -6220,8 +6230,9 @@ function glMapReady() {
   }
   if (GL_MAP.cfg.google_key && !GL_MAP.gFailed) {
     const vec = !!GL_MAP.cfg.map_id;
-    if (window.google && window.google.maps && window.google.maps.Map
-      && (!vec || (window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement))) return "google";
+    // The marker library (asked for with a Map ID) is used for the destination
+    // pin when it loaded; the map does not wait for it.
+    if (window.google && window.google.maps && window.google.maps.Map) return "google";
     // With a Map ID the map is Google's vector map, which can turn to face
     // the way the car is heading; its markers come from the marker library.
     glMapScript("google", "https://maps.googleapis.com/maps/api/js?v=weekly&key="
@@ -6260,7 +6271,8 @@ const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" 
 function glMapGoogle(host) {
   const g = window.google.maps;
   const mapId = GL_MAP.cfg && GL_MAP.cfg.map_id;
-  const vec = !!(mapId && g.marker && g.marker.AdvancedMarkerElement);
+  const vec = !!mapId;
+  const adv = !!(g.marker && g.marker.AdvancedMarkerElement);
   // Vector (Map ID): Google's own dark scheme, and the map turns with the car,
   // the road ahead up, as the car's screen does. Raster (no Map ID): a dark
   // style of our own, north up.
@@ -6314,9 +6326,9 @@ function glMapGoogle(host) {
       casing.setOptions({ strokeWeight: dim ? 12 : 10 });
     },
     setDest(p) {
-      if (!p) { if (dest) { dest.map = null; if (dest.setMap) dest.setMap(null); dest = null; } return; }
+      if (!p) { if (dest) { if (dest.setMap) dest.setMap(null); else dest.map = null; dest = null; } return; }
       if (!dest) {
-        if (vec) {
+        if (vec && adv) {
           const el = document.createElement("div");
           el.className = "gl-map-dest"; el.innerHTML = "<b></b>";
           el.style.transform = "translateY(50%)";
@@ -6326,7 +6338,7 @@ function glMapGoogle(host) {
             fillColor: "#ff3b6b", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } });
         }
       }
-      if (vec) dest.position = ll(p); else dest.setPosition(ll(p));
+      if (vec && adv) dest.position = ll(p); else dest.setPosition(ll(p));
     },
     setCar(p, hd) {
       if (hd != null) heading = hd;
@@ -6486,6 +6498,9 @@ function glMapUpdate(mode) {
   // Navigating with no route line to draw: say why, on the map.
   if (!nav) glMapRouteNote("");
   else if (!rv) glMapRouteNote("No route from the car yet");
+  // No position yet: no arrow (it would claim a place the car is not), and
+  // the view on the destination if there is one.
+  if (GL_MAP.host) GL_MAP.host.classList.toggle("gl-map-nocar", nw.lat == null);
   if (nw.lat == null) {
     if (nav && nav.dest_lat != null && GL_MAP.zoomKey !== "dest") { eng.jump([nav.dest_lat, nav.dest_lon], 13); GL_MAP.zoomKey = "dest"; }
     return;

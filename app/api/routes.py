@@ -15278,7 +15278,12 @@ def telemetry_config(session: Session = Depends(get_session)):
         # anything that has not changed since the configuration landed — a
         # lifetime charge counter on a car that has not charged, a DC power
         # reading on a car that has not supercharged.
-        "configured_but_quiet": sorted(f for f in fields if f not in arrived),
+        "configured_but_quiet": sorted(f for f in fields if f not in arrived and f not in LIVE_ONLY_FIELDS),
+        # Live-only fields are never stored, so only this process's memory can
+        # show them, and the car sends most of them only on a change (the
+        # route when it changes, the heading when the car turns). Not seen
+        # since the last restart is ordinary for a parked car.
+        "live_only_not_seen_since_restart": sorted(f for f in fields if f not in arrived and f in LIVE_ONLY_FIELDS),
         # Arriving without being configured. Should be empty; anything here
         # means this endpoint and the stream disagree about what the car has.
         "arriving_unconfigured": sorted(f for f in arrived if f not in fields),
@@ -16456,7 +16461,9 @@ def _live_mem_fold_locked(vin: str, created_at, fields: dict) -> None:
             # The odometer when the car last said how far is left: the km to
             # go then counts down with the odometer between its updates
             # (the car sends them every 10 s at best).
-            odo = fields.get("Odometer", car.get("Odometer"))
+            odo = fields.get("Odometer")
+            if odo is None:
+                odo = car.get("Odometer")
             car["_nav_odo"] = float(odo) if odo is not None else None
         car[k] = v
         if ts:

@@ -3429,3 +3429,6 @@ main > .card { max-width: 100%; }
 .gl-map-rot { position: absolute; inset: auto; transform-origin: 50% 50%; transition: transform .35s linear; will-change: transform; }
 .gl-map-credit { position: absolute; right: 4px; bottom: 2px; z-index: 6; font: 8.5px system-ui, sans-serif; color: #6b7a8e;
   background: rgba(5, 8, 12, .6); padding: 0 5px; border-radius: 3px; pointer-events: none; }
+
+/* No position known: no car arrow on the map. */
+.gl-map-nocar .gl-map-carfix { display: none; }
