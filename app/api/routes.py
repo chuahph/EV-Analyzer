@@ -16815,7 +16815,7 @@ def _live_nav(car: dict) -> dict | None:
     return nav
 
 
-_ROUTE_CACHE: dict[str, list] = {}
+_ROUTE_CACHE: dict[str, tuple] = {}
 
 
 @router.get("/live/route")
@@ -16832,12 +16832,14 @@ def live_route(vin: str | None = Query(None)):
         # car's configuration has no RouteLine yet), as opposed to one that
         # could not be read.
         return {"v": None, "points": [], "raw_chars": 0, "reason": "no RouteLine from the car"}
-    pts = _ROUTE_CACHE.get(v)
-    if pts is None:
-        pts = navroute.decode_route(raw) or []
+    got = _ROUTE_CACHE.get(v)
+    if got is None:
+        pts, how = navroute.decode_route_info(raw)
+        got = (pts or [], how)
         _ROUTE_CACHE.clear()          # one route at a time is all the page needs
-        _ROUTE_CACHE[v] = pts
-    out = {"v": v, "points": pts, "raw_chars": len(raw)}
+        _ROUTE_CACHE[v] = got
+    pts, how = got
+    out = {"v": v, "points": pts, "raw_chars": len(raw), "format": how}
     if not pts:
         out["reason"] = "RouteLine arrived but did not decode as a route"
     return out

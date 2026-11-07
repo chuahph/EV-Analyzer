@@ -42,13 +42,17 @@ def _decode_polyline(text: str, precision: int) -> list[list[float]] | None:
                 vals.append(~(result >> 1) if result & 1 else result >> 1)
             lat += vals[0]
             lon += vals[1]
-            y, x = lat / factor, lon / factor
-            if not (-90.0 <= y <= 90.0 and -180.0 <= x <= 180.0):
-                return None
-            pts.append([round(y, 6), round(x, 6)])
+            pts.append([round(lat / factor, 6), round(lon / factor, 6)])
     except (TypeError, ValueError):
         return None
-    return pts or None
+    if not pts:
+        return None
+    # Latitude first, as Google's format has it; longitude first is read too
+    # (a longitude over 90, as anywhere in Malaysia, cannot be a latitude).
+    for y_i, x_i in ((0, 1), (1, 0)):
+        if all(-90.0 <= p[y_i] <= 90.0 and -180.0 <= p[x_i] <= 180.0 for p in pts):
+            return [[p[y_i], p[x_i]] for p in pts]
+    return None
 
 
 def _plausible(pts: list[list[float]] | None) -> bool:
@@ -68,24 +72,145 @@ def _thin(pts: list[list[float]], keep: int) -> list[list[float]]:
     return [pts[round(k * step)] for k in range(keep)]
 
 
-def decode_route(raw) -> list[list[float]] | None:
-    """[[lat, lon], ...] for a RouteLine value, or None."""
-    if not isinstance(raw, str) or not raw.strip() or len(raw) > ROUTE_MAX_CHARS:
-        return None
-    raw = raw.strip()
-    candidates: list[str] = []
+def _b64_variants(raw: str) -> list[bytes]:
+    """Every way the text might be base64: standard or URL-safe alphabet,
+    padded or not, with any whitespace dropped."""
+    text = "".join(raw.split())
+    out: list[bytes] = []
+    for alt in (None, b"-_"):
+        try:
+            data = base64.b64decode(text + "=" * (-len(text) % 4), altchars=alt, validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        if data and data not in out:
+            out.append(data)
+    return out
+
+
+def _inflate(data: bytes) -> bytes | None:
+    """zlib, gzip or raw deflate, else None."""
+    for wbits in (15, 31, -15):
+        try:
+            return zlib.decompress(data, wbits)
+        except zlib.error:
+            continue
+    return None
+
+
+POLY_CHARS = frozenset(range(63, 127))
+
+
+def _poly_runs(data: bytes, least: int = 8) -> list[str]:
+    """Stretches of the bytes made only of polyline characters, longest first:
+    the polyline itself when it is wrapped in something else."""
+    runs, start = [], None
+    for i, c in enumerate(data + b"\x00"):
+        if c in POLY_CHARS:
+            if start is None:
+                start = i
+        elif start is not None:
+            if i - start >= least:
+                runs.append(data[start:i].decode("ascii"))
+            start = None
+    return sorted(runs, key=len, reverse=True)
+
+
+def _varint(data: bytes, i: int) -> tuple[int, int]:
+    shift = result = 0
+    while True:
+        if i >= len(data) or shift > 63:
+            raise ValueError("varint")
+        b = data[i]
+        i += 1
+        result |= (b & 0x7F) << shift
+        shift += 7
+        if not b & 0x80:
+            return result, i
+
+
+def _proto_coords(data: bytes, depth: int = 0) -> list[list[float]]:
+    """Coordinates in a protobuf message, read without its schema: every pair
+    of doubles (or floats) that lies on the globe, in order, through nested
+    messages. Empty when the bytes are not a well-formed message."""
+    import struct
+
+    pts: list[list[float]] = []
+    nums: list[float] = []
+    i = 0
     try:
-        dec = base64.b64decode(raw + "=" * (-len(raw) % 4), validate=True).decode("ascii")
-        candidates.append(dec)
-    except (binascii.Error, ValueError, UnicodeDecodeError):
-        pass
-    candidates.append(raw)
-    for text in candidates:
+        while i < len(data):
+            key, i = _varint(data, i)
+            wt = key & 7
+            if wt == 0:
+                _, i = _varint(data, i)
+            elif wt == 1:
+                nums.append(struct.unpack_from("<d", data, i)[0]); i += 8
+            elif wt == 5:
+                nums.append(struct.unpack_from("<f", data, i)[0]); i += 4
+            elif wt == 2:
+                n, i = _varint(data, i)
+                if i + n > len(data):
+                    return []
+                if depth < 4:
+                    pts += _proto_coords(data[i:i + n], depth + 1)
+                i += n
+            else:
+                return []
+    except (ValueError, struct.error):
+        return []
+    for k in range(0, len(nums) - 1, 2):
+        y, x = nums[k], nums[k + 1]
+        if math.isfinite(y) and math.isfinite(x) and -90 <= y <= 90 and -180 <= x <= 180 and (y, x) != (0, 0):
+            pts.append([round(y, 6), round(x, 6)])
+    return pts
+
+
+def decode_route_info(raw) -> tuple[list[list[float]] | None, str]:
+    """(points, how they were read), or (None, a short description of the
+    bytes) when no reading gives a route. The car's RouteLine is documented
+    as a base64 polyline at precision 6; the other readings are there because
+    what a car actually sends has not always matched the documentation."""
+    if not isinstance(raw, str) or not raw.strip() or len(raw) > ROUTE_MAX_CHARS:
+        return None, "empty"
+
+    def poly(text: str, how: str):
         for precision in (6, 5):
             pts = _decode_polyline(text, precision)
-            if _plausible(pts):
-                return _thin(pts, ROUTE_MAX_POINTS)
-    return None
+            if _plausible(pts) and len(pts) >= 2:
+                return _thin(pts, ROUTE_MAX_POINTS), f"{how}, polyline precision {precision}"
+        return None
+
+    raw = raw.strip()
+    blobs = _b64_variants(raw)
+    for k, data in enumerate(blobs):
+        tag = "base64" if k == 0 else "base64 (url-safe)"
+        for body, how in ((data, tag), (_inflate(data), tag + ", compressed")):
+            if not body:
+                continue
+            try:
+                got = poly(body.decode("ascii"), how)
+                if got:
+                    return got
+            except UnicodeDecodeError:
+                pass
+            for run in _poly_runs(body)[:3]:
+                got = poly(run, how + ", wrapped")
+                if got:
+                    return got
+            pts = _proto_coords(body)
+            if _plausible(pts) and len(pts) >= 2:
+                return _thin(pts, ROUTE_MAX_POINTS), how + ", coordinate pairs"
+    got = poly(raw, "plain")
+    if got:
+        return got
+    head = blobs[0][:12].hex(" ") if blobs else ""
+    return None, (f"not readable: base64 to {len(blobs[0])} bytes, starting {head}" if blobs
+                  else "not readable: not base64")
+
+
+def decode_route(raw) -> list[list[float]] | None:
+    """[[lat, lon], ...] for a RouteLine value, or None."""
+    return decode_route_info(raw)[0]
 
 
 def route_version(raw) -> str | None:

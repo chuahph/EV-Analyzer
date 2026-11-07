@@ -14225,3 +14225,31 @@ def test_live_map_starts_from_the_cars_last_known_position():
         routes._LIVE_MEM.clear()
         with SessionLocal() as s:
             state.put(s, state.TELEMETRY_LATEST_KEY, old or "{}")
+
+
+def test_route_line_is_read_in_the_forms_a_car_may_send():
+    """Documented: base64 polyline, precision 6. Read too: URL-safe base64,
+    compressed, longitude first, a polyline wrapped in a protobuf field, and a
+    protobuf of coordinate pairs; anything else says what the bytes were."""
+    import base64
+    import struct
+    import zlib
+    from app import navroute
+
+    pts = [[3.139003, 101.686855], [3.140112, 101.690001], [3.152, 101.712345]]
+    poly = _encode_polyline(pts).encode()
+    forms = {
+        "url-safe": base64.urlsafe_b64encode(poly).decode().rstrip("="),
+        "compressed": base64.b64encode(zlib.compress(poly)).decode(),
+        "lon first": base64.b64encode(_encode_polyline([[x, y] for y, x in pts]).encode()).decode(),
+        "wrapped": base64.b64encode(b"\x0a" + bytes([len(poly)]) + poly + b"\x10\x01").decode(),
+    }
+    for name, raw in forms.items():
+        assert navroute.decode_route(raw) == pts, name
+    def msg(field, body):
+        return bytes([(field << 3) | 2, len(body)]) + body
+    pairs = b"".join(msg(1, b"\x09" + struct.pack("<d", y) + b"\x11" + struct.pack("<d", x)) for y, x in pts)
+    got, how = navroute.decode_route_info(base64.b64encode(pairs).decode())
+    assert got == pts and "coordinate pairs" in how
+    got, how = navroute.decode_route_info(base64.b64encode(bytes(range(200, 230))).decode())
+    assert got is None and how.startswith("not readable: base64 to 30 bytes, starting c8 c9")
