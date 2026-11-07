@@ -14172,3 +14172,19 @@ def test_live_reports_position_and_the_cars_navigation():
         assert "RouteLine" in routes.LIVE_ONLY_FIELDS
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_map_config_names_the_google_key_only_when_set():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    settings = get_settings()
+    old = settings.google_maps_key
+    try:
+        client = TestClient(app)
+        settings.google_maps_key = ""
+        assert client.get("/api/map-config").json() == {"google_key": None, "traffic": False}
+        settings.google_maps_key = " AIzaTestKey "
+        assert client.get("/api/map-config").json() == {"google_key": "AIzaTestKey", "traffic": True}
+    finally:
+        settings.google_maps_key = old

@@ -6169,14 +6169,17 @@ function renderGlance(d) {
   glMapMount(el);
 }
 
-// The Live page's map. One Leaflet map for the whole session, made the first
-// time a page asks for one and moved into each redraw's slot: the page is
-// rebuilt up to five times a second, and a map rebuilt that often would
-// reload its tiles every time. Leaflet itself is loaded only then, so no
-// other page pays for it. Dark raster tiles from CARTO (OpenStreetMap data);
-// the map takes no touches, so a swipe over it still changes the design.
-const GL_MAP = { loading: false, host: null, map: null, car: null, dest: null, line: null,
-  routeV: null, routeAsk: null, zoomKey: null, mode: null };
+// The Live page's map. One map for the whole session, made the first time a
+// page asks for one and moved into each redraw's slot: the page is rebuilt up
+// to five times a second, and a map rebuilt that often would reload its tiles
+// every time (and, with Google, count as a new map load each time). Two
+// engines draw it: Google Maps in a dark style with live traffic when the
+// server has a Google Maps key (GOOGLE_MAPS_KEY), else Leaflet with CARTO's
+// dark tiles. Google failing (a bad key, no network to it) falls back to
+// CARTO. Either library loads only when a map is first on screen, and the
+// map takes no touches, so a swipe over it still changes the design.
+const GL_MAP = { host: null, eng: null, kind: null, cfg: undefined, cfgAsked: false, gFailed: false,
+  loading: {}, routeV: null, routeAsk: null, route: null, zoomKey: null };
 const GL_MAP_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 function glNavName(name) {
   // The car sends the full address; the first part is the place.
@@ -6186,78 +6189,207 @@ function glClockIn(min) {
   const t = new Date(Date.now() + (+min || 0) * 60000);
   return String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
 }
-function glMapLib() {
-  if (window.L && window.L.map) return true;
-  if (!GL_MAP.loading) {
-    GL_MAP.loading = true;
-    const css = document.createElement("link");
-    css.rel = "stylesheet"; css.href = "/static/vendor/leaflet.css";
-    document.head.appendChild(css);
-    const js = document.createElement("script");
-    js.src = "/static/vendor/leaflet.js";
-    js.onload = () => { if (lastData && glanceTab === "live" && glanceVisible()) renderGlance(lastData); };
-    js.onerror = () => { GL_MAP.loading = false; };
-    document.head.appendChild(js);
+const glMapRedraw = () => { if (lastData && glanceTab === "live" && glanceVisible()) renderGlance(lastData); };
+function glMapScript(id, src, css) {
+  if (GL_MAP.loading[id]) return;
+  GL_MAP.loading[id] = true;
+  if (css) {
+    const l = document.createElement("link");
+    l.rel = "stylesheet"; l.href = css;
+    document.head.appendChild(l);
   }
-  return false;
+  const js = document.createElement("script");
+  js.src = src; js.async = true;
+  js.onload = glMapRedraw;
+  js.onerror = () => {
+    GL_MAP.loading[id] = false;
+    if (id === "google") glMapGoogleFailed();
+  };
+  document.head.appendChild(js);
+}
+function glMapGoogleFailed() {
+  // A refused key (Google calls gm_authFailure) or no script: CARTO instead,
+  // for the rest of this visit.
+  if (GL_MAP.gFailed) return;
+  GL_MAP.gFailed = true;
+  if (GL_MAP.kind === "google") {
+    if (GL_MAP.host) GL_MAP.host.remove();
+    GL_MAP.host = null; GL_MAP.eng = null; GL_MAP.kind = null; GL_MAP.zoomKey = null; GL_MAP.routeV = null;
+  }
+  glMapRedraw();
+}
+window.gm_authFailure = glMapGoogleFailed;
+// Which engine, once the server has said whether it has a Google key; null
+// while that question or the library is still on its way.
+function glMapReady() {
+  if (GL_MAP.cfg === undefined) {
+    if (!GL_MAP.cfgAsked) {
+      GL_MAP.cfgAsked = true;
+      fetch("/api/map-config", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : {}))
+        .catch(() => ({})).then((c) => { GL_MAP.cfg = c || {}; glMapRedraw(); });
+    }
+    return null;
+  }
+  if (GL_MAP.cfg.google_key && !GL_MAP.gFailed) {
+    if (window.google && window.google.maps && window.google.maps.Map) return "google";
+    glMapScript("google", "https://maps.googleapis.com/maps/api/js?v=weekly&key="
+      + encodeURIComponent(GL_MAP.cfg.google_key) + "&language=en&region=MY");
+    return null;
+  }
+  if (window.L && window.L.map) return "leaflet";
+  glMapScript("leaflet", "/static/vendor/leaflet.js", "/static/vendor/leaflet.css");
+  return null;
+}
+// Google's dark "night" style, quieter: the car's map at night.
+const GL_GMAP_NIGHT = [
+  { elementType: "geometry", stylers: [{ color: "#1b2129" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#9aa7b8" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#11161c" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#c4ced9" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#7d8a99" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#17271f" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#5f8a6d" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#323c48" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1d242c" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#a9b6c6" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#4a5768" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#232b35" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#d3dce6" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#252d37" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#8f9cad" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1b2a" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6a86" }] },
+];
+const GL_CAR_ARROW = "M0,-11 L8,9 L0,4 L-8,9 Z";
+function glMapGoogle(host) {
+  const g = window.google.maps;
+  const map = new g.Map(host, { center: { lat: 3.14, lng: 101.69 }, zoom: 3, disableDefaultUI: true,
+    gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false, backgroundColor: "#11161c",
+    styles: GL_GMAP_NIGHT });
+  // Live traffic on every road, the route included: green, orange, red.
+  new g.TrafficLayer().setMap(map);
+  let car = null, dest = null, line = null, lastHd;
+  const ll = (p) => ({ lat: p[0], lng: p[1] });
+  return {
+    setRoute(pts) {
+      if (!pts || !pts.length) { if (line) { line.setMap(null); line = null; } return; }
+      // Wide and translucent, so the traffic colours on the road show through.
+      if (!line) line = new g.Polyline({ map, clickable: false, strokeColor: "#22d3ee", strokeOpacity: 0.4, strokeWeight: 11, zIndex: 1 });
+      line.setPath(pts.map(ll));
+    },
+    setDest(p) {
+      if (!p) { if (dest) { dest.setMap(null); dest = null; } return; }
+      if (!dest) dest = new g.Marker({ map, clickable: false, zIndex: 900, icon: { path: g.SymbolPath.CIRCLE, scale: 8,
+        fillColor: "#ff3b6b", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } });
+      dest.setPosition(ll(p));
+    },
+    setCar(p, hd) {
+      if (!car) car = new g.Marker({ map, clickable: false, zIndex: 1000 });
+      car.setPosition(ll(p));
+      const key = hd == null ? null : Math.round(hd);
+      if (key !== lastHd || !car.getIcon()) {
+        lastHd = key;
+        car.setIcon(hd == null
+          ? { path: g.SymbolPath.CIRCLE, scale: 8, fillColor: "#22d3ee", fillOpacity: 1, strokeColor: "#e8fbff", strokeWeight: 2 }
+          : { path: GL_CAR_ARROW, scale: 1.4, rotation: hd, fillColor: "#e8fbff", fillOpacity: 1,
+            strokeColor: "#22d3ee", strokeWeight: 2, anchor: new g.Point(0, 0) });
+      }
+    },
+    jump(p, z) { map.setZoom(z); map.setCenter(ll(p)); },
+    follow(p) { map.panTo(ll(p)); },
+    resize() {},
+  };
+}
+function glMapLeaflet(host) {
+  const L = window.L;
+  const map = L.map(host, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
+    doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false,
+    attributionControl: true });
+  map.attributionControl.setPrefix(false);
+  // {r} asks CARTO for its sharp @2x tiles on a high-density screen, at the
+  // normal label size (detectRetina would also step the zoom up a level,
+  // shrinking every street name to half size).
+  L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false,
+    attribution: "© OpenStreetMap contributors © CARTO" }).addTo(map);
+  map.setView([0, 0], 2);
+  let car = null, dest = null, line = null;
+  return {
+    setRoute(pts) {
+      if (!pts || !pts.length) { if (line) { line.remove(); line = null; } return; }
+      if (!line) line = L.polyline([], { color: "#22d3ee", weight: 6, opacity: 0.85, interactive: false }).addTo(map);
+      line.setLatLngs(pts);
+    },
+    setDest(p) {
+      if (!p) { if (dest) { dest.remove(); dest = null; } return; }
+      if (!dest) dest = L.marker(p, { interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "gl-map-dest", iconSize: [18, 18], iconAnchor: [9, 9], html: "<b></b>" }) }).addTo(map);
+      else dest.setLatLng(p);
+    },
+    setCar(p, hd) {
+      if (!car) {
+        car = L.marker(p, { interactive: false, keyboard: false, zIndexOffset: 1000,
+          icon: L.divIcon({ className: "gl-map-car", iconSize: [34, 34], iconAnchor: [17, 17],
+            html: '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>' }) }).addTo(map);
+      } else car.setLatLng(p);
+      const svg = car.getElement() && car.getElement().querySelector("svg");
+      if (svg) {
+        svg.style.transform = hd != null ? `rotate(${hd}deg)` : "";
+        svg.classList.toggle("nohd", hd == null);
+      }
+    },
+    jump(p, z) { map.setView(p, z, { animate: false }); },
+    follow(p) {
+      const dx = map.latLngToContainerPoint(p).distanceTo(map.getSize().divideBy(2));
+      if (dx > 1) map.panTo(p, { animate: dx < 400, duration: 0.2, easeLinearity: 1, noMoveStart: true });
+    },
+    resize() {
+      const sz = map.getSize();
+      if (sz.x !== host.clientWidth || sz.y !== host.clientHeight) map.invalidateSize(false);
+    },
+  };
 }
 function glMapMount(root) {
   const slot = root && root.querySelector(".gl-map-slot");
   if (!slot) return;
-  if (!glMapLib()) return;
-  const L = window.L;
-  if (!GL_MAP.map) {
+  const kind = glMapReady();
+  if (!kind) return;
+  if (!GL_MAP.eng || GL_MAP.kind !== kind) {
+    if (GL_MAP.host) GL_MAP.host.remove();
     const host = document.createElement("div");
-    host.className = "gl-map-host";
+    host.className = "gl-map-host gl-map-" + kind;
     slot.prepend(host);
-    const map = L.map(host, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
-      doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false,
-      attributionControl: true });
-    map.attributionControl.setPrefix(false);
-    // {r} asks CARTO for its sharp @2x tiles on a high-density screen, at the
-    // normal label size (detectRetina would also step the zoom up a level,
-    // shrinking every street name to half size).
-    L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false,
-      attribution: "© OpenStreetMap contributors © CARTO" }).addTo(map);
-    map.setView([0, 0], 2);
-    GL_MAP.host = host; GL_MAP.map = map;
+    GL_MAP.host = host; GL_MAP.kind = kind; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_MAP.routeAsk = null;
+    GL_MAP.eng = kind === "google" ? glMapGoogle(host) : glMapLeaflet(host);
+    if (GL_MAP.route) GL_MAP.eng.setRoute(GL_MAP.route.points);
   } else {
     slot.prepend(GL_MAP.host);
   }
-  const sz = GL_MAP.map.getSize();
-  if (sz.x !== GL_MAP.host.clientWidth || sz.y !== GL_MAP.host.clientHeight) GL_MAP.map.invalidateSize(false);
+  GL_MAP.eng.resize();
   glMapUpdate(slot.dataset.map || "full");
 }
 function glMapUpdate(mode) {
-  const L = window.L, map = GL_MAP.map, D = glLiveState.data;
-  if (!map || !D) return;
+  const eng = GL_MAP.eng, D = glLiveState.data;
+  if (!eng || !D) return;
   const nw = D.now || {}, nav = D.nav;
   // The route: fetched again only when the car's route changes.
   const rv = nav && nav.route_v;
   if (rv !== GL_MAP.routeV && GL_MAP.routeAsk !== rv) {
     GL_MAP.routeAsk = rv;
     if (!rv) {
-      if (GL_MAP.line) { GL_MAP.line.remove(); GL_MAP.line = null; }
-      GL_MAP.routeV = null;
+      eng.setRoute(null);
+      GL_MAP.routeV = null; GL_MAP.route = null;
     } else {
       fetch("/api/live/route?" + new URLSearchParams(D.vin ? { vin: D.vin } : {}), { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null)).then((r) => {
-          if (!r || r.v !== GL_MAP.routeAsk) return;
-          GL_MAP.routeV = r.v;
-          if (!GL_MAP.line) GL_MAP.line = L.polyline([], { color: "#22d3ee", weight: 6, opacity: 0.85, interactive: false }).addTo(map);
-          GL_MAP.line.setLatLngs(r.points || []);
+          if (!r || r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
+          GL_MAP.routeV = r.v; GL_MAP.route = r;
+          GL_MAP.eng.setRoute(r.points || []);
         }).catch(() => { GL_MAP.routeAsk = null; });
     }
   }
-  // The destination flag.
-  if (nav && nav.dest_lat != null) {
-    const at = [nav.dest_lat, nav.dest_lon];
-    if (!GL_MAP.dest) GL_MAP.dest = L.marker(at, { interactive: false, keyboard: false,
-      icon: L.divIcon({ className: "gl-map-dest", iconSize: [18, 18], iconAnchor: [9, 9], html: "<b></b>" }) }).addTo(map);
-    else GL_MAP.dest.setLatLng(at);
-  } else if (GL_MAP.dest) { GL_MAP.dest.remove(); GL_MAP.dest = null; }
+  eng.setDest(nav && nav.dest_lat != null ? [nav.dest_lat, nav.dest_lon] : null);
   if (nw.lat == null) {
-    if (nav && nav.dest_lat != null && GL_MAP.zoomKey !== "dest") { map.setView([nav.dest_lat, nav.dest_lon], 13, { animate: false }); GL_MAP.zoomKey = "dest"; }
+    if (nav && nav.dest_lat != null && GL_MAP.zoomKey !== "dest") { eng.jump([nav.dest_lat, nav.dest_lon], 13); GL_MAP.zoomKey = "dest"; }
     return;
   }
   // The car: an arrow pointing the way it is heading. Between the car's
@@ -6271,16 +6403,7 @@ function glMapUpdate(mode) {
     pos = [nw.lat + (m * Math.cos(rad)) / 111320,
       nw.lon + (m * Math.sin(rad)) / (111320 * Math.cos(nw.lat * Math.PI / 180))];
   }
-  if (!GL_MAP.car) {
-    GL_MAP.car = L.marker(pos, { interactive: false, keyboard: false, zIndexOffset: 1000,
-      icon: L.divIcon({ className: "gl-map-car", iconSize: [34, 34], iconAnchor: [17, 17],
-        html: '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>' }) }).addTo(map);
-  } else GL_MAP.car.setLatLng(pos);
-  const svg = GL_MAP.car.getElement() && GL_MAP.car.getElement().querySelector("svg");
-  if (svg) {
-    svg.style.transform = nw.heading != null ? `rotate(${nw.heading}deg)` : "";
-    svg.classList.toggle("nohd", nw.heading == null);
-  }
+  eng.setCar(pos, nw.heading != null ? +nw.heading : null);
   // Follow the car, closer in town and further out on the highway; the zoom
   // changes only when the speed crosses a band, so it does not breathe.
   const v = +nw.speed_kmh || 0;
@@ -6288,17 +6411,14 @@ function glMapUpdate(mode) {
   const key = mode + z;
   if (key !== GL_MAP.zoomKey) {
     GL_MAP.zoomKey = key;
-    map.setView(pos, z, { animate: false });
-  } else {
-    const dx = map.latLngToContainerPoint(pos).distanceTo(map.getSize().divideBy(2));
-    if (dx > 1) map.panTo(pos, { animate: dx < 400, duration: 0.2, easeLinearity: 1, noMoveStart: true });
-  }
+    eng.jump(pos, z);
+  } else eng.follow(pos);
 }
 // Five steps a second between redraws while a map is on screen and the car
 // is moving: only the arrow and the view move, nothing is rebuilt.
 setInterval(() => {
   const D = glLiveState.data, nw = D && D.now;
-  if (!GL_MAP.map || !GL_MAP.host || !GL_MAP.host.isConnected || document.hidden
+  if (!GL_MAP.eng || !GL_MAP.host || !GL_MAP.host.isConnected || document.hidden
     || !nw || !(+nw.speed_kmh > 3)) return;
   const slot = GL_MAP.host.parentElement;
   glMapUpdate((slot && slot.dataset.map) || "full");

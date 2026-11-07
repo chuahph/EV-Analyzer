@@ -7476,6 +7476,15 @@ def plan_route(to: str = Query(..., min_length=1),
 # --- Web push notifications -------------------------------------------------
 
 
+@router.get("/map-config")
+def map_config():
+    """What the Live page's map is drawn with: the Google Maps key when one is
+    set (a browser key, restricted to this site in Google Cloud, so it is
+    public by design), else none and the page uses CARTO's tiles."""
+    key = (get_settings().google_maps_key or "").strip()
+    return {"google_key": key or None, "traffic": bool(key)}
+
+
 @router.get("/push/vapid-public-key")
 def push_vapid_public_key():
     """The VAPID application server key the browser needs to call

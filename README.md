@@ -348,7 +348,27 @@ second, at most 1.5 s ahead), so the map moves smoothly. The car sends minutes
 and miles to arrival every 10 s at best; between them the km to go counts
 down with the odometer and the minutes with the clock.
 
-Tiles are CARTO's dark basemap (OpenStreetMap data), its sharp @2x tiles on a
+**Google Maps with live traffic** (optional, closest to the car's own map):
+set `GOOGLE_MAPS_KEY` in Render and the map is Google's, in a dark night
+style, with Google's live traffic colours on every road (the route line is
+drawn wide and translucent so the traffic shows through it). To get a key:
+
+1. Google Cloud console → pick or create a project → **APIs & Services →
+   Library** → enable **Maps JavaScript API**. Google asks for a billing
+   account; a personal dashboard is one map load per opening of the Live
+   page, inside Google's free monthly allowance.
+2. **APIs & Services → Credentials → Create credentials → API key**.
+3. Edit the key: **Application restrictions → Websites**, add
+   `https://evperkm.xyz/*` (and your onrender.com address if you use it);
+   **API restrictions → Restrict key → Maps JavaScript API**. Save.
+4. Render → the service → **Environment** → add `GOOGLE_MAPS_KEY` = the key →
+   save (Render redeploys).
+
+The key reaches the browser (that is how Google's maps work), which is why it
+is restricted to this site. Without a key, or if Google refuses it or cannot
+be reached, the map falls back to CARTO by itself.
+
+Without Google, tiles are CARTO's dark basemap (OpenStreetMap data), its sharp @2x tiles on a
 high-density screen, lifted in brightness so streets and names read in a car,
 loaded only when a map is on screen; the map takes no touches, so a swipe over it still changes the
 design. Leaflet is served from `app/static/vendor/`.

@@ -201,6 +201,11 @@ class Settings(BaseSettings):
     # hidden and /api/push/* returns 404. VAPID requires a contact address
     # (never emailed to you — it's only what a push service could use to
     # reach the app operator if a subscription misbehaves).
+    # Google Maps JavaScript API key for the Live page's map (dark style with
+    # live traffic). A browser key: restrict it in Google Cloud to this app's
+    # address (HTTP referrers) and to the Maps JavaScript API. Empty = the
+    # map uses CARTO's dark tiles instead.
+    google_maps_key: str = ""
     vapid_private_key_pem: str = ""
     vapid_public_key_pem: str = ""
     vapid_subject_email: str = "admin@example.com"
