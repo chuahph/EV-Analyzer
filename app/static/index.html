@@ -226,7 +226,8 @@
       <p class="modal-sub">
         How to run your own copy of EV Analyzer and connect your real EV — so it
         logs every drive and charge automatically. Everything below is <strong>free</strong>
-        except a domain name (Step 5), and can be done entirely from your iPhone in about
+        except a domain name (Step 5) — the optional Google map (Step 10) needs a billing
+        account but stays free with the cap it sets — and can be done entirely from your iPhone in about
         <strong>an hour</strong>. You only do this once. <strong>Do the steps in
         order</strong> — Step 5 must come before you first sign in (Step 6).
       </p>
@@ -686,6 +687,90 @@ export default {
                 <li>Choose <strong>Add to Home Screen → Add</strong>. It now launches full-screen
                   from a ⚡ icon, like a native app, and opens even when offline.</li>
               </ol>
+            </div>
+          </details>
+        </li>
+
+        <li>
+          <details>
+            <summary><span class="gs-num">10</span> 🗺️ Google Maps — live map with traffic (optional)</summary>
+            <div class="gs-body">
+              <p><strong>Why:</strong> the Live dashboard draws your car's own navigation — the
+                route, destination, arrival time, km to go and the battery % on arrival — on a
+                map. Without this step it uses a free dark map (CARTO). With it, the map is
+                <strong>Google's</strong>, with <strong>live traffic</strong>, and with a Map ID it
+                <strong>turns with the car</strong> so the road ahead is always up, like the car's
+                screen. About 10 minutes, on a phone or computer.</p>
+              <p class="gs-note gs-note-info">📡 <strong>The car must send its navigation.</strong>
+                Relays set up before November 2026: update the bridge and re-send the car's
+                configuration once, on the relay server (as in Step 7):<br>
+                <code>sudo curl -sL https://&lt;your-app&gt;/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.py &amp;&amp; sudo systemctl restart tesla-bridge</code><br>
+                <code>curl -sL https://&lt;your-app&gt;/car -o c.sh &amp;&amp; sudo bash c.sh</code><br>
+                Then <code>https://&lt;your-app&gt;/api/telemetry/config</code> should show
+                <code>"synced": true</code> and <code>RouteLine</code> under <code>intervals</code>.</p>
+              <p><strong>A · Turn on the Maps JavaScript API</strong></p>
+              <ol>
+                <li>Open <strong>console.cloud.google.com</strong> (the same Google account as
+                  your relay server is fine) and pick or create a project.</li>
+                <li><strong>APIs &amp; Services → Library</strong> → search
+                  <strong>Maps JavaScript API</strong> → <strong>Enable</strong>. Google asks for a
+                  billing account; a personal dashboard stays inside the free monthly allowance
+                  (see D). No other Maps API is needed — traffic comes with this one.</li>
+              </ol>
+              <p><strong>B · Create the key and lock it to your app</strong></p>
+              <ol>
+                <li><strong>APIs &amp; Services → Credentials → Create credentials → API
+                  key</strong>. Name it e.g. <code>EV Analyzer map</code>.</li>
+                <li><strong>API restrictions → Restrict key</strong> → tick only
+                  <strong>Maps JavaScript API</strong> (untick everything else in the list).</li>
+                <li><strong>Application restrictions → Websites</strong> → add
+                  <code>https://&lt;your-app&gt;/*</code> — your own address, e.g.
+                  <code>https://evperkm.xyz/*</code>, and your <code>onrender.com</code> address too
+                  if you use it. Keep the <code>/*</code> at the end. <strong>Create</strong>, and
+                  copy the key (it starts <code>AIza…</code>).</li>
+              </ol>
+              <p><strong>C · Create a Map ID (the map turns with the car)</strong></p>
+              <ol>
+                <li>Search the console for <strong>Map management</strong> (Google Maps Platform)
+                  → <strong>Create Map ID</strong>.</li>
+                <li>Name <code>EV Analyzer</code>, Map type <strong>JavaScript</strong>,
+                  <strong>Vector</strong>, tick <strong>Tilt</strong> and
+                  <strong>Rotation</strong> → <strong>Save</strong>, and copy the Map ID.</li>
+              </ol>
+              <p><strong>D · Cap the cost at zero</strong></p>
+              <ol>
+                <li>The map loads once each time you open the Live page, not every second.
+                  To make sure it never bills: <strong>Google Maps Platform → Quotas</strong>
+                  (or <strong>APIs &amp; Services → Maps JavaScript API → Quotas &amp; System
+                  Limits</strong>) → <strong>Map loads per day</strong> → edit → <code>300</code>
+                  → <strong>Submit</strong>. Past it, the map quietly switches to the free CARTO
+                  map for the rest of the day. (On a phone, use <em>Request Desktop Website</em>
+                  if the edit button is hidden.)</li>
+                <li><strong>Billing → Budgets &amp; alerts → Create budget</strong> for your Maps
+                  project, a small amount (e.g. RM 5), email alerts on — so any charge emails you
+                  at once.</li>
+              </ol>
+              <p><strong>E · Add both to Render</strong></p>
+              <ol>
+                <li>Render → your service → <strong>Environment</strong> → add
+                  <code>GOOGLE_MAPS_KEY</code> = the <code>AIza…</code> key, and
+                  <code>GOOGLE_MAPS_MAP_ID</code> = the Map ID → <strong>Save Changes</strong>
+                  (Render redeploys by itself).</li>
+                <li>Check <code>https://&lt;your-app&gt;/api/map-config</code>: it should show your
+                  key, <code>"traffic": true</code> and <code>"heading_up": true</code>.</li>
+                <li>Open the dashboard, turn the phone sideways → <strong>Live</strong> → swipe to
+                  <strong>Map</strong> (or Cockpit, Round Mix, Dial). Pull down to refresh first.
+                  Google can take up to 5 minutes to activate a new key.</li>
+              </ol>
+              <p class="gs-note">🔒 <strong>The key is shown to the browser</strong> — that is how
+                Google's maps work — which is why B locks it to your app's address and to the one
+                API. Without <code>GOOGLE_MAPS_MAP_ID</code> the Google map stays north-up; without
+                either, the free CARTO map is used, turned the same way.</p>
+              <p class="gs-note gs-note-warn">🧭 <strong>No blue route line?</strong> With a
+                destination set in the car, open <code>https://&lt;your-app&gt;/api/live/route</code>.
+                <em>"no RouteLine from the car"</em> means the car hasn't sent its route yet (check
+                the 📡 note above; after a redeploy, set the destination again). A list of
+                <code>points</code> means it's working.</p>
             </div>
           </details>
         </li>
