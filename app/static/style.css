@@ -3480,3 +3480,10 @@ main > .card { max-width: 100%; }
 .gl-mix-speed { container-type: size; overflow: hidden; }
 .gl-spdn { font: inherit; line-height: .85; }
 .gl-mix-speed > .gl-spdn { font-size: min(calc(26 * var(--gh)), calc(15 * var(--gw)), calc((100cqh - 20px) * 1.3)); }
+
+/* The arrival strip across the top of a map (Cockpit and others): the
+   destination's name gives way first, ending in "…", so it never runs into
+   the km and arrival % beside it, on any width. */
+.gl-mapo-mini:not(.gl-mapo-stack):not(.gl-mapo-last) > b:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.gl-mapo-mini:not(.gl-mapo-stack):not(.gl-mapo-last) > b:first-child small { display: block; max-width: 100%; align-self: stretch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gl-mapo-mini:not(.gl-mapo-stack):not(.gl-mapo-last) > b:not(:first-child) { flex: 0 0 auto; margin-left: 6px; }
