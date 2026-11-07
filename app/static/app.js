@@ -6396,6 +6396,7 @@ function glMapGoogle(host) {
     },
     follow(p) {
       if (vec) map.moveCamera({ center: ll(ahead(p, map.getZoom() || 16)), heading, tilt });
+      else if (document.body.classList.contains("gl-dim")) map.setCenter(ll(p));   // dimmed: a jump, no animation
       else map.panTo(ll(p));
     },
     resize() {},
@@ -6471,7 +6472,10 @@ function glMapLeaflet(host) {
     jump(p, z) { layout(); map.setView(p, z, { animate: false }); },
     follow(p) {
       const dx = map.latLngToContainerPoint(p).distanceTo(map.getSize().divideBy(2));
-      if (dx > 1) map.panTo(p, { animate: dx < 400, duration: 0.2, easeLinearity: 1, noMoveStart: true });
+      // Bright, a short glide each step; dimmed (a step a second), a jump:
+      // no animation frames at all while the screen is only a glance.
+      const glide = dx < 400 && !document.body.classList.contains("gl-dim");
+      if (dx > 1) map.panTo(p, { animate: glide, duration: 0.2, easeLinearity: 1, noMoveStart: true });
     },
     resize() { layout(); },
   };
@@ -6579,12 +6583,15 @@ function glMapUpdate(mode) {
     eng.jump(pos, z, mode);
   } else eng.follow(pos);
 }
-// Five steps a second between redraws while a map is on screen and the car
-// is moving: only the arrow and the view move, nothing is rebuilt.
+// Five steps a second between redraws while a map is on screen, the car is
+// moving and the screen is bright: only the arrow and the view move.
 setInterval(() => {
   const D = glLiveState.data, nw = D && D.now;
   if (!GL_MAP.eng || !GL_MAP.host || !GL_MAP.host.isConnected || document.hidden
     || !nw || !(+nw.speed_kmh > 3)) return;
+  // Dimmed, the map moves once a second (with the redraw), not five times:
+  // each move repaints the whole map, the page's biggest battery cost.
+  if (document.body.classList.contains("gl-dim")) return;
   const slot = GL_MAP.host.parentElement;
   glMapUpdate((slot && slot.dataset.map) || "full");
 }, 200);
