@@ -3507,6 +3507,24 @@ main > .card { max-width: 100%; }
    the figures-only view in the map's own box. Sized to the box's width. */
 .gl-flipchip { cursor: pointer; letter-spacing: .06em; }
 .gl-flipchip:active { background: rgba(34, 211, 238, .25); }
+/* A side box's figures (glNumsView, no destination): a heading, the trip two
+   across, then the battery now. Sized by the box's width and the screen's
+   height; on shorter screens the o2 figures, then the o1, give way. */
+.gl-numsv:has(.gl-nv-mini) { justify-content: flex-start; gap: min(1.4vh, 8px); padding-top: 10px; }
+.gl-nv-head { font: 700 min(5cqw, 3.3vh, 13px)/1.2 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #22d3ee; min-width: 0; }
+.gl-nv-head span { display: block; font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.gl-nv-mini { row-gap: min(1.3vh, 8px); padding-top: min(1.3vh, 8px); }
+.gl-numsv .gl-nv-mini b, .gl-numsv .gl-nv-now b { font-size: min(9.5cqw, 5.4vh, 26px); }
+.gl-numsv .gl-nv-mini b small, .gl-numsv .gl-nv-now b small { font-size: min(4.2cqw, 2.5vh, 11px); margin-top: 1px; }
+.gl-nv-now { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; margin-top: auto;
+  border-top: 1px solid #1d2a38; padding-top: min(1.3vh, 8px); }
+.gl-nv-now em { grid-column: 1 / -1; font: 700 min(4.2cqw, 2.5vh, 11px)/1.2 system-ui, sans-serif; font-style: normal;
+  letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; margin-bottom: 2px; }
+.gl-nv-now.solo { margin-top: 0; border-top: 0; row-gap: min(2vh, 12px); }
+.gl-numsv.cut2 .gl-nv-mini .o2, .gl-numsv.cut1 .gl-nv-mini .o1, .gl-numsv.cut0 .gl-nv-head span { display: none; }
+/* Navigating, the route's figures stay; the trip under them gives way. */
+.gl-numsv.cut1 .gl-nv-delay, .gl-numsv.cut0 .gl-nv-nav ~ .gl-nv-trip { display: none; }
 /* The smallest phones: the dots close up so the flip chip still fits. */
 @media (max-width: 600px) { .gl-dots { gap: 5px; } .gl-flipchip { padding-left: 8px; padding-right: 8px; } }
 .gl-numsv { display: flex; flex-direction: column; justify-content: center; gap: clamp(4px, 2.5cqw, 14px);

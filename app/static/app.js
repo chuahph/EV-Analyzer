@@ -5838,6 +5838,51 @@ function glNumsView(o, mini) {
     <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
     return `${speedF}${side}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
   }
+  // A side box (Round Mix, Dial, the Cockpit) with no destination: the
+  // drive, or parked the last trip, in full, then the battery now. Figures
+  // marked o1 / o2 give way first on a short screen (style.css).
+  if (mini && !nav) {
+    const L = glLiveState.data || {}, now = nw || L.now || {};
+    const bal = (lastData && lastData.battery_balance) || {};
+    const pctNow = pct ?? now.battery_level ?? now.soc ?? bal.current_level_pct ?? bal.current_soc_pct ?? null;
+    const estFull = lastData && lastData.battery && lastData.battery.est_full_range_km;
+    const rangeNow = now.range_km ?? (pctNow != null && estFull ? Math.round(estFull * pctNow / 100) : null);
+    const lc = (lastData && lastData.last_charge) || {};
+    const rate = o.costRate ?? (lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null);
+    const cur = o.cur || (lastData && lastData.currency) || "RM";
+    const src = t || lt;
+    const f = (val, unit, tone = "", cls = "") => `<b class="${tone}${cls ? " " + cls : ""}">${val}<small>${unit}</small></b>`;
+    let head = "", rows = [];
+    if (t) {
+      const packKwh = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+      const used = o.usedPct ?? Math.max(+t.soc_used || 0, packKwh && t.energy_kwh > 0 ? t.energy_kwh / packKwh * 100 : 0);
+      head = `This drive<span>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</span>`;
+      rows = [
+        f(v(t.distance_km, 1, true), "km"), f(v(t.duration_min), "min"),
+        f(v(t.avg_speed_kmh), "avg km/h"), f(v(t.max_speed_kmh), "top km/h"),
+        f(v(whk, 1, true), "Wh/km"), f(v(t.energy_kwh, 2), "net kWh"),
+        f(v(t.regen_kwh, 2), "regen kWh", "good", "o1"), f(v(used, 2, true), "% batt used", "", "o1"),
+        f(rate != null && t.energy_kwh != null ? n(t.energy_kwh * rate, 2, true) : "—", `cost ${cur}`, "", "o2"),
+        f(v(now.out_temp), "°C outside", "", "o2"),
+      ];
+    } else if (lt) {
+      const band = lt.efficiency_band === "efficient" ? "good" : lt.efficiency_band === "inefficient" ? "warn" : "";
+      head = `Last trip<span>${h(lt.route || tripWhen(lt.start_time))}</span>`;
+      rows = [
+        f(v(lt.distance_km, 1, true), "km"), f(v(lt.duration_min), "min"),
+        f(v(lt.avg_speed_kmh), "avg km/h"), f(v(lt.max_speed_kmh), "top km/h"),
+        f(v(lt.wh_per_km, 1, true), "Wh/km", band), f(v(lt.energy_kwh, 2), "kWh"),
+        f(v(lt.soc_used_pct, 1, true), "% batt used", "", "o1"), f(lt.cost != null ? n(lt.cost, 2, true) : "—", `cost ${cur}`, "", "o1"),
+        f(v(lt.eco_score), "eco score", "", "o2"), f(v(lt.out_temp), "°C then", "", "o2"),
+      ];
+    }
+    // The Cockpit has its battery bar right under this box: no need twice.
+    // With no trip to show at all, the car itself fills the box.
+    const odo = now.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
+    const nowRow = navOnly && src ? "" : `<div class="gl-nv-now${src ? "" : " solo"}"><em>${src ? "Now" : "Car now"}</em>${f(pctNow != null ? n(pctNow, 1, true) : "—", "% batt", pctNow != null && pctNow < 20 ? "warn" : "")}${f(v(rangeNow), "range km")}${
+      src ? "" : f(odo != null ? n(odo, 0) : "—", "odo km") + f(v(now.out_temp), "°C outside")}</div>`;
+    return `${src ? `<div class="gl-nv-head">${head}</div><div class="gl-nv-trip gl-nv-mini">${rows.join("")}</div>` : ""}${nowRow}`;
+  }
   const trip = [
     fig(v(dist, 1, true), "km"), fig(v(mins), "min"),
     ...(mini && nav ? [] : [fig(v(avg), "avg km/h")]),
@@ -6842,6 +6887,14 @@ function glFitRow(row) {
 // Sizes that depend on a box's own height, set once per draw: the Cockpit's
 // trip tiles (data-fit on the pager: short, small, tiny) and Mix's speed.
 function glFitSized(root) {
+  // A side box's figures: the least needed give way until the rest fit.
+  const box = root.querySelector(".gl-map-mini.gl-numsv");
+  if (box) {
+    for (const step of ["cut2", "cut1", "cut0"]) {
+      if (box.scrollHeight <= box.clientHeight + 1) break;
+      box.classList.add(step);
+    }
+  }
   const vp = root.querySelector(".gl-vpages"), t = vp && vp.querySelector(".gl-vpage > .gl-rt");
   if (t && t.clientHeight) {
     const cs = getComputedStyle(t);
