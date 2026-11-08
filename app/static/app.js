@@ -5503,8 +5503,7 @@ function glAltPage(skin, c) {
           ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% on arrival</small></b>` : ""}
         </div>${nav.delay_min >= 1 ? `<em>+${n(nav.delay_min)} min traffic</em>` : ""}</div>`
       : `<div class="gl-mapo gl-mapo-nav idle"><span class="gl-mapo-dest">No destination</span><em>Set one in the car to see the route</em></div>`;
-    return `<div class="gl-page gl-alt gl-mapd">
-      <div class="gl-map-slot" data-map="full">
+    const mapSlot = `<div class="gl-map-slot" data-map="full">
         ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
         <div class="gl-mapo gl-mapo-spd"><strong style="color:${col}">${num}</strong><small>km/h</small><span class="gl-mapo-gear">${gear}</span>
           <span class="gl-mapo-batt2 ${pct != null && pct < 20 ? "warn" : ""}">${pct != null ? n(pct, 1, true) : "—"}<small>%</small></span></div>
@@ -5516,7 +5515,8 @@ function glAltPage(skin, c) {
           ${stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : "")}
           ${stat("kW", kwShown, kw != null && kw < 0 ? "good" : "")}
         </div>
-      </div></div>`;
+      </div>`;
+    return `<div class="gl-page gl-alt gl-mapd">${glMapArea("map", mapSlot, { ...c, nav, n })}</div>`;
   }
   if (skin === 1) {
     return `<div class="gl-page gl-alt gl-hud">
@@ -5581,7 +5581,7 @@ function glAltPage(skin, c) {
     return `<div class="gl-page gl-alt gl-dialpage gl-dialmap">
       ${led(regen ? "Regen" : "Power", pseg, "88.8", kwShown, "kW", pwTone, "<em>150</em><em>75</em><em>0</em><em>regen</em>")}
       <div class="gl-dialbox">${glLadder("regen", c)}${glGauge3D(spd, col, nw, null, true)}${glLadder("whkm", { ...c, whk })}</div>
-      <div class="gl-map-slot gl-map-mini gl-dial-map" data-map="mini">
+${glMapArea("dial", `<div class="gl-map-slot gl-map-mini gl-dial-map" data-map="mini">
         ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
         ${nav ? `<div class="gl-mapo gl-mapo-mini gl-mapo-stack">
           ${nav.minutes != null ? `<b>${glClockIn(nav.minutes)}<small>${h(glNavName(nav.name) || "arrive")}</small></b>` : ""}
@@ -5589,7 +5589,7 @@ function glAltPage(skin, c) {
           ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% arrive</small></b>` : ""}
         </div>` : ""}
         <div class="gl-mapo gl-mapo-batt" style="--c:${bTone}"><b>${pct != null ? n(pct, 1, true) : "—"}<small>% batt</small></b></div>
-      </div>
+      </div>`, { ...c, nav, n })}
     </div>`;
   }
   if (skin === 6) {
@@ -5720,14 +5720,14 @@ function glAltPage(skin, c) {
       </div>
       <div class="gl-rmix-mid">${glLadder("flow", c)}${round}${glLadder("whbat", { ...c, whk })}<span class="gl-gearrow">${["P", "R", "N", "D"].map((x) => `<b class="${nw.shift === x ? "on" : ""}">${x}</b>`).join("")}</span></div>
       <div class="gl-rmix-col gl-rmix-map">
-        <div class="gl-map-slot gl-map-mini" data-map="mini">
+${glMapArea("rmix", `<div class="gl-map-slot gl-map-mini" data-map="mini">
           ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
           ${nav ? `<div class="gl-mapo gl-mapo-mini gl-mapo-stack">
             ${nav.minutes != null ? `<b>${glClockIn(nav.minutes)}<small>${h(glNavName(nav.name) || "arrive")}</small></b>` : ""}
             ${nav.km != null ? `<b>${n(nav.km, 1, true)}<small>km to go</small></b>` : ""}
             ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% arrive</small></b>` : ""}
           </div>` : ""}
-        </div></div>
+        </div>`, { ...c, nav, n })}</div>
     </div>`;
   }
   if (skin === 9) {
@@ -5765,6 +5765,66 @@ const glSave = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* pr
 let glanceTab = glPref("glanceTab", "drive");
 glLiveSkin = GL_SKINS[+glPref("glLiveSkin", "0")] ? +glPref("glLiveSkin", "0") : 0;
 
+// Map or numbers. In each design with a map, the map's box flips (a swipe up
+// or down on it, or its small button) to the figures alone: the destination,
+// arrival, km and minutes to go and the battery on arrival, then the trip.
+// While the figures show, the map is not on the page at all, so it draws
+// nothing (most of a map design's work on the phone); flipping back puts it
+// straight onto the car. Each design keeps the view it was left on.
+const GL_MAPVIEW = (() => { try { return JSON.parse(glPref("glMapView", "{}")) || {}; } catch (_) { return {}; } })();
+function glMapIsNums(key) { return GL_MAPVIEW[key] === "nums"; }
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-mapflip-btn]");
+  if (b) { e.preventDefault(); glMapFlip(b.dataset.mapflipBtn); }
+});
+function glMapFlip(key) {
+  GL_MAPVIEW[key] = glMapIsNums(key) ? "map" : "nums";
+  glSave("glMapView", JSON.stringify(GL_MAPVIEW));
+  if (lastData) renderGlance(lastData);
+}
+// The map's box as given, with its flip button; or, flipped, the figures in a
+// box of the same classes (so the same size and place).
+function glMapArea(key, slot, o) {
+  const btn = (nums) => `<button type="button" class="gl-flip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
+  if (!glMapIsNums(key)) {
+    const at = slot.indexOf('<div class="gl-map-slot');
+    const end = slot.indexOf(">", at);
+    return slot.slice(0, at) + slot.slice(at, end).replace('<div class="gl-map-slot', `<div data-mapflip="${key}" class="gl-map-slot`)
+      + ">" + btn(false) + slot.slice(end + 1);
+  }
+  const cls = (slot.match(/<div class="(gl-map-slot[^"]*)"/) || [, "gl-map-slot"])[1];
+  return `<div class="${cls} gl-numsv" data-mapflip="${key}">${btn(true)}${glNumsView(o, cls.includes("gl-map-mini"))}</div>`;
+}
+function glNumsView(o, mini) {
+  const { nav, t, lt, kw, pct, tw, n, spd, nw, navOnly } = o;
+  const dist = t ? t.distance_km : lt && lt.distance_km;
+  const mins = t ? t.duration_min : lt && lt.duration_min;
+  const avg = t ? t.avg_speed_kmh : lt && lt.avg_speed_kmh;
+  const whk = t ? (tw ?? (lt && lt.wh_per_km)) : lt && lt.wh_per_km;
+  const v = (x, dp, fixed) => (x == null ? "—" : n(x, dp, fixed));
+  const fig = (val, unit, tone = "") => `<b class="${tone}">${val}<small>${unit}</small></b>`;
+  const navBlock = nav ? `<div class="gl-nv-nav">
+      <em>${h(glNavName(nav.name) || "Navigating")}</em>
+      <div class="gl-nv-row">
+        ${nav.minutes != null ? fig(glClockIn(nav.minutes), "arrive") + fig(v(nav.minutes), "min") : ""}
+        ${nav.km != null ? fig(v(nav.km, 1, true), "km to go") : ""}
+        ${nav.arrive_pct != null ? fig(v(nav.arrive_pct), "% on arrival", nav.arrive_pct < 15 ? "warn" : "good") : ""}
+      </div>${nav.delay_min >= 1 ? `<span class="gl-nv-delay">+${v(nav.delay_min)} min traffic</span>` : ""}</div>` : "";
+  const trip = [
+    fig(v(dist, 1, true), "km"), fig(v(mins), "min"),
+    ...(mini && nav ? [] : [fig(v(avg), "avg km/h")]),
+    fig(v(whk, 1, true), "Wh/km"),
+    ...(mini && nav ? [] : [fig(kw == null ? "—" : n(Math.abs(kw), 1), kw != null && kw < 0 ? "regen kW" : "kW", kw != null && kw < 0 ? "good" : "")]),
+    fig(v(pct, 1, true), "% batt", pct != null && pct < 20 ? "warn" : ""),
+  ].join("");
+  // The Map design has its speed on the map: shown here when flipped.
+  const speed = !mini && nw ? `<div class="gl-nv-spd" style="color:${spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff"}">${spd != null ? Math.round(spd) : "—"}<small>km/h</small>
+    <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
+  // The Cockpit shows the trip and battery beside its map already: navigating,
+  // its figures are the route's alone.
+  if (navOnly && navBlock) return navBlock;
+  return `${speed}${navBlock}<div class="gl-nv-trip">${trip}</div>`;
+}
 function renderGlance(d) {
   const el = document.getElementById("glance");
   if (!el || !d) return;
@@ -5885,7 +5945,7 @@ function renderGlance(d) {
           </div>`,
           glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
           // The map of where the car stands, the last trip over it.
-          `<div class="gl-navside"><div class="gl-map-slot gl-map-mini" data-map="mini">
+          `<div class="gl-navside">${glMapArea("cockpit", `<div class="gl-map-slot gl-map-mini" data-map="mini">
             ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
             ${L && L.nav ? `<div class="gl-mapo gl-mapo-mini">
               ${L.nav.minutes != null ? `<b>${glClockIn(L.nav.minutes)}<small>${h(glNavName(L.nav.name) || "arrive")}</small></b>` : ""}
@@ -5897,7 +5957,7 @@ function renderGlance(d) {
               <b>${lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—"}<small>avg km/h</small></b>
               <b class="${ltTone}">${n(lt.wh_per_km, 1, true)}<small>Wh/km</small></b></div>
             </div>` : ""}
-          </div></div>`,
+          </div>`, { nav: (L && L.nav) || null, t: null, lt, kw: null, pct, tw: null, n, navOnly: true })}</div>`,
           foot);
       }
       // Energy over distance, as the car's "Current Drive" shows it.
@@ -5925,7 +5985,7 @@ function renderGlance(d) {
       // and the power sits on the map.
       const navC = L && L.nav;
       {
-        const mini = `<div class="gl-map-slot gl-map-mini" data-map="mini">
+        const mini = glMapArea("cockpit", `<div class="gl-map-slot gl-map-mini" data-map="mini">
             ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
             ${navC ? `<div class="gl-mapo gl-mapo-mini">
               ${navC.minutes != null ? `<b>${glClockIn(navC.minutes)}<small>${h(glNavName(navC.name) || "arrive")}</small></b>` : ""}
@@ -5933,7 +5993,7 @@ function renderGlance(d) {
               ${navC.arrive_pct != null ? `<b class="${navC.arrive_pct < 15 ? "warn" : "good"}">${n(navC.arrive_pct)}<small>% arrive</small></b>` : ""}
             </div>` : ""}
             <div class="gl-mapo gl-mapo-kw ${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></div>
-          </div>`;
+          </div>`, { nav: navC, t, lt, kw, pct, tw: t && (t.wh_per_km ?? t.driving_wh_per_km), n, navOnly: true });
         return page(
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec"></b>Trip computer<em>since ${h(String(tripWhen(t.start_time) || "").split(" ").pop())}</em></div>
@@ -6501,7 +6561,7 @@ function glMapRouteNote(text) {
   el.textContent = text;
 }
 function glMapMount(root) {
-  const slot = root && root.querySelector(".gl-map-slot");
+  const slot = root && root.querySelector(".gl-map-slot:not(.gl-numsv)");
   if (!slot) return;
   const kind = glMapReady();
   if (!kind) return;
@@ -8120,15 +8180,17 @@ document.addEventListener("wheel", (e) => {
     const edge = 28;
     sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select, [data-vscroll]")
       && e.clientX > edge && e.clientX < innerWidth - edge && e.clientY > edge && e.clientY < innerHeight - edge
-      ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId } : null;
+      ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId,
+          flip: (e.target.closest("[data-mapflip]") || { dataset: {} }).dataset.mapflip || null } : null;
   }, { passive: true });
   document.addEventListener("pointerup", (e) => {
     if (!sw || e.pointerId !== sw.id) return;
-    const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = Date.now() - sw.t;
+    const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = Date.now() - sw.t, flip = sw.flip;
     sw = null;
     if (dt >= 900) return;
     if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.6) glSkinStep("h", dx < 0 ? 1 : -1);
-    else if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) glSkinStep("v", dy < 0 ? 1 : -1);
+    // Up or down on a map (or its figures) flips between the two.
+    else if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) { if (flip) glMapFlip(flip); else glSkinStep("v", dy < 0 ? 1 : -1); }
   }, { passive: true });
   document.addEventListener("pointercancel", () => { sw = null; }, { passive: true });
 }
