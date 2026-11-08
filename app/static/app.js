@@ -1680,6 +1680,8 @@ let lastRenderedCharges = [];
 // keeps the tap's permission to write the clipboard.
 let liveViews = null;
 function loadLiveViews() {
+  // The static demo has no server: nothing to ask (else a 404 every minute).
+  if (STATIC_MODE) { liveViews = []; return; }
   fetch("/api/live/views?days=3", { credentials: "same-origin" })
     .then((r) => (r.ok ? r.json() : []))
     .then((v) => { liveViews = Array.isArray(v) ? v : []; })
@@ -5068,6 +5070,9 @@ async function glLivePoll() {
   glWakeSync();
   const want = glanceTab === "live" && glanceVisible() && !document.hidden;
   const es = glLiveState.es;
+  // The static demo has no server and no car: no stream to open and nothing
+  // to ask (else a failed request every second while Live is on screen).
+  if (STATIC_MODE) { glLiveState.timer = setTimeout(glLivePoll, 1000); return; }
   if (!want) {
     if (es) { es.close(); glLiveState.es = null; }
     glLiveState.timer = setTimeout(glLivePoll, 1000);
