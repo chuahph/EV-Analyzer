@@ -4853,7 +4853,7 @@ function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !doc
 // On by default every time the app opens. The chip at the bottom of the page
 // switches it to "always bright" for the rest of that visit — for a phone on
 // a cable in the car; reopening the app goes back to auto-dim.
-const GL_DIM_MS = 15000;
+const GL_DIM_MS = 10000;
 const GL_DIM_EVENT_MS = 8000;
 const GL_BRAKE_KMH_S = 10;   // about 0.28 g: firmer than the strongest regen
 let glDimTimer = null;
@@ -4959,7 +4959,7 @@ function glLiveApply(L) {
     const braking = nw.brake == null && v != null && lv != null && dt >= 0.5 && dt <= 2.5
       && (lv - v) / dt >= GL_BRAKE_KMH_S;
     // The pedal itself, when the car streams it, is the surest sign of all.
-    // Each event wakes the screen once and starts the same 15 s; holding
+    // Each event wakes the screen once and starts the same wake; holding
     // the brake or standing still does not keep it bright. A press counts
     // when the pedal goes down (a release the car never sent expires on the
     // server after 2 minutes, so the next press is still seen).
@@ -6690,7 +6690,7 @@ function glMapUpdate(mode, frame = false) {
 // glMapUpdate), so the view slides instead of stepping. Frames are capped:
 // GL_MAP_FPS while the screen is bright, GL_MAP_FPS_DIM while dimmed (most
 // of a drive), since each frame repaints the map. Nothing else is redrawn.
-const GL_MAP_FPS = 30, GL_MAP_FPS_DIM = 8;
+const GL_MAP_FPS = 30, GL_MAP_FPS_DIM = 4;
 let glMapFrameAt = 0;
 function glMapFrame(ts) {
   requestAnimationFrame(glMapFrame);
