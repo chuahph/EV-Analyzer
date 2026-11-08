@@ -3505,13 +3505,12 @@ main > .card { max-width: 100%; }
 
 /* Map or numbers (glMapArea): the flip button on the map's right edge, and
    the figures-only view in the map's own box. Sized to the box's width. */
-.gl-flip { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
-  font: 700 10px/1 system-ui, sans-serif; letter-spacing: .06em; color: #cfe9f5;
-  background: rgba(5, 10, 16, .78); border: 1px solid #2a3a4c; border-radius: 9px; padding: 6px 7px; cursor: pointer; }
-.gl-flip:active { background: rgba(34, 211, 238, .25); }
-.gl-dim .gl-flip { opacity: .45; }
+.gl-flipchip { cursor: pointer; letter-spacing: .06em; }
+.gl-flipchip:active { background: rgba(34, 211, 238, .25); }
+/* The smallest phones: the dots close up so the flip chip still fits. */
+@media (max-width: 600px) { .gl-dots { gap: 5px; } .gl-flipchip { padding-left: 8px; padding-right: 8px; } }
 .gl-numsv { display: flex; flex-direction: column; justify-content: center; gap: clamp(4px, 2.5cqw, 14px);
-  padding: 8px 40px 8px 10px; background: radial-gradient(120% 90% at 50% 0%, #0d1824, #05080c 70%); }
+  padding: 8px 10px; background: radial-gradient(120% 90% at 50% 0%, #0d1824, #05080c 70%); }
 .gl-numsv b { display: flex; flex-direction: column; align-items: flex-start; min-width: 0;
   font: 700 clamp(16px, 8cqw, 38px)/1.05 "Chakra Petch", system-ui, sans-serif; color: #dbe8f1; font-variant-numeric: tabular-nums; }
 .gl-numsv b small { font: 600 clamp(8px, 2.6cqw, 12px)/1.2 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 2px; white-space: nowrap; }
@@ -3539,3 +3538,10 @@ main > .card { max-width: 100%; }
   border-left: 1px solid #1d2a38; padding-left: clamp(8px, 3cqw, 24px); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .gl-mapd .gl-numsv b { font-size: clamp(16px, 3.6cqw, 34px); }
 .gl-mapd .gl-nv-trip b { font-size: clamp(16px, 3.4cqw, 30px); }
+/* Twelve figures, three across, beside the speed. Sized by the box's width
+   and the screen's height, so four rows fit a short phone too. */
+.gl-mapd .gl-numsv { grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr); }
+.gl-mapd .gl-nv-full { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: clamp(3px, 1.6vh, 12px); }
+.gl-mapd .gl-nv-full b { font-size: min(3cqw, 6.2vh, 28px); }
+.gl-mapd .gl-nv-full b small { font-size: min(1.5cqw, 2.9vh, 11px); }
+.gl-mapd .gl-nv-left b { font-size: min(3.2cqw, 6.4vh, 30px); }

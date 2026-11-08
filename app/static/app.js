@@ -5784,16 +5784,22 @@ function glMapFlip(key) {
 }
 // The map's box as given, with its flip button; or, flipped, the figures in a
 // box of the same classes (so the same size and place).
+// The button that flips it lives in the footer strip (glFlipChip), off the
+// map, so it never covers the route.
 function glMapArea(key, slot, o) {
-  const btn = (nums) => `<button type="button" class="gl-flip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
   if (!glMapIsNums(key)) {
     const at = slot.indexOf('<div class="gl-map-slot');
-    const end = slot.indexOf(">", at);
-    return slot.slice(0, at) + slot.slice(at, end).replace('<div class="gl-map-slot', `<div data-mapflip="${key}" class="gl-map-slot`)
-      + ">" + btn(false) + slot.slice(end + 1);
+    return slot.slice(0, at) + slot.slice(at).replace('<div class="gl-map-slot', `<div data-mapflip="${key}" class="gl-map-slot`);
   }
   const cls = (slot.match(/<div class="(gl-map-slot[^"]*)"/) || [, "gl-map-slot"])[1];
-  return `<div class="${cls} gl-numsv" data-mapflip="${key}">${btn(true)}${glNumsView(o, cls.includes("gl-map-mini"))}</div>`;
+  return `<div class="${cls} gl-numsv" data-mapflip="${key}">${glNumsView(o, cls.includes("gl-map-mini"))}</div>`;
+}
+// The footer's flip chip, for a page with a map (or its figures) on it.
+function glFlipChip(body) {
+  const key = (String(body).match(/data-mapflip="(\w+)"/) || [])[1];
+  if (!key) return "";
+  const nums = glMapIsNums(key);
+  return `<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
 }
 function glNumsView(o, mini) {
   const { nav, t, lt, kw, pct, tw, n, spd, nw, navOnly } = o;
@@ -5810,6 +5816,28 @@ function glNumsView(o, mini) {
         ${nav.km != null ? fig(v(nav.km, 1, true), "km to go") : ""}
         ${nav.arrive_pct != null ? fig(v(nav.arrive_pct), "% on arrival", nav.arrive_pct < 15 ? "warn" : "good") : ""}
       </div>${nav.delay_min >= 1 ? `<span class="gl-nv-delay">+${v(nav.delay_min)} min traffic</span>` : ""}</div>` : "";
+  if (!mini) {
+    const { usedPct, costRate, cur, rangeHere, range, odo } = o;
+    const kwTxt = kw == null ? "—" : n(Math.abs(kw), 1);
+    const full = [
+      fig(v(dist, 1, true), "km"), fig(v(mins), "min"), fig(v(avg), "avg km/h"),
+      fig(v(t && t.max_speed_kmh), "top km/h"),
+      fig(v(whk, 1, true), "Wh/km"),
+      fig(kwTxt, kw != null && kw < 0 ? "regen kW" : "kW", kw != null && kw < 0 ? "good" : ""),
+      fig(v(t && t.regen_kwh, 2), "regen kWh", "good"),
+      fig(v(t && t.energy_kwh, 2), "net kWh"),
+      fig(v(usedPct, 2, true), "% batt used"),
+      fig(v(pct, 1, true), "% batt", pct != null && pct < 20 ? "warn" : ""),
+      fig(v(range), "range km"),
+      fig(costRate != null && t && t.energy_kwh != null ? n(t.energy_kwh * costRate, 2, true) : "—", `cost ${cur || "RM"}`),
+    ].join("");
+    // Not navigating, the space under the speed holds what is left.
+    const side = nav ? navBlock : `<div class="gl-nv-nav gl-nv-left"><em>On this charge</em><div class="gl-nv-row">
+        ${fig(v(rangeHere), "km at this rate")}${fig(odo != null ? n(odo, 0) : "—", "odo km")}${nw && nw.out_temp != null ? fig(n(nw.out_temp, 0), "°C outside") : ""}</div></div>`;
+    const speedF = nw ? `<div class="gl-nv-spd" style="color:${spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff"}">${spd != null ? Math.round(spd) : "—"}<small>km/h</small>
+    <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
+    return `${speedF}${side}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
+  }
   const trip = [
     fig(v(dist, 1, true), "km"), fig(v(mins), "min"),
     ...(mini && nav ? [] : [fig(v(avg), "avg km/h")]),
@@ -6246,7 +6274,7 @@ function renderGlance(d) {
         <path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
     <div class="gl-body">${rail}${pg.body}</div>
-    ${pg.foot ? `<div class="gl-foot">${pg.foot}</div>` : ""}</div>`;
+    ${pg.foot ? `<div class="gl-foot">${glanceTab === "live" ? pg.foot.replace(/(data-gl-dim>[^<]*<\/button>)/, (m) => m + glFlipChip(pg.body)) : pg.foot}</div>` : ""}</div>`;
   glFit(el);
   glMapMount(el);
 }
