@@ -14177,6 +14177,12 @@ def test_live_reports_position_and_the_cars_navigation():
         routes._LIVE_MEM["VNAV"]["RouteLine"] = "CgpAYWJjZGVmZ2hp"
         r = client.get("/api/live/route?vin=VNAV").json()
         assert r["points"] == [] and r["raw"] == "CgpAYWJjZGVmZ2hp"
+        # A longer unreadable value (136 chars, as one car sent near the end
+        # of a route) is shown as sent too, so its format can be read off.
+        junk = "Cg" + "QUJDREVG" * 16 + "AAAAAA"
+        routes._LIVE_MEM["VNAV"]["RouteLine"] = junk
+        r = client.get("/api/live/route?vin=VNAV").json()
+        assert r["points"] == [] and r["raw"] == junk and r["raw_chars"] == len(junk)
         routes._LIVE_MEM["VNAV"]["RouteLine"] = route
         # The car's own heading wins while fresh; junk locations are ignored.
         routes._live_mem_fold("VNAV", at(-3), {"GpsHeading": 181.0,

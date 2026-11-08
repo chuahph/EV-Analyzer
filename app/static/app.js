@@ -6526,14 +6526,24 @@ function glMapUpdate(mode) {
     GL_MAP.routeAsk = rv;
     if (!rv) {
       eng.setRoute(null);
-      GL_MAP.routeV = null; GL_MAP.route = null;
+      GL_MAP.routeV = null; GL_MAP.route = null; GL_MAP.routeDest = "";
     } else {
       fetch("/api/live/route?" + new URLSearchParams(D.vin ? { vin: D.vin } : {}), { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null)).then((r) => {
           // An error answer: ask again in 5 s (else not until the route changed).
           if (!r) { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; return; }
           if (r.v !== GL_MAP.routeAsk || !GL_MAP.eng) return;
+          const had = GL_MAP.route && GL_MAP.route.points && GL_MAP.route.points.length;
+          const dest = nav && nav.dest_lat != null ? nav.dest_lat.toFixed(4) + "," + nav.dest_lon.toFixed(4) : "";
+          if (!(r.points && r.points.length) && had && dest && dest === GL_MAP.routeDest
+            && !/km from the car/.test(r.format || "")) {
+            // An update the app cannot read, mid-route: keep the last good
+            // route (still trimmed behind the car) rather than a blank map.
+            GL_MAP.routeV = r.v;
+            return;
+          }
           GL_MAP.routeV = r.v; GL_MAP.route = r; GL_MAP.cut = null; GL_MAP.trimAt = 0;
+          GL_MAP.routeDest = dest;
           GL_MAP.eng.setRoute(r.points || []);
           // A very short RouteLine (a point or two, as near the destination)
           // is nothing to draw, not a fault: no note for it.
