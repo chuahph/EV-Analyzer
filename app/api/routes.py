@@ -16075,7 +16075,10 @@ def _live_clean(key: str, value):
             x = float(value)
         except (TypeError, ValueError):
             return None
-        return x if math.isfinite(x) else None
+        # Finite and of a size a car can send: a corrupted reading of 1e300
+        # is finite but overflows to infinity once multiplied (power is volts
+        # times amps), and one such value would break the page's JSON.
+        return x if math.isfinite(x) and abs(x) < 1e9 else None
     if key in _LIVE_TEXT_KEYS:
         return value if isinstance(value, str) else None
     if key in _LIVE_LOC_KEYS:
@@ -16671,11 +16674,23 @@ def telemetry_live_push(payload: dict = Body(...)):
     return {"ok": True}
 
 
+def _live_finite(o):
+    """The answer with any non-finite number (inf, nan) made None: the page's
+    JSON parser rejects those, and one would stop the whole live frame."""
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _live_finite(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_live_finite(v) for v in o]
+    return o
+
+
 def _live_payload_safe(vin: str | None, capacity_kwh: float | None) -> dict:
     """_live_payload, but a failure is an empty answer, never an error: the page
     keeps its last picture and the stream stays up."""
     try:
-        return _live_payload(vin, capacity_kwh)
+        return _live_finite(_live_payload(vin, capacity_kwh))
     except Exception:   # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("live payload failed")

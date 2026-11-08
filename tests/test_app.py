@@ -14307,3 +14307,31 @@ def test_live_navigation_ends_when_parked_at_the_destination():
         assert routes._live_payload("VARR", None)["nav"]["km"] == 4.8
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_live_answer_stays_valid_json_with_absurd_readings():
+    """A corrupted reading of a huge but finite size (1e300 volts) once
+    overflowed to infinity in power and energy, and the page's JSON parser
+    rejects infinity, so the whole live frame failed. Such readings are
+    dropped on the way in, and the answer is made finite on the way out."""
+    import json
+    import time as _t
+    from datetime import datetime, timezone
+    from app.api import routes
+
+    def at(sec):
+        return datetime.fromtimestamp(_t.time() + sec, timezone.utc).isoformat()
+
+    try:
+        routes._LIVE_MEM.clear()
+        routes._live_mem_fold("VBIG", at(-6), {"Gear": "ShiftStateD", "VehicleSpeed": 40.0, "Odometer": 1000.0,
+                                               "PackVoltage": 380.0, "PackCurrent": 20.0})
+        routes._live_mem_fold("VBIG", at(-3), {"PackVoltage": 1e300, "PackCurrent": 1e300, "VehicleSpeed": 1e300,
+                                               "Odometer": 1e300})
+        routes._live_mem_fold("VBIG", at(-1), {"VehicleSpeed": float("inf"), "PackCurrent": float("nan")})
+        p = routes._live_payload_safe("VBIG", 75.0)
+        json.dumps(p, allow_nan=False)
+        assert p["now"] is not None and p["now"]["speed_kmh"] < 1000
+        assert routes._live_finite({"a": [float("inf"), 1.0], "b": float("nan")}) == {"a": [None, 1.0], "b": None}
+    finally:
+        routes._LIVE_MEM.clear()
