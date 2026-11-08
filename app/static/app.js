@@ -6191,6 +6191,7 @@ function glMapScript(id, src, css) {
 // 80 m (a missed turn, before the car sends the new route) nothing more is
 // cut. Redrawn about once a second, not on every frame.
 const ROUTE_SHORT_CHARS = 64;
+const GL_EASE_MS = 350;   // how quickly the map takes up a new reading (see glMapUpdate)
 function glRouteTrim(eng, pos) {
   const r = GL_MAP.route, pts = r && r.points;
   if (!pts || pts.length < 2) return;
@@ -6560,7 +6561,9 @@ function glMapUpdate(mode) {
   // for at most 1.5 s, so the map glides instead of stepping.
   let pos = [nw.lat, nw.lon];
   const fixAt = (glLiveState.recvAt || Date.now()) - (+nw.loc_age_sec || 0) * 1000;
-  const ahead = Math.min(Math.max((Date.now() - fixAt) / 1000, 0), 1.5);
+  // Looked ahead by the smoothing's own lag (GL_EASE_MS), so the eased
+  // position below sits where the car is now, not a moment behind.
+  const ahead = Math.min(Math.max((Date.now() - fixAt + GL_EASE_MS) / 1000, 0), 1.8);
   if (nw.heading != null && +nw.speed_kmh > 3 && ahead > 0 && (+nw.loc_age_sec || 0) < 5) {
     const m = (+nw.speed_kmh / 3.6) * ahead, rad = nw.heading * Math.PI / 180;
     pos = [nw.lat + (m * Math.cos(rad)) / 111320,
@@ -6576,6 +6579,22 @@ function glMapUpdate(mode) {
     if (GL_MAP.lastHd == null) { try { const v = parseFloat(localStorage.getItem("glLastHeading")); if (Number.isFinite(v)) GL_MAP.lastHd = v; } catch (_) { /* none */ } }
     hd = GL_MAP.lastHd != null ? GL_MAP.lastHd : 0;
   }
+  // Eased, never snapped: each step moves the shown place and heading part
+  // of the way to the new estimate, so a fresh reading that differs a little
+  // from the guess (every second, more in a turn) blends in over about a
+  // third of a second instead of jerking the map. A big jump (the phone
+  // slept, a long gap) is taken at once.
+  const tNow = performance.now(), prev = GL_MAP.disp;
+  if (prev && tNow - prev.t < 3000) {
+    const dLat = (pos[0] - prev.pos[0]) * 111320, dLon = (pos[1] - prev.pos[1]) * 111320 * Math.cos(pos[0] * Math.PI / 180);
+    if (dLat * dLat + dLon * dLon < 200 * 200) {
+      const k = 1 - Math.exp(-(tNow - prev.t) / GL_EASE_MS);
+      pos = [prev.pos[0] + (pos[0] - prev.pos[0]) * k, prev.pos[1] + (pos[1] - prev.pos[1]) * k];
+      const turn = ((hd - prev.hd + 540) % 360) - 180;        // the short way round
+      hd = (prev.hd + turn * k + 360) % 360;
+    }
+  }
+  GL_MAP.disp = { pos, hd, t: tNow };
   eng.setCar(pos, hd);
   glRouteTrim(eng, pos);
   // Follow the car, closer in town and further out on the highway; the zoom
