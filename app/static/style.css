@@ -3458,30 +3458,26 @@ main > .card { max-width: 100%; }
 
 /* The Cockpit's paged trip tiles take their height from the panel, which
    varies with the phone (and Safari's bars, and the Dynamic Island's
-   margins). Each tile sizes to itself (heights are its inner space, inside
-   the padding): short, the icon goes so the figure stays whole; shorter
-   still, the figure shrinks. Never clipped; on a usual phone, unchanged. */
-.gl-vpage > .gl-rt { container-type: size; overflow: hidden; }
-@container (max-height: 44px) {
-  .gl-vpage > .gl-rt > i { display: none; }
-  .gl-vpage > .gl-rt > span { grid-column: 1 / -1; }
-}
-@container (max-height: 38px) {
-  .gl-vpage > .gl-rt > strong { font-size: 22px; }
-}
-@container (max-height: 32px) {
-  .gl-vpage > .gl-rt > strong { font-size: 18px; }
-  .gl-vpage > .gl-rt > span { font-size: 8px; }
-}
+   margins). After each draw the page measures a tile's inner height and
+   marks the pager (glFitSized): short, the icon goes so the figure stays
+   whole; shorter still, the figure shrinks. Measured once per draw, not by
+   container queries, which made every layout of the page about 13 times
+   dearer and the moving map repaint the whole page each frame. */
+.gl-vpage > .gl-rt { overflow: hidden; }
+.gl-vpages[data-fit] .gl-vpage > .gl-rt > i { display: none; }
+.gl-vpages[data-fit] .gl-vpage > .gl-rt > span { grid-column: 1 / -1; }
+.gl-vpages[data-fit="small"] .gl-vpage > .gl-rt > strong { font-size: 22px; }
+.gl-vpages[data-fit="tiny"] .gl-vpage > .gl-rt > strong { font-size: 18px; }
+.gl-vpages[data-fit="tiny"] .gl-vpage > .gl-rt > span { font-size: 8px; }
 
 /* Mix and Stack: the speed fits its box, so it never spills over the
    readings around it, whatever the screen's height (Safari's bars). Mix's
-   box is set by the layout and the figure sizes to it (digits are about
-   0.75 of the font size); Stack's box grows with its figure, a little
+   box is set by the layout and the figure is capped to it after each draw
+   (glFitSized; digits are about 0.75 of the font size); Stack's box grows with its figure, a little
    smaller than before so it fits with its label. */
-.gl-mix-speed { container-type: size; overflow: hidden; }
+.gl-mix-speed { overflow: hidden; }
 .gl-spdn { font: inherit; line-height: .85; }
-.gl-mix-speed > .gl-spdn { font-size: min(calc(26 * var(--gh)), calc(15 * var(--gw)), calc((100cqh - 20px) * 1.3)); }
+.gl-mix-speed > .gl-spdn { font-size: min(calc(26 * var(--gh)), calc(15 * var(--gw))); }   /* capped to its box by glFitSized */
 
 /* The arrival strip across the top of a map (Cockpit and others): the
    destination's name gives way first, ending in "…", so it never runs into

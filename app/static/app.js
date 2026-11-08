@@ -6400,9 +6400,11 @@ function glMapGoogle(host) {
         map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
       } else { map.setZoom(z); map.setCenter(ll(p)); }
     },
-    follow(p) {
+    // A frame (many a second): an instant move, the frames make the motion.
+    // A redraw (once a second, car slow or stopped): a short pan.
+    follow(p, frame) {
       if (vec) map.moveCamera({ center: ll(ahead(p, map.getZoom() || 16)), heading, tilt });
-      else if (document.body.classList.contains("gl-dim")) map.setCenter(ll(p));   // dimmed: a jump, no animation
+      else if (frame || document.body.classList.contains("gl-dim")) map.setCenter(ll(p));
       else map.panTo(ll(p));
     },
     resize() {},
@@ -6476,12 +6478,12 @@ function glMapLeaflet(host) {
       inner.style.transform = `rotate(${rot.toFixed(1)}deg)`;
     },
     jump(p, z) { layout(); map.setView(p, z, { animate: false }); },
-    follow(p) {
+    // A frame (many a second): an instant move, the frames make the motion.
+    // A redraw (once a second, car slow or stopped): a short glide if bright.
+    follow(p, frame) {
       const dx = map.latLngToContainerPoint(p).distanceTo(map.getSize().divideBy(2));
-      // Bright, a short glide each step; dimmed (a step a second), a jump:
-      // no animation frames at all while the screen is only a glance.
-      const glide = dx < 400 && !document.body.classList.contains("gl-dim");
-      if (dx > 1) map.panTo(p, { animate: glide, duration: 0.2, easeLinearity: 1, noMoveStart: true });
+      const glide = !frame && dx < 400 && !document.body.classList.contains("gl-dim");
+      if (dx > 0.5) map.panTo(p, { animate: glide, duration: 0.2, easeLinearity: 1, noMoveStart: true });
     },
     resize() { layout(); },
   };
@@ -6489,10 +6491,11 @@ function glMapLeaflet(host) {
 // A small note on the map while a destination is set but no route line can
 // be drawn, so the reason shows without opening anything.
 function glMapRouteNote(text) {
-  GL_MAP.note = text;
   const host = GL_MAP.host;
-  if (!host) return;
+  if (!host) { GL_MAP.note = text; return; }
   let el = host.querySelector(".gl-map-note");
+  if (text === GL_MAP.note && !!el === !!text) return;   // unchanged: no DOM write (called every frame)
+  GL_MAP.note = text;
   if (!text) { if (el) el.remove(); return; }
   if (!el) { el = document.createElement("div"); el.className = "gl-map-note"; host.append(el); }
   el.textContent = text;
@@ -6516,7 +6519,7 @@ function glMapMount(root) {
   GL_MAP.eng.resize();
   glMapUpdate(slot.dataset.map || "full");
 }
-function glMapUpdate(mode) {
+function glMapUpdate(mode, frame = false) {
   const eng = GL_MAP.eng, D = glLiveState.data;
   if (!eng || !D) return;
   const nw = D.now || {}, nav = D.nav;
@@ -6554,7 +6557,11 @@ function glMapUpdate(mode) {
         }).catch(() => { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; });
     }
   }
-  eng.setDest(nav && nav.dest_lat != null ? [nav.dest_lat, nav.dest_lon] : null);
+  const destKey = nav && nav.dest_lat != null ? nav.dest_lat + "," + nav.dest_lon : "";
+  if (destKey !== GL_MAP.destKey || eng !== GL_MAP.destEng) {
+    GL_MAP.destKey = destKey; GL_MAP.destEng = eng;
+    eng.setDest(destKey ? [nav.dest_lat, nav.dest_lon] : null);
+  }
   if (eng.setDim) eng.setDim(document.body.classList.contains("gl-dim"));
   // Navigating with no route line to draw: say why, on the map.
   if (!nav) glMapRouteNote("");
@@ -6615,20 +6622,28 @@ function glMapUpdate(mode) {
   if (key !== GL_MAP.zoomKey) {
     GL_MAP.zoomKey = key;
     eng.jump(pos, z, mode);
-  } else eng.follow(pos);
+  } else eng.follow(pos, frame);
 }
-// Five steps a second between redraws while a map is on screen, the car is
-// moving and the screen is bright: only the arrow and the view move.
-setInterval(() => {
+// Between the car's readings the map moves on by itself, frame by frame,
+// while a map is on screen and the car is moving: each frame places the car
+// where its speed and heading put it at that moment (eased, see
+// glMapUpdate), so the view slides instead of stepping. Frames are capped:
+// GL_MAP_FPS while the screen is bright, GL_MAP_FPS_DIM while dimmed (most
+// of a drive), since each frame repaints the map. Nothing else is redrawn.
+const GL_MAP_FPS = 30, GL_MAP_FPS_DIM = 8;
+let glMapFrameAt = 0;
+function glMapFrame(ts) {
+  requestAnimationFrame(glMapFrame);
   const D = glLiveState.data, nw = D && D.now;
   if (!GL_MAP.eng || !GL_MAP.host || !GL_MAP.host.isConnected || document.hidden
     || !nw || !(+nw.speed_kmh > 3)) return;
-  // Dimmed, the map moves once a second (with the redraw), not five times:
-  // each move repaints the whole map, the page's biggest battery cost.
-  if (document.body.classList.contains("gl-dim")) return;
+  const fps = document.body.classList.contains("gl-dim") ? GL_MAP_FPS_DIM : GL_MAP_FPS;
+  if (ts - glMapFrameAt < 1000 / fps - 4) return;
+  glMapFrameAt = ts;
   const slot = GL_MAP.host.parentElement;
-  glMapUpdate((slot && slot.dataset.map) || "full");
-}, 200);
+  glMapUpdate((slot && slot.dataset.map) || "full", true);
+}
+requestAnimationFrame(glMapFrame);
 
 // Shrink to fit: any figure or heading wider than the box it sits in gets a
 // smaller font until it fits (down to 8 px), so no phone size clips a number or
@@ -6691,7 +6706,25 @@ function glFitRow(row) {
   }
 }
 
+// Sizes that depend on a box's own height, set once per draw: the Cockpit's
+// trip tiles (data-fit on the pager: short, small, tiny) and Mix's speed.
+function glFitSized(root) {
+  const vp = root.querySelector(".gl-vpages"), t = vp && vp.querySelector(".gl-vpage > .gl-rt");
+  if (t && t.clientHeight) {
+    const cs = getComputedStyle(t);
+    const inner = t.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const fit = inner <= 32 ? "tiny" : inner <= 38 ? "small" : inner <= 44 ? "short" : "";
+    if ((vp.dataset.fit || "") !== fit) { if (fit) vp.dataset.fit = fit; else delete vp.dataset.fit; }
+  }
+  const ms = root.querySelector(".gl-mix-speed"), mn = ms && ms.querySelector(".gl-spdn");
+  if (mn && ms.clientHeight) {
+    mn.style.fontSize = "";
+    const cap = Math.max(10, (ms.clientHeight - 20) * 1.3);
+    if (parseFloat(getComputedStyle(mn).fontSize) > cap) mn.style.fontSize = cap.toFixed(1) + "px";
+  }
+}
 function glFit(root) {
+  glFitSized(root);
   const els = [...root.querySelectorAll(GL_FIT)];
   for (const e of els) if (e.style.fontSize) e.style.fontSize = "";
   const fix = [];
