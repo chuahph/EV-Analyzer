@@ -13737,7 +13737,16 @@ def test_the_dashboard_is_told_when_a_promotion_was_refused():
     prev_flag = state.get(sess, state.PROMOTE_REFUSED_KEY)
     try:
         vin = sess.scalars(select(Vehicle.vin)).first()
-        base = sync_mod.now_local().replace(microsecond=0) - timedelta(days=3, hours=2)
+        # A stretch the demo drives leave empty: one they overlap is matched
+        # to them, nothing is left to add, and nothing is refused — so this
+        # failed only when run in the evening, among the demo's drives.
+        span = timedelta(minutes=25 * (routes_mod.PROMOTE_AUTO_MAX_ADD + 2) + 20)
+        base = (sync_mod.now_local() - timedelta(days=3)).replace(hour=3, minute=0, second=0, microsecond=0)
+        for _ in range(48):
+            if not sess.query(Drive).filter(Drive.end_time >= base - timedelta(minutes=30),
+                                            Drive.start_time <= base + span).first():
+                break
+            base -= timedelta(hours=1)
         trips = []
         for i in range(routes_mod.PROMOTE_AUTO_MAX_ADD + 2):
             at = base + timedelta(minutes=25 * i)

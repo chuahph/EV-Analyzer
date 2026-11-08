@@ -5825,9 +5825,54 @@ function glNumsView(o, mini) {
   if (navOnly && navBlock) return navBlock;
   return `${speed}${navBlock}<div class="gl-nv-trip">${trip}</div>`;
 }
+// No redraw while a finger is on the page. The page is rebuilt every second,
+// and on an iPhone a touch that began on a piece the rebuild then throws away
+// ends on that removed piece: the page never hears the finger lift, so the
+// swipe (or the tap) does nothing. The newest reading waits and is drawn just
+// after the finger lifts — late enough that a tap's click still lands — or
+// after GL_HOLD_MAX_MS of holding, so a resting thumb never freezes the page.
+const GL_HOLD = { id: null, t: 0, until: 0, d: null, timer: null };
+const GL_HOLD_MAX_MS = 1500, GL_HOLD_AFTER_MS = 60;
+function glHoldFlush() {
+  clearTimeout(GL_HOLD.timer); GL_HOLD.timer = null;
+  const d = GL_HOLD.d;
+  GL_HOLD.d = null;
+  if (d) renderGlance(d);
+}
+// Captured on the way down, so it is set before any other handler can redraw.
+document.addEventListener("pointerdown", (e) => {
+  if (!(e.target.closest && e.target.closest("#glance"))) return;
+  GL_HOLD.id = e.pointerId; GL_HOLD.t = Date.now();
+}, { capture: true, passive: true });
+const glHoldEnd = (e) => {
+  if (GL_HOLD.id == null || e.pointerId !== GL_HOLD.id) return;
+  GL_HOLD.id = null;
+  GL_HOLD.until = Date.now() + GL_HOLD_AFTER_MS;
+  if (GL_HOLD.d) { clearTimeout(GL_HOLD.timer); GL_HOLD.timer = setTimeout(glHoldFlush, GL_HOLD_AFTER_MS + 5); }
+};
+document.addEventListener("pointerup", glHoldEnd, { capture: true, passive: true });
+document.addEventListener("pointercancel", glHoldEnd, { capture: true, passive: true });
+// A swipe that changes the page draws at once: there is no click to wait for.
+function glHoldRelease() {
+  GL_HOLD.id = null; GL_HOLD.until = 0; GL_HOLD.d = null;
+  clearTimeout(GL_HOLD.timer); GL_HOLD.timer = null;
+}
+function glHeld() {
+  const now = Date.now();
+  return (GL_HOLD.id != null && now - GL_HOLD.t < GL_HOLD_MAX_MS) || now < GL_HOLD.until;
+}
 function renderGlance(d) {
   const el = document.getElementById("glance");
   if (!el || !d) return;
+  if (glHeld()) {
+    GL_HOLD.d = d;
+    if (!GL_HOLD.timer) {
+      const wait = GL_HOLD.id != null ? GL_HOLD_MAX_MS - (Date.now() - GL_HOLD.t) : GL_HOLD.until - Date.now();
+      GL_HOLD.timer = setTimeout(glHoldFlush, Math.max(0, wait) + 5);
+    }
+    return;
+  }
+  GL_HOLD.d = null;
   glAutoLive(d);
   const drv = d.driving || {}, eff = d.efficiency || {}, bal = d.battery_balance || {};
   const chg = d.charging || {}, bat = d.battery || {}, v = d.vehicle || {};
@@ -8147,17 +8192,32 @@ function glVScrollSet(f, snap) {
 document.addEventListener("pointerdown", (e) => {
   const box = e.target.closest && e.target.closest("#glance [data-vscroll]");
   // One full drag of the box's height moves one page.
-  GL_VSCROLL.drag = box ? { y: e.clientY, f0: GL_VSCROLL.f, span: (box.clientHeight + 8) * Math.max(1, (+box.dataset.steps || 2) / 2), id: e.pointerId } : null;
+  GL_VSCROLL.drag = box ? { x: e.clientX, y: e.clientY, f0: GL_VSCROLL.f, span: (box.clientHeight + 8) * Math.max(1, (+box.dataset.steps || 2) / 2), id: e.pointerId } : null;
 }, { passive: true });
 document.addEventListener("pointermove", (e) => {
   const d = GL_VSCROLL.drag;
   if (!d || e.pointerId !== d.id) return;
+  // A mostly sideways drag is a swipe to another design: the tiles stay put.
+  if (d.x != null && Math.abs(e.clientX - d.x) > 12 && Math.abs(e.clientX - d.x) > Math.abs(e.clientY - d.y) * 1.3) {
+    if (GL_VSCROLL.f !== d.f0) glVScrollSet(d.f0, false);
+    return;
+  }
   glVScrollSet(d.f0 - (e.clientY - d.y) / d.span, false);
 }, { passive: true });
 const glVScrollEnd = (e) => {
   const d = GL_VSCROLL.drag;
   if (!d || e.pointerId !== d.id) return;
   GL_VSCROLL.drag = null;
+  // A short flick still moves a row: snapping to the nearest row alone sent
+  // anything under half a box's drag back where it was, as if ignored.
+  const box = document.querySelector("#glance [data-vscroll]");
+  const steps = (box && +box.dataset.steps) || 1;
+  const dy = e.clientY - d.y, from = Math.round(d.f0 * steps);
+  if (e.type === "pointerup" && Math.abs(dy) >= 24 && Math.round(GL_VSCROLL.f * steps) === from
+      && !(d.x != null && Math.abs(e.clientX - d.x) > Math.abs(dy) * 1.3)) {
+    glVScrollSet((from + (dy < 0 ? 1 : -1)) / steps, true);
+    return;
+  }
   glVScrollSet(GL_VSCROLL.f, true);
 };
 document.addEventListener("pointerup", glVScrollEnd, { passive: true });
@@ -8177,22 +8237,36 @@ document.addEventListener("wheel", (e) => {
   let sw = null;
   document.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest("#glance");
-    const edge = 28;
-    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select, [data-vscroll]")
+    const edge = 24;
+    sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select")
       && e.clientX > edge && e.clientX < innerWidth - edge && e.clientY > edge && e.clientY < innerHeight - edge
-      ? { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId,
+      ? { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: Date.now(), id: e.pointerId,
+          // On the trip tiles an up or down drag scrolls them; only a sideways
+          // swipe there changes the design.
+          vs: !!e.target.closest("[data-vscroll]"),
           flip: (e.target.closest("[data-mapflip]") || { dataset: {} }).dataset.mapflip || null } : null;
   }, { passive: true });
-  document.addEventListener("pointerup", (e) => {
-    if (!sw || e.pointerId !== sw.id) return;
-    const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = Date.now() - sw.t, flip = sw.flip;
-    sw = null;
-    if (dt >= 900) return;
-    if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.6) glSkinStep("h", dx < 0 ? 1 : -1);
-    // Up or down on a map (or its figures) flips between the two.
-    else if (Math.abs(dy) >= 50 && Math.abs(dy) > Math.abs(dx) * 1.6) { if (flip) glMapFlip(flip); else glSkinStep("v", dy < 0 ? 1 : -1); }
+  document.addEventListener("pointermove", (e) => {
+    if (sw && e.pointerId === sw.id) { sw.lx = e.clientX; sw.ly = e.clientY; }
   }, { passive: true });
-  document.addEventListener("pointercancel", () => { sw = null; }, { passive: true });
+  const end = (e, x, y) => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const dx = x - sw.x, dy = y - sw.y, dt = Date.now() - sw.t, { flip, vs } = sw;
+    sw = null;
+    if (dt >= 1200) return;
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    if (ax >= 50 && ax > ay * 1.3) { glHoldRelease(); GL_VSCROLL.drag = null; glSkinStep("h", dx < 0 ? 1 : -1); }
+    // Up or down on a map (or its figures) flips between the two.
+    else if (!vs && ay >= 45 && ay > ax * 1.3) { glHoldRelease(); if (flip) glMapFlip(flip); else glSkinStep("v", dy < 0 ? 1 : -1); }
+  };
+  document.addEventListener("pointerup", (e) => end(e, e.clientX, e.clientY), { passive: true });
+  // A cancelled touch (the phone took the gesture over) still counts, as far
+  // as the finger had got.
+  document.addEventListener("pointercancel", (e) => { if (sw) end(e, sw.lx, sw.ly); }, { passive: true });
+  // Once a tap's click has landed there is nothing to wait for: draw at once.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest && e.target.closest("#glance")) GL_HOLD.until = 0;
+  }, { capture: true, passive: true });
 }
 
 // Touch the Live page and the panels tilt towards your finger, a little, for

@@ -2653,6 +2653,9 @@ main > .card { max-width: 100%; }
 /* Live bottom line: always one row. */
 .gl-eco .glance .gl-foot { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .gl-eco .glance .gl-foot > * { flex: 0 0 auto; }
+/* Upright the strip is too narrow for the design dots: they go to a line of
+   their own instead of off the edge, so a tap can still change the design. */
+@media (orientation: portrait) { .gl-eco .glance .gl-foot { flex-wrap: wrap; } }
 .glance .gl-live { font-size: 11px; letter-spacing: .08em; }
 @media (orientation: landscape) and (max-width: 740px) { .glance .gl-live { font-size: 10px; letter-spacing: .04em; } }
 .gl-dimchip { letter-spacing: .06em; color: #cfe8ff; }
