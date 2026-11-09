@@ -3611,3 +3611,5 @@ main > .card { max-width: 100%; }
 /* A narrow map (the Dial's on a small phone): the last-trip strip keeps
    km, min and Wh/km; the average speed is in the trip panel beside it. */
 @container (max-width: 210px) { .gl-mapo-last > div > b:nth-child(3) { display: none; } }
+/* Dimmed, the frame's corner arcs fade with the rest of the frame. */
+.gl-dim .gl-main::after { opacity: .25; }
