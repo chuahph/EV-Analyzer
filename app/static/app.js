@@ -4909,6 +4909,25 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("resize", () => setTimeout(glWakeSync, 400));
 
+// Sideways, iOS keeps the camera's safe margin on both sides, though the
+// camera (the Dynamic Island or notch) is on one only. Which one follows
+// from the way the phone is turned: the page marks it, and style.css keeps
+// the full margin on that side and a small one on the other, which gives
+// the Live page's map and figures that width back.
+function glNotchSide() {
+  let a = typeof window.orientation === "number" ? window.orientation : null;
+  if (a == null && screen.orientation && typeof screen.orientation.angle === "number") {
+    a = screen.orientation.angle === 270 ? -90 : screen.orientation.angle;
+  }
+  const side = a === 90 ? "l" : a === -90 ? "r" : "";
+  const root = document.documentElement;
+  if ((root.dataset.notch || "") !== side) { if (side) root.dataset.notch = side; else delete root.dataset.notch; }
+}
+glNotchSide();
+window.addEventListener("orientationchange", glNotchSide);
+window.addEventListener("resize", glNotchSide);
+if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener("change", glNotchSide);
+
 // One reading from the server, pushed or polled: fold it into the page.
 function glLiveApply(L) {
   const nw = L.now || {};
