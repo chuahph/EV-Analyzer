@@ -3660,3 +3660,4 @@ main > .card { max-width: 100%; }
 @media (max-width: 760px) { .gl-battbar-slim { flex-wrap: wrap; row-gap: 3px; } .gl-battbar-slim .gl-battbar-cell { flex-basis: 100%; height: 9px; } }
 @media (max-width: 760px) { .gl-battbar-slim { padding: 4px 8px !important; } .gl-battbar-slim .gl-battbar-top { gap: 4px; min-width: 0; flex: 1 1 100%; }
   .gl-battbar-slim .gl-battbar-top span { font-size: 9.5px; letter-spacing: .04em; } .gl-battbar-slim .gl-battbar-top strong { font-size: 15px; } }
+.gl-navside > .gl-battbar { margin-top: 3px; }

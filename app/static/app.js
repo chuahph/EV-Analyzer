@@ -7028,8 +7028,12 @@ function glFitSized(root) {
   // box's height or width limits that (the gear column narrows it on a small
   // phone): the pair always match.
   const tsv = root.querySelector(".gl-twin-spd > svg"), tpw = root.querySelector(".gl-twin-pwr");
-  if (tsv && tpw && tsv.clientHeight) {
-    const d = Math.min(tsv.clientHeight, tsv.clientWidth * 224 / 218) * 0.943;
+  // getBoundingClientRect, not clientHeight: some browsers (older Safari
+  // among them) report 0 for an SVG's client size. The 2.7% translate moves
+  // the box, not its size.
+  const tq = tsv && tsv.getBoundingClientRect();
+  if (tq && tpw && tq.height) {
+    const d = Math.min(tq.height, tq.width * 224 / 218) * 0.943;
     const v = Math.max(40, Math.round(d)) + "px";
     if (tpw.style.getPropertyValue("--twd") !== v) tpw.style.setProperty("--twd", v);
   }
