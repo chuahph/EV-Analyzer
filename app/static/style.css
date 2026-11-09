@@ -3530,6 +3530,10 @@ main > .card { max-width: 100%; }
 /* Map or numbers (glMapArea): the flip button on the map's right edge, and
    the figures-only view in the map's own box. Sized to the box's width. */
 .gl-flipchip { cursor: pointer; letter-spacing: .06em; }
+.gl-zoomchip { cursor: pointer; min-width: 30px; justify-content: center; font-weight: 700; font-size: 15px; line-height: 1; }
+.gl-zoomchip:active { background: rgba(34, 211, 238, .25); }
+/* Small phones (iPhone SE and smaller): no room for the zoom chips beside the dots; a pinch or double tap still zooms. */
+@media (max-width: 700px) { .gl-zoomchip { display: none; } }
 .gl-flipchip:active { background: rgba(34, 211, 238, .25); }
 /* A side box's figures (glNumsView, no destination): a heading, the trip two
    across, then the battery now. Sized by the box's width and the screen's

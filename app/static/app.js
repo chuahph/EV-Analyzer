@@ -5804,7 +5804,9 @@ function glFlipChip(body) {
   const key = (String(body).match(/data-mapflip="(\w+)"/) || [])[1];
   if (!key) return "";
   const nums = glMapIsNums(key);
-  return `<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
+  // With the map showing, - and + to zoom it by hand (see glZoomBy).
+  const zoom = nums ? "" : `<button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="-1" aria-label="Zoom the map out">−</button><button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="1" aria-label="Zoom the map in">+</button>`;
+  return `${zoom}<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
 }
 function glNumsView(o, mini) {
   const { nav, t, lt, kw, pct, tw, n, spd, nw, navOnly } = o;
@@ -6449,7 +6451,7 @@ function glMapGoogleFailed() {
   GL_MAP.gFailed = true;
   if (GL_MAP.kind === "google") {
     if (GL_MAP.host) GL_MAP.host.remove();
-    GL_MAP.host = null; GL_MAP.eng = null; GL_MAP.kind = null; GL_MAP.zoomKey = null; GL_MAP.routeV = null;
+    GL_MAP.host = null; GL_MAP.eng = null; GL_MAP.kind = null; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_ZOOM.cur = null;
   }
   glMapRedraw();
 }
@@ -6609,6 +6611,12 @@ function glMapGoogle(host) {
         map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
       } else { map.setZoom(z); map.setCenter(ll(p)); }
     },
+    // A zoom step on the way to a new zoom (GL_ZOOM): fractional on the
+    // vector map, so it glides; the older raster map takes whole levels.
+    zoomTo(p, z) {
+      if (vec) map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
+      else if (Math.round(z) !== map.getZoom()) { map.setZoom(Math.round(z)); map.setCenter(ll(p)); }
+    },
     // A frame (many a second): an instant move, the frames make the motion.
     // A redraw (once a second, car slow or stopped): a short pan.
     follow(p, frame) {
@@ -6636,7 +6644,7 @@ function glMapLeaflet(host) {
   credit.textContent = "© OpenStreetMap contributors © CARTO";
   host.append(inner, fixCar, credit);
   const map = L.map(inner, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
-    doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false,
+    doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false, zoomSnap: 0,
     attributionControl: false });
   // {r} asks CARTO for its sharp @2x tiles on a high-density screen, at the
   // normal label size (detectRetina would also step the zoom up a level,
@@ -6687,6 +6695,7 @@ function glMapLeaflet(host) {
       inner.style.transform = `rotate(${rot.toFixed(1)}deg)`;
     },
     jump(p, z) { layout(); map.setView(p, z, { animate: false }); },
+    zoomTo(p, z) { map.setView(p, z, { animate: false }); },
     // A frame (many a second): an instant move, the frames make the motion.
     // A redraw (once a second, car slow or stopped): a short glide if bright.
     follow(p, frame) {
@@ -6719,7 +6728,7 @@ function glMapMount(root) {
     const host = document.createElement("div");
     host.className = "gl-map-host gl-map-" + kind;
     slot.prepend(host);
-    GL_MAP.host = host; GL_MAP.kind = kind; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_MAP.routeAsk = null;
+    GL_MAP.host = host; GL_MAP.kind = kind; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_MAP.routeAsk = null; GL_ZOOM.cur = null;
     GL_MAP.eng = kind === "google" ? glMapGoogle(host) : glMapLeaflet(host);
     if (GL_MAP.route) { GL_MAP.eng.setRoute(GL_MAP.route.points); GL_MAP.trimAt = 0; }
   } else {
@@ -6824,14 +6833,64 @@ function glMapUpdate(mode, frame = false) {
   eng.setCar(pos, hd);
   glRouteTrim(eng, pos);
   // Follow the car, closer in town and further out on the highway; the zoom
-  // changes only when the speed crosses a band, so it does not breathe.
+  // changes only when the speed crosses a band, so it does not breathe, and
+  // a step closer in the last kilometre to the destination. A change glides
+  // there (GL_ZOOM); the driver's own zoom (pinch, double tap, the - and +
+  // chips) sits on top until it lapses.
   const v = +nw.speed_kmh || 0;
-  const z = v < 35 ? 17 : v < 70 ? 16 : v < 100 ? 15 : 14;
-  const key = mode + z;
-  if (key !== GL_MAP.zoomKey) {
-    GL_MAP.zoomKey = key;
-    eng.jump(pos, z, mode);
-  } else eng.follow(pos, frame);
+  let z = v < 35 ? 17 : v < 70 ? 16 : v < 100 ? 15 : 14;
+  if (nav && nav.km != null && +nav.km < 1) z = Math.min(18, z + 1);
+  GL_ZOOM.auto = z;
+  if (mode !== GL_MAP.zoomKey || GL_ZOOM.cur == null) {
+    GL_MAP.zoomKey = mode;
+    GL_ZOOM.cur = glZoomTarget();
+    eng.jump(pos, GL_ZOOM.cur, mode);
+  } else {
+    eng.follow(pos, frame);
+    glZoomGo();
+  }
+}
+// The map's zoom: where it is (cur), where speed puts it (auto) and the
+// driver's own steps on top (user), which lapse GL_ZOOM_USER_MS after the
+// last touch. A change is eased over about a second by a short loop of its
+// own, which stops once there; dimmed, it is taken at once.
+const GL_ZOOM = { cur: null, auto: 16, user: 0, userAt: 0, raf: 0, last: 0 };
+const GL_ZOOM_USER_MS = 10000, GL_ZOOM_MIN = 11, GL_ZOOM_MAX = 19;
+function glZoomTarget() {
+  if (GL_ZOOM.user && Date.now() - GL_ZOOM.userAt > GL_ZOOM_USER_MS) GL_ZOOM.user = 0;
+  return Math.max(GL_ZOOM_MIN, Math.min(GL_ZOOM_MAX, GL_ZOOM.auto + GL_ZOOM.user));
+}
+function glZoomGo() {
+  if (GL_ZOOM.raf || GL_ZOOM.cur == null) return;
+  const tgt = glZoomTarget();
+  if (Math.abs(tgt - GL_ZOOM.cur) < 0.005) return;
+  const eng = GL_MAP.eng, disp = GL_MAP.disp;
+  if (!eng || !eng.zoomTo || !disp) return;
+  if (document.body.classList.contains("gl-dim") || document.hidden) { GL_ZOOM.cur = tgt; eng.zoomTo(disp.pos, tgt); return; }
+  GL_ZOOM.last = performance.now();
+  const step = (ts) => {
+    const e = GL_MAP.eng, d = GL_MAP.disp, t = glZoomTarget();
+    if (!e || !d || GL_ZOOM.cur == null) { GL_ZOOM.raf = 0; return; }
+    const k = 1 - Math.exp(-(ts - GL_ZOOM.last) / 260);
+    GL_ZOOM.last = ts;
+    GL_ZOOM.cur += (t - GL_ZOOM.cur) * k;
+    if (Math.abs(t - GL_ZOOM.cur) < 0.01) GL_ZOOM.cur = t;
+    e.zoomTo(d.pos, GL_ZOOM.cur);
+    GL_ZOOM.raf = GL_ZOOM.cur === t ? 0 : requestAnimationFrame(step);
+  };
+  GL_ZOOM.raf = requestAnimationFrame(step);
+}
+// The driver zooms: by whole steps (double tap, the chips) or by a pinch's
+// scale; either way the map eases there and the auto zoom resumes later.
+function glZoomBy(dz, now = false) {
+  if (GL_ZOOM.cur == null) return;
+  const base = GL_ZOOM.auto;
+  GL_ZOOM.user = Math.max(GL_ZOOM_MIN - base, Math.min(GL_ZOOM_MAX - base, (GL_ZOOM.user || 0) + dz));
+  GL_ZOOM.userAt = Date.now();
+  if (now && GL_MAP.eng && GL_MAP.disp) { cancelAnimationFrame(GL_ZOOM.raf); GL_ZOOM.raf = 0; GL_ZOOM.cur = glZoomTarget(); GL_MAP.eng.zoomTo(GL_MAP.disp.pos, GL_ZOOM.cur); }
+  else glZoomGo();
+  clearTimeout(GL_ZOOM.back);
+  GL_ZOOM.back = setTimeout(glZoomGo, GL_ZOOM_USER_MS + 50);
 }
 // Between the car's readings the map moves on by itself, frame by frame,
 // while a map is on screen and the car is moving: each frame places the car
@@ -8345,12 +8404,16 @@ document.addEventListener("wheel", (e) => {
   glVScrollSet(GL_VSCROLL.f + Math.sign(e.deltaY) / ((+box.dataset.steps) || 1), true);
 }, { passive: false });
 
+// Set by the swipe handler below: drops a swipe in progress (a second finger
+// has come down, so it is a pinch).
+let glSwipeCancel = () => {};
 // Swipe across the Live page to change its design: left or right for the
 // single designs, up or down for the combinations. A swipe has to be mostly
 // along one axis and a good length, and not start at a screen edge (where the
 // browser's own back and home gestures live).
 {
   let sw = null;
+  glSwipeCancel = () => { if (sw) { if (sw.dragged) unfollow(sw.el); sw = null; } };
   // The map (or its figures) follows a finger dragging up or down, a little,
   // so a swipe is seen to take; let go short and it springs back.
   const follow = (dy) => {
@@ -8375,6 +8438,8 @@ document.addEventListener("wheel", (e) => {
     else if (sw.dragged && Math.abs(dx) > Math.abs(dy)) { sw.dragged = false; unfollow(sw.el); }
   };
   document.addEventListener("pointerdown", (e) => {
+    // A second finger makes it a pinch (see the zoom below), not a swipe.
+    if (!e.isPrimary) { glSwipeCancel(); return; }
     const g = e.target.closest && e.target.closest("#glance");
     const edge = 24;
     const fl = g && e.target.closest("[data-mapflip]");
@@ -8440,6 +8505,51 @@ document.addEventListener("wheel", (e) => {
   document.addEventListener("click", (e) => {
     if (e.target.closest && e.target.closest("#glance")) GL_HOLD.until = 0;
   }, { capture: true, passive: true });
+}
+
+// Zoom the map by hand: two fingers apart or together, or a double tap to
+// come in a step. Only on a map showing (not its figures). The driver's zoom
+// sits on top of the auto zoom and lapses after GL_ZOOM_USER_MS (glZoomBy).
+{
+  const pts = new Map();
+  let pinch = null, lastTap = null;
+  const onMap = (e) => { const s = e.target.closest && e.target.closest("#glance .gl-map-slot[data-mapflip]:not(.gl-numsv)"); return s && glanceTab === "live" ? s : null; };
+  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  document.addEventListener("pointerdown", (e) => {
+    if (!onMap(e)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY, t: Date.now() });
+    if (pts.size === 2 && GL_ZOOM.cur != null) {
+      glSwipeCancel();
+      pinch = { d0: Math.max(20, dist()), u0: GL_ZOOM.user || 0 };
+    }
+  }, { capture: true, passive: true });
+  document.addEventListener("pointermove", (e) => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pinch && pts.size === 2) {
+      const dz = Math.log2(dist() / pinch.d0);
+      const base = GL_ZOOM.auto;
+      GL_ZOOM.user = Math.max(GL_ZOOM_MIN - base, Math.min(GL_ZOOM_MAX - base, pinch.u0 + dz));
+      GL_ZOOM.userAt = Date.now();
+      if (GL_MAP.eng && GL_MAP.disp) { cancelAnimationFrame(GL_ZOOM.raf); GL_ZOOM.raf = 0; GL_ZOOM.cur = glZoomTarget(); GL_MAP.eng.zoomTo(GL_MAP.disp.pos, GL_ZOOM.cur); }
+    }
+  }, { capture: true, passive: true });
+  const up = (e) => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    pts.delete(e.pointerId);
+    if (pinch) { if (!pts.size) { pinch = null; glZoomBy(0); } return; }
+    // A tap: short and still. Two within 320ms in the same place: zoom in.
+    if (e.type !== "pointerup" || Date.now() - p.t > 250 || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12) { lastTap = null; return; }
+    const now = Date.now();
+    if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; glZoomBy(1); }
+    else lastTap = { t: now, x: e.clientX, y: e.clientY };
+  };
+  document.addEventListener("pointerup", up, { capture: true, passive: true });
+  document.addEventListener("pointercancel", up, { capture: true, passive: true });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest && e.target.closest("[data-gl-zoom]");
+    if (b) { e.preventDefault(); glZoomBy(+b.dataset.glZoom); }
+  });
 }
 
 // Touch the Live page and the panels tilt towards your finger, a little, for
