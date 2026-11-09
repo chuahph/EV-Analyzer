@@ -5157,9 +5157,9 @@ function glKeyBar(c) {
   const { t, nw } = c;
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
-  // The mix designs carry the odometer as a row of drums (Round Mix, Digital Mix
-  // and the Cockpit already show it in their own way).
-  const odoChip = [7, 9, 2, 11].includes(c.skin) && c.odo != null
+  // The mix designs and the Dial carry the odometer as a row of drums (Round
+  // Mix, Digital Mix and the Cockpit already show it in their own way).
+  const odoChip = [7, 9, 2, 11, 5].includes(c.skin) && c.odo != null
     ? `<span class="gl-kb gl-kodo"><em>Odo km</em><span class="gl-drum">${String(Math.round(c.odo)).split("").map((d) => `<b>${d}</b>`).join("")}</span></span>` : "";
   const chips = [
     odoChip,
@@ -5179,8 +5179,19 @@ function glKeyBar(c) {
     // so far, which none of them shows anywhere else.
     t && t.energy_kwh != null && c.costRate != null && [2, 5, 8].includes(c.skin)
       ? `<span class="gl-kb gl-opt"><em>Cost</em><b>${c.h(c.cur)} ${c.n(t.energy_kwh * c.costRate, 2, true)}</b></span>` : "",
+    // Parked: charging now, else when the car last charged and to what.
+    !t && nw.charging ? `<span class="gl-kb gl-opt"><em>Charging</em><b>${nw.power_kw != null ? c.n(Math.abs(nw.power_kw), 1) + " kW" : "now"}</b></span>` : "",
+    !t && !nw.charging ? glLastChargeChip(c) : "",
   ];
   return `<div class="gl-keybar">${chips.join("")}</div>`;
+}
+function glLastChargeChip(c) {
+  const lc = lastData && lastData.last_charge;
+  const at = lc && Date.parse(lc.end_time || lc.start_time || "");
+  if (!at) return "";
+  const hrs = Math.max(0, (Date.now() - at) / 3600000);
+  const ago = hrs < 1 ? "just now" : hrs < 48 ? `${Math.round(hrs)} h ago` : `${Math.round(hrs / 24)} d ago`;
+  return `<span class="gl-kb gl-opt"><em>Charged</em><b>${ago}${lc.end_soc != null ? " · " + c.n(lc.end_soc) + "%" : ""}</b></span>`;
 }
 function glAltSkin(skin, c) {
   c.skin = skin; c.h = h;
