@@ -2510,6 +2510,9 @@ main > .card { max-width: 100%; }
 .gl-side > .gl-trip { flex: 1 1 auto; max-height: 75%; margin-block: auto; }
 /* Room for the odometer line under the tiles while driving. */
 .gl-side > .gl-trip:has(.gl-odo) { max-height: 78%; }
+/* The map and battery column lines up with the trip panel opposite: the same
+   height, centred, rather than from just under the header to the footer. */
+.gl-side > .gl-navside { flex: 1 1 auto; max-height: 78%; margin-block: auto; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
 .gl-side > .gl-trip .gl-rt strong { font-size: clamp(23px, calc(7.6 * var(--gh)), 35px); line-height: 1; }
 @media (orientation: landscape) and (max-width: 740px) {
@@ -2673,6 +2676,7 @@ main > .card { max-width: 100%; }
 @media (orientation: landscape) and (max-height: 360px) {
   .gl-3 > .gl-side:has(> .gl-power) { height: 96%; gap: 4px; }
   .gl-side > .gl-trip:has(.gl-odo) { max-height: 96%; }
+  .gl-side > .gl-navside { max-height: 96%; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-trace { min-height: 44px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-trace svg { min-height: 22px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-minis { margin-top: 4px; }
@@ -3527,6 +3531,10 @@ main > .card { max-width: 100%; }
   letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; margin-bottom: 2px; }
 .gl-nv-now.solo { margin-top: 0; border-top: 0; row-gap: min(2vh, 12px); }
 .gl-numsv.cut2 .gl-nv-mini .o2, .gl-numsv.cut1 .gl-nv-mini .o1, .gl-numsv.cut0 .gl-nv-head span { display: none; }
+/* Still too tall: the heading goes, then the figures come down a size. */
+.gl-numsv.cuth .gl-nv-head { display: none; }
+.gl-numsv.cutf .gl-nv-mini { row-gap: 2px; padding-top: 4px; }
+.gl-numsv.cutf .gl-nv-mini b { font-size: min(8cqw, 4.4vh, 22px); }
 /* Navigating, the route's figures stay; the trip under them gives way. */
 .gl-numsv.cut1 .gl-nv-delay, .gl-numsv.cut0 .gl-nv-nav ~ .gl-nv-trip { display: none; }
 /* The smallest phones: the dots close up so the flip chip still fits. */

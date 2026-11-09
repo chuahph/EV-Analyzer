@@ -6909,8 +6909,9 @@ function glFitSized(root) {
   if (box) {
     // From the full set each time: after a resize to a taller screen, figures
     // dropped for the shorter one come back.
-    box.classList.remove("cut2", "cut1", "cut0");
-    for (const step of ["cut2", "cut1", "cut0"]) {
+    const steps = ["cut2", "cut1", "cut0", "cuth", "cutf"];
+    box.classList.remove(...steps);
+    for (const step of steps) {
       if (box.scrollHeight <= box.clientHeight + 1) break;
       box.classList.add(step);
     }
