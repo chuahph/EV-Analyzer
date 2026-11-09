@@ -5568,9 +5568,10 @@ function glAltPage(skin, c) {
     const src = t || lt;
     const strip = [
       stat("km", dist != null ? n(dist, 1, true) : "—"), stat("min", mins != null ? n(mins) : "—"),
-      stat("avg", avg != null ? n(avg) : "—"), stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : ""),
+      // Range is in the key bar above: the top speed instead, beside the average.
+      stat("avg", avg != null ? n(avg) : "—"), stat("top", src && src.max_speed_kmh != null ? n(src.max_speed_kmh) : "—"),
+      stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : ""),
       stat("batt %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good"),
-      stat("range", range != null ? n(range) : "—"),
     ].join("");
     return `<div class="gl-page gl-alt gl-twin">
       <div class="gl-twin-dial gl-twin-spd">${glGauge3D(spd, col, nw, null, true)}</div>
