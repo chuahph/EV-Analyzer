@@ -4325,32 +4325,12 @@ document.getElementById("quick-nav")?.addEventListener("click", (e) => {
 // cards use, so it costs no chart instances and redraws instantly on rotate.
 // A cluster dial: a 240° sweep with ticks, coloured bands, a needle and an
 // optional marker (e.g. the rated line). Drawn on a 200x200 box.
-// The robotic frame: an armour plate at each corner (one drawing, mirrored),
-// riveted, with a lit seam and a status light; LED strips along the top and
-// bottom, vent slots up the sides. Decoration only, behind the content.
-const GL_CORNER = `<svg viewBox="0 0 150 96" aria-hidden="true">
-  <defs>
-    <linearGradient id="glPlate" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#3b4554"/><stop offset=".35" stop-color="#1c232d"/>
-      <stop offset=".7" stop-color="#121820"/><stop offset="1" stop-color="#262e39"/></linearGradient>
-    <linearGradient id="glEdge" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#8a96a8"/><stop offset="1" stop-color="#2a313c"/></linearGradient>
-  </defs>
-  <path d="M0 0H150L132 10H40L22 28V78L10 96H0Z" fill="url(#glPlate)" stroke="url(#glEdge)" stroke-width="1.2"/>
-  <path d="M6 6H118L108 12H38L18 32V74L10 86H6Z" fill="none" stroke="#05070a" stroke-width="1" opacity=".8"/>
-  <path class="seam" d="M30 16H124M16 36V70" fill="none" stroke-width="2" stroke-linecap="round"/>
-  <g fill="#0a0d12" stroke="#5a6574" stroke-width=".8">
-    <circle cx="12" cy="12" r="3"/><circle cx="60" cy="5" r="2.2"/><circle cx="5" cy="58" r="2.2"/></g>
-  <g stroke="#07090c" stroke-width="1.6">
-    <path d="M84 3l-4 5M90 3l-4 5M96 3l-4 5M102 3l-4 5"/></g>
-  <circle class="led" cx="12" cy="12" r="1.6"/>
-  <rect class="led2" x="27" y="21" width="9" height="3" rx="1"/>
-</svg>`;
+// The frame round the Live page: slim arcs at the rounded corners (drawn by
+// .gl-main::after) and a chasing strip top and bottom. The heavy corner
+// plates and side vents it once had took width from the page and, sideways
+// on a phone, sat in the screen's rounded corners, cut off.
 const GL_FRAME = `<div class="gl-frame" aria-hidden="true">
-  <i class="c tl">${GL_CORNER}</i><i class="c tr">${GL_CORNER}</i>
-  <i class="c bl">${GL_CORNER}</i><i class="c br">${GL_CORNER}</i>
   <i class="strip top"></i><i class="strip bot"></i>
-  <i class="vent l"></i><i class="vent r"></i>
 </div>`;
 
 // The Live page's speedometer, not a dial: a wide angular panel with the speed

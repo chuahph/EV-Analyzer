@@ -1659,8 +1659,11 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
 }
 /* Sideways the camera is on one side only (glNotchSide): the other side
    keeps 20px, clear of the screen's rounded corners, not the full margin. */
-:root[data-notch="l"] .glance { --sr: max(14px, min(20px, env(safe-area-inset-right))); }
-:root[data-notch="r"] .glance { --sl: max(14px, min(20px, env(safe-area-inset-left))); }
+/* On the camera's side, only as much as the camera takes: the Dynamic
+   Island ends about 48px from the edge sideways, a notch sooner (an iPhone
+   with a notch reports 44 to 48px anyway). */
+:root[data-notch="l"] .glance { --sl: max(14px, min(50px, env(safe-area-inset-left))); --sr: max(14px, min(20px, env(safe-area-inset-right))); }
+:root[data-notch="r"] .glance { --sr: max(14px, min(50px, env(safe-area-inset-right))); --sl: max(14px, min(20px, env(safe-area-inset-left))); }
 body.glance-on .glance { display: flex; justify-content: center; align-items: center; }
 @media (orientation: landscape) and (max-height: 560px) {
   body:not(.view-home) .glance { display: flex; }
@@ -1964,10 +1967,10 @@ body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max
 /* HUD frame: a thin chamfered border round the whole view, corner brackets
    in the page colour, a faint grid and a slow scan line. */
 .gl-main { --tc: var(--accent-2); padding: 14px 18px 10px; isolation: isolate; }
+.gl-main { --fr: 18px; }
 .gl-main::before {
   content: ""; position: absolute; inset: 0; z-index: -2; pointer-events: none;
-  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 22px, 100% calc(100% - 22px),
-                     calc(100% - 22px) 100%, 22px 100%, 0 calc(100% - 22px), 0 22px);
+  border-radius: var(--fr);
   background:
     linear-gradient(rgba(120,160,220,.045) 1px, transparent 1px) 0 0 / 100% 22px,
     linear-gradient(90deg, rgba(120,160,220,.045) 1px, transparent 1px) 0 0 / 22px 100%,
@@ -1975,21 +1978,22 @@ body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max
   border: 1px solid color-mix(in srgb, var(--tc) 35%, #2b3442);
   box-shadow: inset 0 0 40px rgba(0,0,0,.6);
 }
+/* Slim corner arcs, and a short glow at the middle of the top and bottom:
+   the outline in the accent colour, shown only there. */
 .gl-main::after {
   content: ""; position: absolute; inset: -1px; z-index: -1; pointer-events: none;
-  --l: 34px; --w: 2px;
-  background:
-    linear-gradient(var(--tc), var(--tc)) 0 0 / var(--l) var(--w),
-    linear-gradient(var(--tc), var(--tc)) 0 0 / var(--w) var(--l),
-    linear-gradient(var(--tc), var(--tc)) 100% 0 / var(--l) var(--w),
-    linear-gradient(var(--tc), var(--tc)) 100% 0 / var(--w) var(--l),
-    linear-gradient(var(--tc), var(--tc)) 0 100% / var(--l) var(--w),
-    linear-gradient(var(--tc), var(--tc)) 0 100% / var(--w) var(--l),
-    linear-gradient(var(--tc), var(--tc)) 100% 100% / var(--l) var(--w),
-    linear-gradient(var(--tc), var(--tc)) 100% 100% / var(--w) var(--l),
-    linear-gradient(90deg, transparent, color-mix(in srgb, var(--tc) 80%, transparent), transparent) 50% 0 / 40% 1px,
-    linear-gradient(90deg, transparent, color-mix(in srgb, var(--tc) 80%, transparent), transparent) 50% 100% / 40% 1px;
-  background-repeat: no-repeat;
+  --l: 48px;
+  border: 2px solid var(--tc); border-radius: calc(var(--fr) + 1px);
+  -webkit-mask:
+    linear-gradient(#000 0 0) 0 0 / var(--l) var(--l), linear-gradient(#000 0 0) 100% 0 / var(--l) var(--l),
+    linear-gradient(#000 0 0) 0 100% / var(--l) var(--l), linear-gradient(#000 0 0) 100% 100% / var(--l) var(--l),
+    linear-gradient(90deg, transparent, #000, transparent) 50% 0 / 40% 3px, linear-gradient(90deg, transparent, #000, transparent) 50% 100% / 40% 3px;
+  -webkit-mask-repeat: no-repeat;
+  mask:
+    linear-gradient(#000 0 0) 0 0 / var(--l) var(--l), linear-gradient(#000 0 0) 100% 0 / var(--l) var(--l),
+    linear-gradient(#000 0 0) 0 100% / var(--l) var(--l), linear-gradient(#000 0 0) 100% 100% / var(--l) var(--l),
+    linear-gradient(90deg, transparent, #000, transparent) 50% 0 / 40% 3px, linear-gradient(90deg, transparent, #000, transparent) 50% 100% / 40% 3px;
+  mask-repeat: no-repeat;
   filter: drop-shadow(0 0 4px var(--tc));
 }
 .gl-body::after {
@@ -2073,19 +2077,12 @@ body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max
   .glance > .gl-main::after { left: calc(-1px - var(--xl)); right: calc(-1px - var(--xr)); }
   .glance > .gl-main > .gl-frame { left: calc(-2px - var(--xl)); right: calc(-2px - var(--xr)); }
   .glance > .gl-main { padding-left: max(10px, calc(26px - var(--xl))) !important; padding-right: max(10px, calc(26px - var(--xr))) !important; }
+  /* Corners rounded to follow the screen's own (about 47 to 62px on an
+     iPhone, less on most Android phones), so the arcs are never cut off. */
+  .glance > .gl-main { --fr: 46px; }
 }
 .gl-main > :not(.gl-frame) { position: relative; z-index: 1; }
-.gl-frame .c { position: absolute; width: 150px; height: 96px; display: block;
-  filter: drop-shadow(0 4px 6px rgba(0,0,0,.7)); }
-.gl-frame .c svg { width: 100%; height: 100%; display: block; }
-.gl-frame .tl { left: 0; top: 0; }
-.gl-frame .tr { right: 0; top: 0; transform: scaleX(-1); }
-.gl-frame .bl { left: 0; bottom: 0; transform: scaleY(-1); }
-.gl-frame .br { right: 0; bottom: 0; transform: scale(-1, -1); }
-.gl-frame .seam { stroke: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); opacity: .9; }
-.gl-frame .led { fill: var(--tc); filter: drop-shadow(0 0 3px var(--tc)); animation: gl-blink 2.4s ease-in-out infinite var(--p2400, 0ms); }
-.gl-frame .led2 { fill: #ff5a5f; filter: drop-shadow(0 0 3px #ff5a5f); animation: gl-blink 3.1s ease-in-out infinite calc(var(--p3100, 0ms) + .6s); }
-.gl-frame .strip { position: absolute; left: 160px; right: 160px; height: 3px; border-radius: 2px;
+.gl-frame .strip { position: absolute; left: 22%; right: 22%; height: 3px; border-radius: 2px;
   background:
     linear-gradient(90deg, transparent 0 40%, rgba(255,255,255,.9) 50%, transparent 60% 100%) 0 0 / 30% 100% no-repeat,
     repeating-linear-gradient(90deg, color-mix(in srgb, var(--tc) 85%, transparent) 0 10px, transparent 10px 15px);
@@ -2094,20 +2091,11 @@ body.glance-on .glance > .gl-main { flex: 0 1 min(540px, 100%); width: 100%; max
 .gl-frame .strip.top { top: 3px; }
 .gl-frame .strip.bot { bottom: 3px; animation-direction: reverse; }
 @keyframes gl-chase { from { background-position: -40% 0, 0 0; } to { background-position: 140% 0, 0 0; } }
-.gl-frame .vent { position: absolute; top: 120px; bottom: 120px; width: 6px;
-  background: repeating-linear-gradient(180deg, #2b3340 0 3px, #06080b 3px 8px);
-  border-radius: 2px; box-shadow: inset 0 0 2px #000, 0 0 6px -2px var(--tc); opacity: .8; }
-.gl-frame .vent.l { left: 4px; } .gl-frame .vent.r { right: 4px; }
 @media (prefers-reduced-motion: reduce) {
   .gl-frame .strip, .gl-frame .led, .gl-frame .led2 { animation: none; } }
 /* Content clears the plates. */
 .gl-main { padding: 22px 30px 22px; }
 .gl-foot { padding-left: 14px; }
-@media (max-height: 420px) {
-  .gl-frame .c { width: 112px; height: 72px; }
-  .gl-frame .strip { left: 120px; right: 120px; }
-  .gl-frame .vent { top: 90px; bottom: 90px; }
-}
 
 /* Horizontal bars from the rated line (glHBars). */
 .gl-hbars { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 4px 2px; }
@@ -2311,9 +2299,6 @@ header::after {
   .gl-head h2 { font-size: 14px; }
   .gl-head .gl-sub { font-size: 11px; }
   .gl-page, .gl-side { gap: 7px; }
-  .gl-frame .c { width: 96px; height: 60px; }
-  .gl-frame .strip { left: 104px; right: 104px; }
-  .gl-frame .vent { top: 76px; bottom: 76px; }
 }
 @media (orientation: landscape) and (max-height: 330px) {
   .gl-main { padding: 12px 22px 10px; }
