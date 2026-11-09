@@ -5586,7 +5586,8 @@ function glAltPage(skin, c) {
       stat("batt %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good"),
     ].join("");
     return `<div class="gl-page gl-alt gl-twin">
-      <div class="gl-twin-dial gl-twin-spd">${glGauge3D(spd, col, nw, null, true)}</div>
+      <div class="gl-twin-cell"><span class="gl-twin-gear">${["P", "R", "N", "D"].map((g) => `<b class="${(nw.shift || "P") === g ? "on" : ""}">${g}</b>`).join("")}</span>
+        <div class="gl-twin-dial gl-twin-spd">${glGauge3D(spd, col, nw, null, true)}</div></div>
 ${glMapArea("dial", `<div class="gl-map-slot gl-map-mini gl-twin-map" data-map="mini">
         ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
         ${nav ? `<div class="gl-mapo gl-mapo-mini">
@@ -5595,7 +5596,11 @@ ${glMapArea("dial", `<div class="gl-map-slot gl-map-mini gl-twin-map" data-map="
           ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% arrive</small></b>` : ""}
         </div>` : ""}
       </div>`, { ...c, nav, n, navOnly: true })}
-      <div class="gl-twin-dial gl-twin-pwr">${power}</div>
+      <div class="gl-twin-cell"><div class="gl-twin-dial gl-twin-pwr">${power}</div>
+        <div class="gl-twin-batt" style="--c:${pct == null ? "#7e93ab" : pct < 20 ? "#ff3b3b" : pct < 35 ? "#ff8a1f" : "#2ee86a"}">
+          <b>${pct != null ? n(pct, 0) : "—"}<small>%</small></b>
+          <span class="gl-twin-cells">${Array.from({ length: 10 }, (_, i) => `<i class="${pct != null && pct >= (9 - i) * 10 + 5 ? "on" : ""}"></i>`).join("")}</span>
+          <em>${range != null ? n(range) + " km" : ""}</em></div></div>
       <div class="gl-twin-strip"><span class="gl-twin-h">${src ? (t ? "This drive" : "Last trip") : "Trip"}</span>${strip}</div>
     </div>`;
   }
@@ -7014,6 +7019,15 @@ function glFitRow(row) {
 // Sizes that depend on a box's own height, set once per draw: the Cockpit's
 // trip tiles (data-fit on the pager: short, small, tiny) and Mix's speed.
 function glFitSized(root) {
+  // The Dial's power dial takes the speed dial's drawn size, whichever of its
+  // box's height or width limits that (the gear column narrows it on a small
+  // phone): the pair always match.
+  const tsv = root.querySelector(".gl-twin-spd > svg"), tpw = root.querySelector(".gl-twin-pwr");
+  if (tsv && tpw && tsv.clientHeight) {
+    const d = Math.min(tsv.clientHeight, tsv.clientWidth * 224 / 218) * 0.943;
+    const v = Math.max(40, Math.round(d)) + "px";
+    if (tpw.style.getPropertyValue("--twd") !== v) tpw.style.setProperty("--twd", v);
+  }
   // A side box's figures: the least needed give way until the rest fit.
   const box = root.querySelector(".gl-map-mini.gl-numsv");
   if (box) {

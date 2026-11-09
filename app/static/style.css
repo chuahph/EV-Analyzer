@@ -3615,10 +3615,10 @@ main > .card { max-width: 100%; }
    both dials are the same size (82% of the row) with equal room above and below. */
 .gl-twin-spd > svg { aspect-ratio: 218 / 224; translate: 0 2.7%; }
 /* The power dial wears a bezel like the speed dial's, so the pair match. */
-.gl-twin-pwr::before { content: ""; position: absolute; aspect-ratio: 1; height: calc(89% - 6px); max-width: 100%; border-radius: 50%; z-index: -1; translate: 0 -2px;
+.gl-twin-pwr::before { content: ""; position: absolute; aspect-ratio: 1; height: calc(var(--twd, 89%) - 6px); max-width: 100%; border-radius: 50%; z-index: -1; translate: 0 -2px;
   background: radial-gradient(circle at 50% 38%, #1b2533, #070b10 70%);
   box-shadow: 0 0 0 2px #3a4656, 0 0 0 3px #5b6b80, inset 0 0 30px rgba(0,0,0,.8), 0 0 14px color-mix(in srgb, var(--tc) 22%, transparent); }
-.gl-twin-pwr > svg { height: calc(80% - 6px); translate: 0 -2px; }
+.gl-twin-pwr > svg { height: calc((var(--twd, 89%) - 6px) * .9); translate: 0 -2px; }
 .gl-twin .gl-twin-map { transform: none; min-height: 0; border-radius: 16px; }
 .gl-twin-strip { grid-column: 1 / -1; display: flex; align-items: stretch; gap: 8px; min-width: 0; }
 .gl-twin-h { align-self: center; font: 700 clamp(9px, calc(2.4 * var(--gh)), 12px) system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase;
@@ -3627,3 +3627,24 @@ main > .card { max-width: 100%; }
 .gl-twin-strip .gl-hud-stat strong { font-size: clamp(14px, calc(4.6 * var(--gh)), 24px); }
 .gl-dim .gl-twin-pwr::before { box-shadow: 0 0 0 2px #1c232c, inset 0 0 30px rgba(0,0,0,.8); }
 .gl-twin-strip .gl-hud-stat span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* Beside the dials, as on a car's cluster: the gear by the speed dial, a
+   battery gauge (like a fuel gauge) by the power dial. */
+.gl-twin-cell { min-width: 0; min-height: 0; display: flex; align-items: center; gap: 8px; }
+.gl-twin-cell > .gl-twin-dial { flex: 1 1 auto; height: 100%; }
+.gl-twin-gear { flex: 0 0 auto; display: flex; flex-direction: column; gap: clamp(2px, 1vh, 8px); padding: 6px 4px;
+  border: 1px solid #1d2a38; border-radius: 10px; background: rgba(5, 10, 16, .6); }
+.gl-twin-gear b { display: grid; place-items: center; width: clamp(18px, 6vh, 28px); height: clamp(18px, 6vh, 28px); border-radius: 6px;
+  font: 800 clamp(11px, 3.6vh, 17px)/1 system-ui, sans-serif; color: #3d4a5b; }
+.gl-twin-gear b.on { color: #e8fbff; background: color-mix(in srgb, var(--spd, #22d3ee) 25%, transparent);
+  box-shadow: 0 0 0 1px var(--spd, #22d3ee), 0 0 10px color-mix(in srgb, var(--spd, #22d3ee) 50%, transparent); }
+.gl-twin-batt { flex: 0 0 auto; height: 82%; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.gl-twin-batt b { font: 800 clamp(13px, 4.4vh, 22px)/1 ui-monospace, Menlo, monospace; color: var(--c); }
+.gl-twin-batt b small { font-size: .55em; margin-left: 1px; }
+.gl-twin-cells { flex: 1 1 auto; min-height: 0; width: clamp(16px, 4.6vh, 24px); display: flex; flex-direction: column; gap: 2px; padding: 3px;
+  border: 1px solid #2a3a4c; border-radius: 6px; background: #05080c; }
+.gl-twin-cells i { flex: 1 1 0; border-radius: 2px; background: #121a24; }
+.gl-twin-cells i.on { background: var(--c); box-shadow: 0 0 6px color-mix(in srgb, var(--c) 60%, transparent); }
+.gl-twin-batt em { font: 600 clamp(8px, 2.6vh, 11px)/1 system-ui, sans-serif; font-style: normal; color: var(--muted); white-space: nowrap; }
+.gl-dim .gl-twin-gear b:not(.on), .gl-dim .gl-twin-cells i:not(.on), .gl-dim .gl-twin-batt em { opacity: .4; }
+@media (max-width: 700px) { .gl-twin-cell { gap: 5px; } .gl-twin-gear { padding: 4px 2px; } .gl-twin-gear b { width: 18px; height: 18px; font-size: 11px; } }
