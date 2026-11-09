@@ -1662,8 +1662,15 @@ footer { padding: 18px 28px; color: var(--muted); font-size: 12px; border-top: 1
 /* On the camera's side, only as much as the camera takes: the Dynamic
    Island ends about 48px from the edge sideways, a notch sooner (an iPhone
    with a notch reports 44 to 48px anyway). */
-:root[data-notch="l"] .glance { --sl: max(14px, min(50px, env(safe-area-inset-left))); --sr: max(14px, min(20px, env(safe-area-inset-right))); }
-:root[data-notch="r"] .glance { --sr: max(14px, min(50px, env(safe-area-inset-right))); --sl: max(14px, min(20px, env(safe-area-inset-left))); }
+/* The other side is balanced to match: about 10px less, the page's own
+   padding being 4px on the camera's side and 10px on the other, so both
+   gaps come out nearly equal (54 and 50px on a Dynamic Island iPhone). */
+:root[data-notch="l"] .glance { --sl: max(14px, min(50px, env(safe-area-inset-left))); --sr: max(14px, min(40px, calc(env(safe-area-inset-left) - 10px))); }
+:root[data-notch="r"] .glance { --sr: max(14px, min(50px, env(safe-area-inset-right))); --sl: max(14px, min(40px, calc(env(safe-area-inset-right) - 10px))); }
+@media (orientation: landscape) and (max-height: 560px) {
+  :root[data-notch="l"] .glance > .gl-main { padding-left: max(4px, calc(26px - var(--xl))) !important; }
+  :root[data-notch="r"] .glance > .gl-main { padding-right: max(4px, calc(26px - var(--xr))) !important; }
+}
 body.glance-on .glance { display: flex; justify-content: center; align-items: center; }
 @media (orientation: landscape) and (max-height: 560px) {
   body:not(.view-home) .glance { display: flex; }
