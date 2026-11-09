@@ -6114,12 +6114,12 @@ function renderGlance(d) {
               tile("dist", "Trip km", lt.distance_km != null ? n(lt.distance_km, 1, true) : "—"),
               tile("time", "Trip min", lt.duration_min != null ? n(lt.duration_min) : "—"),
               tile("speed", "Trip avg", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—"),
-              tile("whkm", "Trip Wh/km", lt.wh_per_km != null ? n(lt.wh_per_km, 1, true) : "—", ltTone),
+              tile("speed", "Trip top", lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—"),
             ], [
+              tile("whkm", "Trip Wh/km", lt.wh_per_km != null ? n(lt.wh_per_km, 1, true) : "—", ltTone),
               tile("regen", "Trip kWh", lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—"),
               tile("batt", "Batt used %", lt.soc_used_pct != null ? n(lt.soc_used_pct, 1, true) : "—"),
               tile("cost", `Trip ${cur || "RM"}`, lt.cost != null ? n(lt.cost, 2, true) : "—"),
-              tile("speed", "Eco score", lt.eco_score != null ? n(lt.eco_score) : "—"),
             ]]) : `<div class="gl-rts">
               ${tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good")}
               ${tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—")}
@@ -6140,7 +6140,10 @@ function renderGlance(d) {
               <b>${lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—"}<small>avg km/h</small></b>
               <b class="${ltTone}">${n(lt.wh_per_km, 1, true)}<small>Wh/km</small></b></div>
             </div>` : ""}
-          </div>`, { nav: (L && L.nav) || null, t: null, lt, kw: null, pct, tw: null, n, navOnly: true })}</div>`,
+          </div>`, { nav: (L && L.nav) || null, t: null, lt, kw: null, pct, tw: null, n, navOnly: true })}
+          <div class="gl-battbar gl-battbar-slim">
+            <div class="gl-battbar-top"><span>Battery${rangeShown != null ? `<em class="gl-rated">${n(rangeShown)} km</em>` : ""}</span><strong>${pctShown != null ? n(pctShown, 1, true) : "—"}<small>%</small></strong></div>
+            <div class="gl-battbar-cell"><i style="width:${pctShown ?? 0}%;background:${(pctShown ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div></div></div>`,
           foot);
       }
       // Energy over distance, as the car's "Current Drive" shows it.

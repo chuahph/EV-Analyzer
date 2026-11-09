@@ -3648,3 +3648,15 @@ main > .card { max-width: 100%; }
 .gl-twin-batt em { font: 600 clamp(8px, 2.6vh, 11px)/1 system-ui, sans-serif; font-style: normal; color: var(--muted); white-space: nowrap; }
 .gl-dim .gl-twin-gear b:not(.on), .gl-dim .gl-twin-cells i:not(.on), .gl-dim .gl-twin-batt em { opacity: .4; }
 @media (max-width: 700px) { .gl-twin-cell { gap: 5px; } .gl-twin-gear { padding: 4px 2px; } .gl-twin-gear b { width: 18px; height: 18px; font-size: 11px; } }
+
+/* Parked, the Cockpit's battery under the map: one slim line, so the map
+   keeps most of the height. */
+.gl-battbar-slim { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 5px 10px !important; }
+.gl-battbar-slim .gl-battbar-top { flex: 0 0 auto; gap: 8px; }
+.gl-battbar-slim .gl-battbar-top strong { font-size: clamp(14px, calc(4 * var(--gh)), 19px); }
+.gl-battbar-slim .gl-battbar-cell { flex: 1 1 auto; margin-top: 0 !important; height: 12px; }
+.gl-battbar-slim { margin-top: 4px; min-width: 0; }
+/* Narrow: the bar goes under the figures rather than out of the box. */
+@media (max-width: 760px) { .gl-battbar-slim { flex-wrap: wrap; row-gap: 3px; } .gl-battbar-slim .gl-battbar-cell { flex-basis: 100%; height: 9px; } }
+@media (max-width: 760px) { .gl-battbar-slim { padding: 4px 8px !important; } .gl-battbar-slim .gl-battbar-top { gap: 4px; min-width: 0; flex: 1 1 100%; }
+  .gl-battbar-slim .gl-battbar-top span { font-size: 9.5px; letter-spacing: .04em; } .gl-battbar-slim .gl-battbar-top strong { font-size: 15px; } }
