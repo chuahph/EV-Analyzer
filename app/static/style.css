@@ -3598,3 +3598,16 @@ main > .card { max-width: 100%; }
 .gl-nv-th { grid-column: 1 / -1; display: flex; gap: 8px; align-items: baseline; min-width: 0; font: 700 min(1.6cqw, 3vh, 12px)/1.2 system-ui, sans-serif;
   font-style: normal; letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; }
 .gl-nv-th span { font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Dial: the Cockpit's page with the needle dial in the middle (glDialPod):
+   a wider middle than the Cockpit's speed panel needs, the dial as large as
+   the height allows, slim power and efficiency bars either side of it. */
+.gl-3:has(.gl-dialpod) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr); }
+.gl-pod:has(> .gl-dialpod) { align-items: stretch; }
+.gl-dialpod { width: 100%; height: 100%; gap: 6px; align-items: center; }
+.gl-dialpod > svg { flex: 0 1 auto; height: 94%; width: auto; max-width: 70%; aspect-ratio: 218 / 224; }
+.gl-dialpod > .gl-ladder { flex: 0 0 auto; width: clamp(48px, 15%, 64px); min-width: 0; height: 82%; }
+.gl-dialpod .gl-ladder b small { display: block; margin: 1px 0 0; line-height: 1; }
+/* A narrow map (the Dial's on a small phone): the last-trip strip keeps
+   km, min and Wh/km; the average speed is in the trip panel beside it. */
+@container (max-width: 210px) { .gl-mapo-last > div > b:nth-child(3) { display: none; } }
