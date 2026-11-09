@@ -5164,7 +5164,8 @@ function glKeyBar(c) {
   const chips = [
     odoChip,
     `<span class="gl-kb"><em>Time</em><b>${hh}</b></span>`,
-    c.rangeHere != null || c.range != null ? `<span class="gl-kb gl-opt"><em>Range</em><b>${c.n(c.rangeHere != null ? c.rangeHere : c.range)} km</b></span>` : "",
+    // Not on the Dial: its battery gauge shows the range already.
+    c.skin !== 5 && (c.rangeHere != null || c.range != null) ? `<span class="gl-kb gl-opt"><em>Range</em><b>${c.n(c.rangeHere != null ? c.rangeHere : c.range)} km</b></span>` : "",
     nw.out_temp != null ? `<span class="gl-kb gl-opt"><em>Outside</em><b>${c.n(nw.out_temp, 0)}°C</b></span>` : "",
     // The car's own navigation when a destination is set; else the app's
     // guess at the nearest saved place.
@@ -5583,7 +5584,8 @@ function glAltPage(skin, c) {
       // Range is in the key bar above: the top speed instead, beside the average.
       stat("avg", avg != null ? n(avg) : "—"), stat("top", src && src.max_speed_kmh != null ? n(src.max_speed_kmh) : "—"),
       stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : ""),
-      stat("batt %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good"),
+      // The battery is in its gauge beside the power dial: the energy here.
+      stat("kWh", src && src.energy_kwh != null ? n(src.energy_kwh, 2) : "—"),
     ].join("");
     return `<div class="gl-page gl-alt gl-twin">
       <div class="gl-twin-cell"><span class="gl-twin-gear">${["P", "R", "N", "D"].map((g) => `<b class="${(nw.shift || "P") === g ? "on" : ""}">${g}</b>`).join("")}</span>
@@ -5598,7 +5600,7 @@ ${glMapArea("dial", `<div class="gl-map-slot gl-map-mini gl-twin-map" data-map="
       </div>`, { ...c, nav, n, navOnly: true })}
       <div class="gl-twin-cell"><div class="gl-twin-dial gl-twin-pwr">${power}</div>
         <div class="gl-twin-batt" style="--c:${pct == null ? "#7e93ab" : pct < 20 ? "#ff3b3b" : pct < 35 ? "#ff8a1f" : "#2ee86a"}">
-          <b>${pct != null ? n(pct, 0) : "—"}<small>%</small></b>
+          <b>${pct != null ? n(pct, 1, true) : "—"}<small>%</small></b>
           <span class="gl-twin-cells">${Array.from({ length: 10 }, (_, i) => `<i class="${pct != null && pct >= (9 - i) * 10 + 5 ? "on" : ""}"></i>`).join("")}</span>
           <em>${range != null ? n(range) + " km" : ""}</em></div></div>
       <div class="gl-twin-strip"><span class="gl-twin-h">${src ? (t ? "This drive" : "Last trip") : "Trip"}</span>${strip}</div>
