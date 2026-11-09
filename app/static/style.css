@@ -3613,3 +3613,9 @@ main > .card { max-width: 100%; }
 @container (max-width: 210px) { .gl-mapo-last > div > b:nth-child(3) { display: none; } }
 /* Dimmed, the frame's corner arcs fade with the rest of the frame. */
 .gl-dim .gl-main::after { opacity: .25; }
+/* Room either side of the middle: the bars' readouts are wider than the
+   bars, and the side panels lean in a little (their 3D tilt). */
+.gl-3:has(.gl-dialpod) { column-gap: 22px; }
+.gl-dialpod .gl-ladder > span { font-size: clamp(8px, calc(2.2 * var(--gh)), 11px); letter-spacing: .04em; }
+.glance .gl-dialpod .gl-ladder .gl-ltop { font-size: clamp(12px, calc(3.8 * var(--gh)), 18px); }
+.gl-dialpod .gl-ladder b { font-size: clamp(13px, calc(4.2 * var(--gh)), 20px); }
