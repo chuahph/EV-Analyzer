@@ -5819,21 +5819,37 @@ function glNumsView(o, mini) {
   if (!mini) {
     const { usedPct, costRate, cur, rangeHere, range, odo } = o;
     const kwTxt = kw == null ? "—" : n(Math.abs(kw), 1);
-    const full = [
-      fig(v(dist, 1, true), "km"), fig(v(mins), "min"), fig(v(avg), "avg km/h"),
-      fig(v(t && t.max_speed_kmh), "top km/h"),
-      fig(v(whk, 1, true), "Wh/km"),
+    // Driving: this drive, its own figures only. Parked: the last trip, in
+    // full, so no half of the box is from one trip and half blank.
+    const full = t ? [
+      `<em class="gl-nv-th">This drive</em>`,
+      fig(v(t.distance_km, 1, true), "km"), fig(v(t.duration_min), "min"), fig(v(t.avg_speed_kmh), "avg km/h"),
+      fig(v(t.max_speed_kmh), "top km/h"),
+      fig(v(tw ?? t.wh_per_km ?? t.driving_wh_per_km, 1, true), "Wh/km"),
       fig(kwTxt, kw != null && kw < 0 ? "regen kW" : "kW", kw != null && kw < 0 ? "good" : ""),
-      fig(v(t && t.regen_kwh, 2), "regen kWh", "good"),
-      fig(v(t && t.energy_kwh, 2), "net kWh"),
+      fig(v(t.regen_kwh, 2), "regen kWh", "good"),
+      fig(v(t.energy_kwh, 2), "net kWh"),
       fig(v(usedPct, 2, true), "% batt used"),
       fig(v(pct, 1, true), "% batt", pct != null && pct < 20 ? "warn" : ""),
       fig(v(range), "range km"),
-      fig(costRate != null && t && t.energy_kwh != null ? n(t.energy_kwh * costRate, 2, true) : "—", `cost ${cur || "RM"}`),
-    ].join("");
+      fig(costRate != null && t.energy_kwh != null ? n(t.energy_kwh * costRate, 2, true) : "—", `cost ${cur || "RM"}`),
+    ].join("") : lt ? [
+      `<em class="gl-nv-th">Last trip<span>${h(lt.route || tripWhen(lt.start_time))}</span></em>`,
+      fig(v(lt.distance_km, 1, true), "km"), fig(v(lt.duration_min), "min"), fig(v(lt.avg_speed_kmh), "avg km/h"),
+      fig(v(lt.max_speed_kmh), "top km/h"),
+      fig(v(lt.wh_per_km, 1, true), "Wh/km", lt.efficiency_band === "efficient" ? "good" : lt.efficiency_band === "inefficient" ? "warn" : ""),
+      fig(v(lt.energy_kwh, 2), "kWh"),
+      fig(v(lt.soc_used_pct, 1, true), "% batt used"),
+      fig(lt.cost != null ? n(lt.cost, 2, true) : "—", `cost ${cur || "RM"}`),
+      fig(v(lt.eco_score), "eco score"),
+      fig(v(pct, 1, true), "% batt now", pct != null && pct < 20 ? "warn" : ""),
+      fig(v(range), "range km now"),
+      fig(v(lt.out_temp), "°C then"),
+    ].join("") : `<em class="gl-nv-th">No trip yet</em>${fig(v(pct, 1, true), "% batt now")}${fig(v(range), "range km now")}`;
     // Not navigating, the space under the speed holds what is left.
     const side = nav ? navBlock : `<div class="gl-nv-nav gl-nv-left"><em>On this charge</em><div class="gl-nv-row">
-        ${fig(v(rangeHere), "km at this rate")}${fig(odo != null ? n(odo, 0) : "—", "odo km")}${nw && nw.out_temp != null ? fig(n(nw.out_temp, 0), "°C outside") : ""}</div></div>`;
+        ${rangeHere != null || t ? fig(v(rangeHere), "km at this rate")
+          : fig(nw && nw.energy_kwh != null && lt && lt.wh_per_km > 0 ? n(nw.energy_kwh * 1000 / lt.wh_per_km) : "—", "km at last trip's rate")}${fig(odo != null ? n(odo, 0) : "—", "odo km")}${nw && nw.out_temp != null ? fig(n(nw.out_temp, 0), "°C outside") : ""}</div></div>`;
     const speedF = nw ? `<div class="gl-nv-spd" style="color:${spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff"}">${spd != null ? Math.round(spd) : "—"}<small>km/h</small>
     <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
     return `${speedF}${side}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
@@ -5860,7 +5876,8 @@ function glNumsView(o, mini) {
       rows = [
         f(v(t.distance_km, 1, true), "km"), f(v(t.duration_min), "min"),
         f(v(t.avg_speed_kmh), "avg km/h"), f(v(t.max_speed_kmh), "top km/h"),
-        f(v(whk, 1, true), "Wh/km"), f(v(t.energy_kwh, 2), "net kWh"),
+        // Its own Wh/km only, under a "This drive" heading (no last trip's).
+        f(v(tw ?? t.wh_per_km ?? t.driving_wh_per_km, 1, true), "Wh/km"), f(v(t.energy_kwh, 2), "net kWh"),
         f(v(t.regen_kwh, 2), "regen kWh", "good", "o1"), f(v(used, 2, true), "% batt used", "", "o1"),
         f(rate != null && t.energy_kwh != null ? n(t.energy_kwh * rate, 2, true) : "—", `cost ${cur}`, "", "o2"),
         f(v(now.out_temp), "°C outside", "", "o2"),
@@ -6890,6 +6907,9 @@ function glFitSized(root) {
   // A side box's figures: the least needed give way until the rest fit.
   const box = root.querySelector(".gl-map-mini.gl-numsv");
   if (box) {
+    // From the full set each time: after a resize to a taller screen, figures
+    // dropped for the shorter one come back.
+    box.classList.remove("cut2", "cut1", "cut0");
     for (const step of ["cut2", "cut1", "cut0"]) {
       if (box.scrollHeight <= box.clientHeight + 1) break;
       box.classList.add(step);
@@ -6899,7 +6919,7 @@ function glFitSized(root) {
   if (t && t.clientHeight) {
     const cs = getComputedStyle(t);
     const inner = t.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const fit = inner <= 32 ? "tiny" : inner <= 38 ? "small" : inner <= 44 ? "short" : "";
+    const fit = inner <= 32 ? "tiny" : inner <= 38 ? "small" : inner <= 48 ? "short" : "";
     if ((vp.dataset.fit || "") !== fit) { if (fit) vp.dataset.fit = fit; else delete vp.dataset.fit; }
   }
   const ms = root.querySelector(".gl-mix-speed"), mn = ms && ms.querySelector(".gl-spdn");

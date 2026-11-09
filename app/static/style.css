@@ -3324,6 +3324,7 @@ main > .card { max-width: 100%; }
 .gl-map-host .leaflet-control-attribution { pointer-events: auto; background: rgba(5, 8, 12, .6) !important;
   color: #6b7a8e; font-size: 8.5px; line-height: 1.4; padding: 0 5px; }
 .gl-map-host .leaflet-control-attribution a { color: #8a98ad; }
+
 .gl-map-wait { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center;
   color: var(--muted); font: 600 13px system-ui, sans-serif; letter-spacing: .04em;
   background: rgba(8, 12, 18, .82); text-align: center; padding: 0 10px; }
@@ -3436,6 +3437,9 @@ main > .card { max-width: 100%; }
 .gl-map-rot { position: absolute; inset: auto; transform-origin: 50% 50%; transition: transform .35s linear; will-change: transform; }
 .gl-map-credit { position: absolute; right: 4px; bottom: 2px; z-index: 6; font: 8.5px system-ui, sans-serif; color: #6b7a8e;
   background: rgba(5, 8, 12, .6); padding: 0 5px; border-radius: 3px; pointer-events: none; }
+/* The credit stays one line, cut short if it must: wrapped in a narrow side
+   box, its second line ran into the kW badge. */
+.gl-map-credit { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 70px); }
 
 /* No position known: no car arrow on the map. */
 .gl-map-nocar .gl-map-carfix { display: none; }
@@ -3563,3 +3567,6 @@ main > .card { max-width: 100%; }
 .gl-mapd .gl-nv-full b { font-size: min(3cqw, 6.2vh, 28px); }
 .gl-mapd .gl-nv-full b small { font-size: min(1.5cqw, 2.9vh, 11px); }
 .gl-mapd .gl-nv-left b { font-size: min(3.2cqw, 6.4vh, 30px); }
+.gl-nv-th { grid-column: 1 / -1; display: flex; gap: 8px; align-items: baseline; min-width: 0; font: 700 min(1.6cqw, 3vh, 12px)/1.2 system-ui, sans-serif;
+  font-style: normal; letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; }
+.gl-nv-th span { font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
