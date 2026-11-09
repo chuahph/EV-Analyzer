@@ -3333,6 +3333,10 @@ main > .card { max-width: 100%; }
    which on iPhone can stop the page's touch-action: none reaching inside it,
    so it is set here on the box and everything in it. */
 #glance .gl-map-slot, #glance .gl-map-slot * { touch-action: none; }
+/* The new view slides in from the side the swipe went (GL_FLIPIN). */
+.gl-flipin { animation: gl-flipin .24s ease-out; }
+@keyframes gl-flipin { from { translate: 0 calc(var(--fd, 1) * 26px); opacity: .35; } to { translate: 0 0; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gl-flipin { animation: none; } }
 .gl-map-host .leaflet-container, .gl-map-host.leaflet-container { background: #05080c; font: 10px system-ui, sans-serif; }
 /* CARTO's dark map is very dark on a phone in a car: lifted so the streets,
    their names and the buildings read at a glance. */

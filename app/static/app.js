@@ -5785,13 +5785,19 @@ function glMapFlip(key) {
 // box of the same classes (so the same size and place).
 // The button that flips it lives in the footer strip (glFlipChip), off the
 // map, so it never covers the route.
+// After a swipe flips a box, the next draw slides the new view in from the
+// side the finger went (once: the draws after it must not replay it).
+const GL_FLIPIN = { key: null, dir: 1 };
 function glMapArea(key, slot, o) {
+  let fin = "";
+  if (GL_FLIPIN.key === key) { fin = ` style="--fd:${GL_FLIPIN.dir}"`; GL_FLIPIN.key = null; }
+  const inCls = fin ? " gl-flipin" : "";
   if (!glMapIsNums(key)) {
     const at = slot.indexOf('<div class="gl-map-slot');
-    return slot.slice(0, at) + slot.slice(at).replace('<div class="gl-map-slot', `<div data-mapflip="${key}" class="gl-map-slot`);
+    return slot.slice(0, at) + slot.slice(at).replace('<div class="gl-map-slot', `<div data-mapflip="${key}"${fin} class="gl-map-slot${inCls}`);
   }
   const cls = (slot.match(/<div class="(gl-map-slot[^"]*)"/) || [, "gl-map-slot"])[1];
-  return `<div class="${cls} gl-numsv" data-mapflip="${key}">${glNumsView(o, cls.includes("gl-map-mini"))}</div>`;
+  return `<div class="${cls} gl-numsv${inCls}" data-mapflip="${key}"${fin}>${glNumsView(o, cls.includes("gl-map-mini"))}</div>`;
 }
 // The footer's flip chip, for a page with a map (or its figures) on it.
 function glFlipChip(body) {
@@ -8345,29 +8351,69 @@ document.addEventListener("wheel", (e) => {
 // browser's own back and home gestures live).
 {
   let sw = null;
+  // The map (or its figures) follows a finger dragging up or down, a little,
+  // so a swipe is seen to take; let go short and it springs back.
+  const follow = (dy) => {
+    const el = sw && sw.el;
+    if (!el || !el.isConnected) return;
+    el.style.transition = "none";
+    el.style.translate = `0 ${Math.max(-34, Math.min(34, dy * 0.35)).toFixed(1)}px`;
+    el.style.opacity = String(1 - Math.min(0.35, Math.abs(dy) / 260));
+  };
+  const unfollow = (el) => {
+    if (!el || !el.isConnected) return;
+    el.style.transition = "translate .18s ease-out, opacity .18s ease-out";
+    el.style.translate = ""; el.style.opacity = "";
+  };
+  const moved = (x, y) => {
+    if (!sw) return;
+    sw.lx = x; sw.ly = y;
+    const now = Date.now();
+    sw.hist.push([x, y, now]); if (sw.hist.length > 8) sw.hist.shift();
+    const dx = x - sw.x, dy = y - sw.y;
+    if (sw.el && !sw.vs && Math.abs(dy) > 8 && Math.abs(dy) >= Math.abs(dx)) { sw.dragged = true; follow(dy); }
+    else if (sw.dragged && Math.abs(dx) > Math.abs(dy)) { sw.dragged = false; unfollow(sw.el); }
+  };
   document.addEventListener("pointerdown", (e) => {
     const g = e.target.closest && e.target.closest("#glance");
     const edge = 24;
+    const fl = g && e.target.closest("[data-mapflip]");
     sw = g && glanceTab === "live" && !e.target.closest("button, a, input, select")
       && e.clientX > edge && e.clientX < innerWidth - edge && e.clientY > edge && e.clientY < innerHeight - edge
       ? { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: Date.now(), id: e.pointerId,
+          hist: [[e.clientX, e.clientY, Date.now()]], el: fl || null,
           // On the trip tiles an up or down drag scrolls them; only a sideways
           // swipe there changes the design.
           vs: !!e.target.closest("[data-vscroll]"),
-          flip: (e.target.closest("[data-mapflip]") || { dataset: {} }).dataset.mapflip || null } : null;
+          flip: fl ? fl.dataset.mapflip : null } : null;
   }, { passive: true });
   document.addEventListener("pointermove", (e) => {
-    if (sw && e.pointerId === sw.id) { sw.lx = e.clientX; sw.ly = e.clientY; }
+    if (sw && e.pointerId === sw.id) moved(e.clientX, e.clientY);
   }, { passive: true });
   const end = (e, x, y) => {
     if (!sw || e.pointerId !== sw.id) return;
-    const dx = x - sw.x, dy = y - sw.y, dt = Date.now() - sw.t, { flip, vs } = sw;
+    const dx = x - sw.x, dy = y - sw.y, dt = Date.now() - sw.t, { flip, vs, el, dragged } = sw;
+    // How fast the finger was going as it lifted (px per ms, over the last
+    // tenth of a second or so): a quick flick needs less distance.
+    // Measured from the last point before that tenth of a second: the lift
+    // comes where the last move was, so a window holding only that point
+    // would read a flick as standing still.
+    const now = Date.now(), i = sw.hist.findIndex((p) => now - p[2] <= 120);
+    const h = sw.hist[Math.max(0, (i < 0 ? sw.hist.length : i) - 1)];
+    const vy = Math.abs(y - h[1]) / Math.max(16, now - h[2]);
     sw = null;
-    if (dt >= 1200) return;
     const ax = Math.abs(dx), ay = Math.abs(dy);
-    if (ax >= 50 && ax > ay * 1.3) { glHoldRelease(); GL_VSCROLL.drag = null; glSkinStep("h", dx < 0 ? 1 : -1); }
-    // Up or down on a map (or its figures) flips between the two.
-    else if (!vs && ay >= 45 && ay > ax * 1.3) { glHoldRelease(); if (flip) glMapFlip(flip); else glSkinStep("v", dy < 0 ? 1 : -1); }
+    const quick = vy >= 0.35;
+    let did = false;
+    if (dt < 1500) {
+      if (ax >= 50 && ax > ay * 1.3) { glHoldRelease(); GL_VSCROLL.drag = null; glSkinStep("h", dx < 0 ? 1 : -1); did = true; }
+      // Up or down on a map (or its figures) flips between the two: 36px,
+      // or 24px when flicked, and anything steeper than about 45 degrees.
+      else if (flip && !vs && (ay >= 36 || (ay >= 24 && quick)) && ay > ax) {
+        glHoldRelease(); GL_FLIPIN.key = flip; GL_FLIPIN.dir = dy < 0 ? 1 : -1; glMapFlip(flip); did = true;
+      } else if (!flip && !vs && (ay >= 45 || (ay >= 30 && quick)) && ay > ax * 1.3) { glHoldRelease(); glSkinStep("v", dy < 0 ? 1 : -1); did = true; }
+    }
+    if (dragged && !did) unfollow(el);
   };
   document.addEventListener("pointerup", (e) => end(e, e.clientX, e.clientY), { passive: true });
   // A cancelled touch (the phone took the gesture over, which Safari does a
@@ -8382,7 +8428,7 @@ document.addEventListener("wheel", (e) => {
     sw.timer = setTimeout(() => { if (sw && sw.cancelled && sw.id === id) end({ pointerId: id }, sw.lx, sw.ly); }, 1300);
   }, { passive: true });
   document.addEventListener("touchmove", (e) => {
-    if (sw && sw.cancelled && e.touches[0]) { sw.lx = e.touches[0].clientX; sw.ly = e.touches[0].clientY; }
+    if (sw && sw.cancelled && e.touches[0]) moved(e.touches[0].clientX, e.touches[0].clientY);
   }, { capture: true, passive: true });
   document.addEventListener("touchend", (e) => {
     if (!sw || !sw.cancelled) return;
