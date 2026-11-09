@@ -5191,7 +5191,8 @@ function glLastChargeChip(c) {
   if (!at) return "";
   const hrs = Math.max(0, (Date.now() - at) / 3600000);
   const ago = hrs < 1 ? "just now" : hrs < 48 ? `${Math.round(hrs)} h ago` : `${Math.round(hrs / 24)} d ago`;
-  return `<span class="gl-kb gl-opt"><em>Charged</em><b>${ago}${lc.end_soc != null ? " · " + c.n(lc.end_soc) + "%" : ""}</b></span>`;
+  // Kept when space is short: the range and outside chips give way first.
+  return `<span class="gl-kb"><em>Charged</em><b>${ago}${lc.end_soc != null ? " · " + c.n(lc.end_soc) + "%" : ""}</b></span>`;
 }
 function glAltSkin(skin, c) {
   c.skin = skin; c.h = h;
