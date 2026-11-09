@@ -2890,7 +2890,7 @@ main > .card { max-width: 100%; }
 /* Round Mix */
 .gl-rmix { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
 /* Round Mix's power and efficiency columns slimmer, for a wider map. */
-.gl-rmix .gl-ladder { min-width: 52px; max-width: 64px; }
+.gl-rmix .gl-ladder { min-width: 48px; max-width: 56px; }
 .gl-rmix .gl-ladder b small { display: block; margin: 1px 0 0; line-height: 1; }
 .gl-rmix-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .gl-rmix-col .gl-hud-stat { flex: 1 1 0; display: flex; flex-direction: column; justify-content: center; }
@@ -2973,9 +2973,9 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-kb { box-shadow: none; border-color: #12181f; opacity: .7; }
 
 /* The round gauge takes the middle; the trip and power cards beside it are slimmer. */
-/* The middle (two slim bars and the dial) takes what it needs; the spare
-   width goes to the map on the right. */
-.gl-rmix { grid-template-columns: minmax(0, .62fr) minmax(0, 1.56fr) minmax(0, .82fr); grid-template-rows: minmax(0, 1fr); }
+/* The trip boxes and the map the same width either side, the dial centred
+   between them; the middle (two slim bars and the dial) takes what is left. */
+.gl-rmix { grid-template-columns: minmax(0, .76fr) minmax(0, 1.48fr) minmax(0, .76fr); grid-template-rows: minmax(0, 1fr); }
 .gl-rmix-mid { min-height: 0; }
 .gl-rmix-mid svg { width: 100%; height: 100%; }
 .gl-rmix-col .gl-hud-stat strong { font-size: clamp(16px, min(calc(5.6 * var(--gh)), calc(3.4 * var(--gw))), 28px); }
