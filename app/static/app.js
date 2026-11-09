@@ -5554,7 +5554,38 @@ function glAltPage(skin, c) {
       <div class="gl-night-row"><span>${dist != null ? n(dist, 1, true) : "—"} km</span><span>${mins != null ? n(mins) : "—"} min</span><span>${whk != null ? n(whk, 1, true) : "—"} Wh/km</span></div>
     </div>`;
   }
-  // Dial (5) is drawn with the Cockpit's page (see glDialPod in renderGlance).
+  if (skin === 5) {
+    // Dial: a car's instrument cluster. Two needle dials, speed on the left
+    // and power on the right (regen below zero, in green), the map between
+    // them with the arrival over it, and the trip as a strip along the
+    // bottom: this drive's figures, or parked the last trip's.
+    const nav = c.nav;
+    const pwr = kw != null ? +kw : null;
+    const pwTone = pwr == null ? "#7e93ab" : pwr < 0 ? "#2ee86a" : pwr > 110 ? "#ff3b3b" : pwr > 60 ? "#ffb020" : "#22d3ee";
+    const power = glDial({ value: pwr == null ? 0 : Math.max(-60, Math.min(150, pwr)), min: -60, max: 150, step: 15,
+      bands: [{ from: -60, to: 0, colour: "#2ee86a" }, { from: 0, to: 60, colour: "#22d3ee" }, { from: 60, to: 110, colour: "#ffb020" }, { from: 110, to: 150, colour: "#ff3b3b" }],
+      centre: pwr == null ? "—" : n(Math.abs(pwr), 1), unit: pwr != null && pwr < 0 ? "kW regen" : "kW", colour: pwTone, label: pwr != null && pwr < 0 ? "Regen" : "Power" });
+    const src = t || lt;
+    const strip = [
+      stat("km", dist != null ? n(dist, 1, true) : "—"), stat("min", mins != null ? n(mins) : "—"),
+      stat("avg", avg != null ? n(avg) : "—"), stat("Wh/km", whk != null ? n(whk, 1, true) : "—", t ? twTone : ""),
+      stat("batt %", pct != null ? n(pct, 1, true) : "—", pct != null && pct < 20 ? "warn" : "good"),
+      stat("range", range != null ? n(range) : "—"),
+    ].join("");
+    return `<div class="gl-page gl-alt gl-twin">
+      <div class="gl-twin-dial gl-twin-spd">${glGauge3D(spd, col, nw, null, true)}</div>
+${glMapArea("dial", `<div class="gl-map-slot gl-map-mini gl-twin-map" data-map="mini">
+        ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
+        ${nav ? `<div class="gl-mapo gl-mapo-mini">
+          ${nav.minutes != null ? `<b>${glClockIn(nav.minutes)}<small>${h(glNavName(nav.name) || "arrive")}</small></b>` : ""}
+          ${nav.km != null ? `<b>${n(nav.km, 1, true)}<small>km</small></b>` : ""}
+          ${nav.arrive_pct != null ? `<b class="${nav.arrive_pct < 15 ? "warn" : "good"}">${n(nav.arrive_pct)}<small>% arrive</small></b>` : ""}
+        </div>` : ""}
+      </div>`, { ...c, nav, n, navOnly: true })}
+      <div class="gl-twin-dial gl-twin-pwr">${power}</div>
+      <div class="gl-twin-strip"><span class="gl-twin-h">${src ? (t ? "This drive" : "Last trip") : "Trip"}</span>${strip}</div>
+    </div>`;
+  }
   if (skin === 6) {
     // Range: the battery, big, and what it will do.
     const shown = pct ?? 0;
@@ -6011,22 +6042,15 @@ function renderGlance(d) {
           <i><svg viewBox="0 0 24 24" aria-hidden="true">${ico[k]}</svg></i>
           <span>${h(label)}</span><strong>${value}</strong></div>`;
       const pct = lvl != null ? Math.max(0, Math.min(100, +lvl)) : null;
-      // Dial (5) is the Cockpit's page with the needle dial in the middle
-      // (glDialPod): the trip computer on the left, the map over the battery
-      // bar on the right. Every other design draws its own page.
-      const isDial = glLiveSkin === 5, mapKey = isDial ? "dial" : "cockpit";
-      const glDialPod = (whkNow, pctNow = pct) => {
-        const cc = { spd, kw: inst && inst.kw != null ? inst.kw : null, pct: pctNow, whk: whkNow, rated,
-          regenKwh: t && t.regen_kwh != null ? t.regen_kwh : null, nowWh: inst && inst.whkm != null ? inst.whkm : null, n };
-        return `<div class="gl-dialbox gl-dialpod">${glLadder("flow", cc)}${glGauge3D(spd, spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff", nw, null, true)}${glLadder("whbat", cc)}</div>`;
-      };
-      if (glLiveSkin > 0 && !isDial) {
+      if (glLiveSkin > 0) {
         const twA = t ? (t.wh_per_km ?? t.driving_wh_per_km) : null;
         const odoA = nw.odo_km ?? (lastData && lastData.vehicle && lastData.vehicle.current_odo_km);
         const hist = glLiveState.hist || [];
         const traceHtml = glEffTrace(hist, rated);
         return { body: glAltSkin(glLiveSkin, {
-          t, nw, spd, kw: inst && inst.kw != null ? inst.kw : null, tw: twA, pct, odo: odoA, hist, regenKwh: t && t.regen_kwh != null ? t.regen_kwh : null,
+          // The battery: the car's own reading, else (parked, the car not yet
+          // heard from since a restart) the dashboard's, as the Cockpit does.
+          t, nw, spd, kw: inst && inst.kw != null ? inst.kw : null, tw: twA, pct: pct ?? (bal && (bal.current_level_pct ?? bal.current_soc_pct)) ?? null, odo: odoA, hist, regenKwh: t && t.regen_kwh != null ? t.regen_kwh : null,
           range: nw.range_km ?? null, rated, lt, trace: traceHtml,
           nowWh: inst && inst.whkm != null ? inst.whkm : null,
           rangeHere: nw.energy_kwh != null && twA > 0 ? nw.energy_kwh * 1000 / twA : null, n,
@@ -6067,9 +6091,9 @@ function renderGlance(d) {
               ${tile("odo", "Odometer km", odo != null ? fmt(odo) : "—", "", "wide")}
             </div>
           </div>`,
-          isDial ? glDialPod(lt ? lt.wh_per_km : null, pctShown) : glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
+          glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
           // The map of where the car stands, the last trip over it.
-          `<div class="gl-navside">${glMapArea(mapKey, `<div class="gl-map-slot gl-map-mini" data-map="mini">
+          `<div class="gl-navside">${glMapArea("cockpit", `<div class="gl-map-slot gl-map-mini" data-map="mini">
             ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
             ${L && L.nav ? `<div class="gl-mapo gl-mapo-mini">
               ${L.nav.minutes != null ? `<b>${glClockIn(L.nav.minutes)}<small>${h(glNavName(L.nav.name) || "arrive")}</small></b>` : ""}
@@ -6109,7 +6133,7 @@ function renderGlance(d) {
       // and the power sits on the map.
       const navC = L && L.nav;
       {
-        const mini = glMapArea(mapKey, `<div class="gl-map-slot gl-map-mini" data-map="mini">
+        const mini = glMapArea("cockpit", `<div class="gl-map-slot gl-map-mini" data-map="mini">
             ${nw.lat == null ? '<div class="gl-map-wait">Waiting for the car\'s location…</div>' : ""}
             ${navC ? `<div class="gl-mapo gl-mapo-mini">
               ${navC.minutes != null ? `<b>${glClockIn(navC.minutes)}<small>${h(glNavName(navC.name) || "arrive")}</small></b>` : ""}
@@ -6143,7 +6167,7 @@ function renderGlance(d) {
             <div class="gl-odo"><span>Odo km</span>
               <strong>${odoNow != null ? n(odoNow, 1) : "—"}</strong></div>
           </div>`,
-          isDial ? glDialPod(tw) : glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
+          glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
           `<div class="gl-navside">${mini}${battBar}</div>`,
           foot);
       }

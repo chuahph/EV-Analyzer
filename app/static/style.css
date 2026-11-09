@@ -3599,23 +3599,29 @@ main > .card { max-width: 100%; }
   font-style: normal; letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; }
 .gl-nv-th span { font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Dial: the Cockpit's page with the needle dial in the middle (glDialPod):
-   a wider middle than the Cockpit's speed panel needs, the dial as large as
-   the height allows, slim power and efficiency bars either side of it. */
-.gl-3:has(.gl-dialpod) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, 1fr); }
-.gl-pod:has(> .gl-dialpod) { align-items: stretch; }
-.gl-dialpod { width: 100%; height: 100%; gap: 6px; align-items: center; }
-.gl-dialpod > svg { flex: 0 1 auto; height: 94%; width: auto; max-width: 70%; aspect-ratio: 218 / 224; }
-.gl-dialpod > .gl-ladder { flex: 0 0 auto; width: clamp(48px, 15%, 64px); min-width: 0; height: 82%; }
-.gl-dialpod .gl-ladder b small { display: block; margin: 1px 0 0; line-height: 1; }
 /* A narrow map (the Dial's on a small phone): the last-trip strip keeps
    km, min and Wh/km; the average speed is in the trip panel beside it. */
 @container (max-width: 210px) { .gl-mapo-last > div > b:nth-child(3) { display: none; } }
 /* Dimmed, the frame's corner arcs fade with the rest of the frame. */
 .gl-dim .gl-main::after { opacity: .25; }
-/* Room either side of the middle: the bars' readouts are wider than the
-   bars, and the side panels lean in a little (their 3D tilt). */
-.gl-3:has(.gl-dialpod) { column-gap: 22px; }
-.gl-dialpod .gl-ladder > span { font-size: clamp(8px, calc(2.2 * var(--gh)), 11px); letter-spacing: .04em; }
-.glance .gl-dialpod .gl-ladder .gl-ltop { font-size: clamp(12px, calc(3.8 * var(--gh)), 18px); }
-.gl-dialpod .gl-ladder b { font-size: clamp(13px, calc(4.2 * var(--gh)), 20px); }
+
+/* Dial: a car's instrument cluster (glAltSkin 5). Speed and power dials
+   either side of the map, the trip as a strip along the bottom. */
+.gl-twin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto; gap: 10px 16px; align-items: stretch; }
+.gl-twin-dial { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; isolation: isolate; }
+.gl-twin-dial > svg { height: 100%; width: auto; max-width: 100%; aspect-ratio: 1; filter: drop-shadow(0 10px 14px rgba(0,0,0,.7)); }
+.gl-twin-spd > svg { aspect-ratio: 218 / 224; }
+/* The power dial wears a bezel like the speed dial's, so the pair match. */
+.gl-twin-pwr::before { content: ""; position: absolute; aspect-ratio: 1; height: 96%; max-width: 100%; border-radius: 50%; z-index: -1;
+  background: radial-gradient(circle at 50% 38%, #1b2533, #070b10 70%);
+  box-shadow: 0 0 0 3px #3a4656, 0 0 0 5px #11161d, 0 0 0 6px #5b6b80, inset 0 0 30px rgba(0,0,0,.8), 0 0 18px color-mix(in srgb, var(--tc) 25%, transparent); }
+.gl-twin-pwr > svg { height: 88%; }
+.gl-twin .gl-twin-map { transform: none; min-height: 0; border-radius: 16px; }
+.gl-twin-strip { grid-column: 1 / -1; display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.gl-twin-h { align-self: center; font: 700 clamp(9px, calc(2.4 * var(--gh)), 12px) system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase;
+  color: #22d3ee; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.gl-twin-strip .gl-hud-stat { flex: 1 1 0; min-width: 0; padding: 4px 8px; }
+.gl-twin-strip .gl-hud-stat strong { font-size: clamp(14px, calc(4.6 * var(--gh)), 24px); }
+.gl-dim .gl-twin-pwr::before { box-shadow: 0 0 0 3px #1c232c, inset 0 0 30px rgba(0,0,0,.8); }
+.gl-twin-strip .gl-hud-stat span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
