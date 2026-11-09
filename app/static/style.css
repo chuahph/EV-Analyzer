@@ -2513,6 +2513,10 @@ main > .card { max-width: 100%; }
 /* The map and battery column lines up with the trip panel opposite: the same
    height, centred, rather than from just under the header to the footer. */
 .gl-side > .gl-navside { flex: 1 1 auto; max-height: 78%; margin-block: auto; }
+/* The Cockpit's two side columns stand taller, level with each other: a
+   taller map and a little more room in the trip tiles, still clear of the
+   header and the footer. */
+.gl-3:has(.gl-navside) > .gl-side > .gl-trip, .gl-3:has(.gl-navside) > .gl-side > .gl-navside { max-height: 88%; }
 .gl-side > .gl-trip .gl-rts { flex: 1 1 auto; grid-auto-rows: 1fr; }
 .gl-side > .gl-trip .gl-rt strong { font-size: clamp(23px, calc(7.6 * var(--gh)), 35px); line-height: 1; }
 @media (orientation: landscape) and (max-width: 740px) {
@@ -2676,7 +2680,7 @@ main > .card { max-width: 100%; }
 @media (orientation: landscape) and (max-height: 360px) {
   .gl-3 > .gl-side:has(> .gl-power) { height: 96%; gap: 4px; }
   .gl-side > .gl-trip:has(.gl-odo) { max-height: 96%; }
-  .gl-side > .gl-navside { max-height: 96%; }
+  .gl-side > .gl-navside, .gl-3:has(.gl-navside) > .gl-side > .gl-trip, .gl-3:has(.gl-navside) > .gl-side > .gl-navside { max-height: 96%; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-trace { min-height: 44px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-trace svg { min-height: 22px; }
   .gl-3 > .gl-side:has(> .gl-power) .gl-minis { margin-top: 4px; }
