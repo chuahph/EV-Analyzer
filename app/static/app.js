@@ -6085,11 +6085,26 @@ function renderGlance(d) {
         return page(
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec idle"></b>Car now<em>${!L ? "connecting…" : nw.age_sec != null ? `${nw.age_sec < 90 ? nw.age_sec + "s" : Math.round(nw.age_sec / 60) + " min"} ago` : ""}</em></div>
-            <div class="gl-rts">
+            ${lt ? glVPages([[
+              // The car now, as before; then, a flick up or down, the last trip.
+              tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good"),
+              tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—"),
+              tile("odo", "Odometer km", odo != null ? fmt(odo) : "—", "", "wide"),
+            ], [
+              tile("dist", "Trip km", lt.distance_km != null ? n(lt.distance_km, 1, true) : "—"),
+              tile("time", "Trip min", lt.duration_min != null ? n(lt.duration_min) : "—"),
+              tile("speed", "Trip avg", lt.avg_speed_kmh != null ? n(lt.avg_speed_kmh) : "—"),
+              tile("whkm", "Trip Wh/km", lt.wh_per_km != null ? n(lt.wh_per_km, 1, true) : "—", ltTone),
+            ], [
+              tile("regen", "Trip kWh", lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—"),
+              tile("batt", "Batt used %", lt.soc_used_pct != null ? n(lt.soc_used_pct, 1, true) : "—"),
+              tile("cost", `Trip ${cur || "RM"}`, lt.cost != null ? n(lt.cost, 2, true) : "—"),
+              tile("speed", "Eco score", lt.eco_score != null ? n(lt.eco_score) : "—"),
+            ]]) : `<div class="gl-rts">
               ${tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good")}
               ${tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—")}
               ${tile("odo", "Odometer km", odo != null ? fmt(odo) : "—", "", "wide")}
-            </div>
+            </div>`}
           </div>`,
           glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed" }),
           // The map of where the car stands, the last trip over it.
