@@ -3610,13 +3610,13 @@ main > .card { max-width: 100%; }
 .gl-twin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto; gap: 10px 16px; align-items: stretch; }
 .gl-twin-dial { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; isolation: isolate; }
-.gl-twin-dial > svg { height: 100%; width: auto; max-width: 100%; aspect-ratio: 1; filter: drop-shadow(0 10px 14px rgba(0,0,0,.7)); }
+.gl-twin-dial > svg { height: 90%; width: auto; max-width: 100%; aspect-ratio: 1; filter: drop-shadow(0 10px 14px rgba(0,0,0,.7)); }
 .gl-twin-spd > svg { aspect-ratio: 218 / 224; }
 /* The power dial wears a bezel like the speed dial's, so the pair match. */
-.gl-twin-pwr::before { content: ""; position: absolute; aspect-ratio: 1; height: 96%; max-width: 100%; border-radius: 50%; z-index: -1;
+.gl-twin-pwr::before { content: ""; position: absolute; aspect-ratio: 1; height: 86%; max-width: 100%; border-radius: 50%; z-index: -1;
   background: radial-gradient(circle at 50% 38%, #1b2533, #070b10 70%);
   box-shadow: 0 0 0 3px #3a4656, 0 0 0 5px #11161d, 0 0 0 6px #5b6b80, inset 0 0 30px rgba(0,0,0,.8), 0 0 18px color-mix(in srgb, var(--tc) 25%, transparent); }
-.gl-twin-pwr > svg { height: 88%; }
+.gl-twin-pwr > svg { height: 78%; }
 .gl-twin .gl-twin-map { transform: none; min-height: 0; border-radius: 16px; }
 .gl-twin-strip { grid-column: 1 / -1; display: flex; align-items: stretch; gap: 8px; min-width: 0; }
 .gl-twin-h { align-self: center; font: 700 clamp(9px, calc(2.4 * var(--gh)), 12px) system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase;
