@@ -3661,3 +3661,19 @@ main > .card { max-width: 100%; }
 @media (max-width: 760px) { .gl-battbar-slim { padding: 4px 8px !important; } .gl-battbar-slim .gl-battbar-top { gap: 4px; min-width: 0; flex: 1 1 100%; }
   .gl-battbar-slim .gl-battbar-top span { font-size: 9.5px; letter-spacing: .04em; } .gl-battbar-slim .gl-battbar-top strong { font-size: 15px; } }
 .gl-navside > .gl-battbar { margin-top: 3px; }
+
+/* Auto Dim for the Dial's instrument cluster, to the same depth as Round
+   Mix and the Cockpit: the trip boxes to dark glass, both dials' rings and
+   scales faded with the speed and the needle left readable, the gear and
+   battery gauge and the map's frame faded the same way. */
+.gl-dim .gl-twin-strip .gl-hud-stat { background: #06090d; border-color: #12181f; box-shadow: none; }
+.gl-dim .gl-twin-strip .gl-hud-stat::before, .gl-dim .gl-twin-strip .gl-hud-stat::after { opacity: .15; }
+.gl-dim .gl-twin-strip .gl-hud-stat strong { opacity: .8; text-shadow: none; }
+.gl-dim .gl-twin-strip .gl-hud-stat span { opacity: .5; }
+.gl-dim .gl-twin-spd > svg > :not(.gl-g3-spd) { opacity: .6; }
+.gl-dim .gl-twin-pwr > svg > :not([filter*="-sh"]):not(text:nth-last-of-type(-n+2)) { opacity: .6; }
+.gl-dim .gl-twin-pwr::before { opacity: .5; }
+.gl-dim .gl-twin-gear { border-color: #12181f; background: transparent; }
+.gl-dim .gl-twin-cells { border-color: #12181f; }
+.gl-dim .gl-twin-map { border-color: #12181f; }
+.gl-dim .gl-twin-batt b, .gl-dim .gl-twin-gear b.on { opacity: .8; }
