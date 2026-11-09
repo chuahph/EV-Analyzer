@@ -8576,6 +8576,9 @@ let glSwipeCancel = () => {};
   const onMap = (e) => { const s = e.target.closest && e.target.closest("#glance .gl-map-slot[data-mapflip]:not(.gl-numsv)"); return s && glanceTab === "live" ? s : null; };
   const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
   document.addEventListener("pointerdown", (e) => {
+    // A first finger means no other is down: forget any whose lift was never
+    // heard, or the next touch would be taken for a pinch and drop a swipe.
+    if (e.isPrimary) { pts.clear(); pinch = null; }
     if (!onMap(e)) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY, t: Date.now() });
     if (pts.size === 2 && GL_ZOOM.cur != null) {
