@@ -2892,7 +2892,7 @@ main > .card { max-width: 100%; }
 .gl-mix-trip .gl-hud-stat { display: flex; flex-direction: column; justify-content: center; }
 
 /* Two-axis designs: single ones left/right, combinations up/down. */
-.glance { touch-action: none; }
+.glance { touch-action: none; overscroll-behavior: none; }
 .gl-dots i { width: 1px; height: 12px; background: #2a3645; margin: 0 2px; }
 .gl-dots button.cb { border-radius: 2px; }
 .gl-dots button.cb.on { width: 8px; border-radius: 2px; }
@@ -3328,6 +3328,11 @@ main > .card { max-width: 100%; }
   box-shadow: 0 0 18px -8px var(--spd, #22d3ee) inset; }
 .gl-alt.gl-mapd > .gl-map-slot { flex: 1 1 auto; transform: none; }
 .gl-map-host { position: absolute; inset: 0; z-index: 0; background: #05080c; pointer-events: none; }
+/* A swipe up or down on the map flips it to its figures: the phone must not
+   take that drag for a scroll of its own. The box clips (overflow: hidden),
+   which on iPhone can stop the page's touch-action: none reaching inside it,
+   so it is set here on the box and everything in it. */
+#glance .gl-map-slot, #glance .gl-map-slot * { touch-action: none; }
 .gl-map-host .leaflet-container, .gl-map-host.leaflet-container { background: #05080c; font: 10px system-ui, sans-serif; }
 /* CARTO's dark map is very dark on a phone in a car: lifted so the streets,
    their names and the buildings read at a glance. */

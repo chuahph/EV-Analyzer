@@ -5920,7 +5920,7 @@ function glNumsView(o, mini) {
 // swipe (or the tap) does nothing. The newest reading waits and is drawn just
 // after the finger lifts — late enough that a tap's click still lands — or
 // after GL_HOLD_MAX_MS of holding, so a resting thumb never freezes the page.
-const GL_HOLD = { id: null, t: 0, until: 0, d: null, timer: null };
+const GL_HOLD = { id: null, t: 0, until: 0, d: null, timer: null, touchHeld: false };
 const GL_HOLD_MAX_MS = 1500, GL_HOLD_AFTER_MS = 60;
 function glHoldFlush() {
   clearTimeout(GL_HOLD.timer); GL_HOLD.timer = null;
@@ -5931,7 +5931,7 @@ function glHoldFlush() {
 // Captured on the way down, so it is set before any other handler can redraw.
 document.addEventListener("pointerdown", (e) => {
   if (!(e.target.closest && e.target.closest("#glance"))) return;
-  GL_HOLD.id = e.pointerId; GL_HOLD.t = Date.now();
+  GL_HOLD.id = e.pointerId; GL_HOLD.t = Date.now(); GL_HOLD.touchHeld = false;
 }, { capture: true, passive: true });
 const glHoldEnd = (e) => {
   if (GL_HOLD.id == null || e.pointerId !== GL_HOLD.id) return;
@@ -5940,10 +5940,19 @@ const glHoldEnd = (e) => {
   if (GL_HOLD.d) { clearTimeout(GL_HOLD.timer); GL_HOLD.timer = setTimeout(glHoldFlush, GL_HOLD_AFTER_MS + 5); }
 };
 document.addEventListener("pointerup", glHoldEnd, { capture: true, passive: true });
-document.addEventListener("pointercancel", glHoldEnd, { capture: true, passive: true });
+// A cancelled touch is still a finger on the glass (its touch events carry
+// on, see the swipe below): keep holding until it lifts, or GL_HOLD_MAX_MS.
+document.addEventListener("pointercancel", (e) => {
+  if (GL_HOLD.id != null && e.pointerId === GL_HOLD.id) GL_HOLD.touchHeld = true;
+}, { capture: true, passive: true });
+document.addEventListener("touchend", (e) => {
+  if (!GL_HOLD.touchHeld || (e.touches && e.touches.length)) return;
+  GL_HOLD.touchHeld = false;
+  glHoldEnd({ pointerId: GL_HOLD.id });
+}, { capture: true, passive: true });
 // A swipe that changes the page draws at once: there is no click to wait for.
 function glHoldRelease() {
-  GL_HOLD.id = null; GL_HOLD.until = 0; GL_HOLD.d = null;
+  GL_HOLD.id = null; GL_HOLD.until = 0; GL_HOLD.d = null; GL_HOLD.touchHeld = false;
   clearTimeout(GL_HOLD.timer); GL_HOLD.timer = null;
 }
 function glHeld() {
@@ -8361,9 +8370,26 @@ document.addEventListener("wheel", (e) => {
     else if (!vs && ay >= 45 && ay > ax * 1.3) { glHoldRelease(); if (flip) glMapFlip(flip); else glSkinStep("v", dy < 0 ? 1 : -1); }
   };
   document.addEventListener("pointerup", (e) => end(e, e.clientX, e.clientY), { passive: true });
-  // A cancelled touch (the phone took the gesture over) still counts, as far
-  // as the finger had got.
-  document.addEventListener("pointercancel", (e) => { if (sw) end(e, sw.lx, sw.ly); }, { passive: true });
+  // A cancelled touch (the phone took the gesture over, which Safari does a
+  // few px into a drag) still counts. Its pointer events stop there, but its
+  // touch events carry on: follow the finger through those and decide when
+  // it lifts, so a flick that was cancelled early is not cut short. If no
+  // touch end comes, decide on where it had got.
+  document.addEventListener("pointercancel", (e) => {
+    if (!sw || e.pointerId !== sw.id || sw.cancelled) return;
+    sw.cancelled = true;
+    const id = sw.id;
+    sw.timer = setTimeout(() => { if (sw && sw.cancelled && sw.id === id) end({ pointerId: id }, sw.lx, sw.ly); }, 1300);
+  }, { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    if (sw && sw.cancelled && e.touches[0]) { sw.lx = e.touches[0].clientX; sw.ly = e.touches[0].clientY; }
+  }, { capture: true, passive: true });
+  document.addEventListener("touchend", (e) => {
+    if (!sw || !sw.cancelled) return;
+    const t = e.changedTouches && e.changedTouches[0];
+    clearTimeout(sw.timer);
+    end({ pointerId: sw.id }, t ? t.clientX : sw.lx, t ? t.clientY : sw.ly);
+  }, { capture: true, passive: true });
   // Once a tap's click has landed there is nothing to wait for: draw at once.
   document.addEventListener("click", (e) => {
     if (e.target.closest && e.target.closest("#glance")) GL_HOLD.until = 0;
