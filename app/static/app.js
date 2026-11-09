@@ -5157,9 +5157,9 @@ function glKeyBar(c) {
   const { t, nw } = c;
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
-  // The mix designs carry the odometer as a row of drums (Round Mix and the
-  // Cockpit already show it in their own way).
-  const odoChip = [7, 9, 2, 11, 12].includes(c.skin) && c.odo != null
+  // The mix designs carry the odometer as a row of drums (Round Mix, Digital Mix
+  // and the Cockpit already show it in their own way).
+  const odoChip = [7, 9, 2, 11].includes(c.skin) && c.odo != null
     ? `<span class="gl-kb gl-kodo"><em>Odo km</em><span class="gl-drum">${String(Math.round(c.odo)).split("").map((d) => `<b>${d}</b>`).join("")}</span></span>` : "";
   const chips = [
     odoChip,

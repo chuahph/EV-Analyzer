@@ -2506,6 +2506,8 @@ main > .card { max-width: 100%; }
 .gl-side > .gl-trip { flex: 1 1 auto; max-height: 75%; margin-block: auto; }
 /* Room for the odometer line under the tiles while driving. */
 .gl-side > .gl-trip:has(.gl-odo) { max-height: 78%; }
+/* Clear of the tiles above (their glow runs a few px below them). */
+.gl-side > .gl-trip .gl-odo { margin-top: 12px; }
 /* The map and battery column lines up with the trip panel opposite: the same
    height, centred, rather than from just under the header to the footer. */
 .gl-side > .gl-navside { flex: 1 1 auto; max-height: 78%; margin-block: auto; }
@@ -2590,7 +2592,7 @@ main > .card { max-width: 100%; }
   .gl-side > .gl-trip:has(.gl-odo) .gl-rts { gap: 6px; padding-top: 6px; }
   .gl-side > .gl-trip:has(.gl-odo) .gl-rt { padding-top: 5px; padding-bottom: 5px; }
   .gl-side > .gl-trip:has(.gl-odo) .gl-rt strong { font-size: clamp(20px, calc(6.8 * var(--gh)), 27px); }
-  .gl-side > .gl-trip:has(.gl-odo) .gl-odo { margin-top: 6px; padding-top: 3px; padding-bottom: 3px; }
+  .gl-side > .gl-trip:has(.gl-odo) .gl-odo { margin-top: 10px; padding-top: 3px; padding-bottom: 3px; }
 }
 /* Live page on screen (body.gl-eco): true black behind everything. On the
    OLED screen of a recent iPhone a black pixel is switched off, and the deep
@@ -3408,7 +3410,7 @@ main > .card { max-width: 100%; }
 .gl-mapo-batt b small { font-size: 8.5px; margin-left: 3px; }
 
 /* Cockpit parked: the last trip over the map. */
-.gl-mapo-last { flex-direction: column; align-items: stretch; gap: 3px; }
+.gl-mapo-last { flex-direction: column; align-items: stretch; gap: 6px; }
 .gl-mapo-last em { font: 600 10px system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; font-style: normal; }
 .gl-mapo-last > div { display: flex; justify-content: space-between; gap: 6px; }
 .gl-mapo-last b.tone-good, .gl-mapo-last b.good { color: var(--green); }
