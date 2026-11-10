@@ -3677,3 +3677,6 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-twin-cells { border-color: #12181f; }
 .gl-dim .gl-twin-map { border-color: #12181f; }
 .gl-dim .gl-twin-batt b, .gl-dim .gl-twin-gear b.on { opacity: .8; }
+/* A narrow full map (small phones): the destination box leaves room for a
+   three-digit speed beside it. */
+@container (max-width: 620px) { .gl-mapo-nav { max-width: 46%; } }
