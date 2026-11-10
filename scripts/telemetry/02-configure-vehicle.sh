@@ -336,19 +336,9 @@ fi
 # database, so with one the classic intervals are kept.
 if grep -q '^DB_INTERVALS' /opt/tesla-bridge/bridge.py 2>/dev/null; then
   FAST_DRIVE=1 FAST_LEVEL=10 FAST_RANGE=10 FAST_GEAR=1 FAST_LOC=1
-  # The heading reads a slightly different number every second even on a
-  # straight road, and each one is a billed signal. Sent only when it has
-  # turned by HEADING_DELTA degrees (2 by default; 0 sends every one): the
-  # map eases its heading anyway, so a 2 degree step cannot be seen, and a
-  # straight road stops costing a signal a second. The live map only: the
-  # heading is never stored.
-  HEADING_DELTA="${HEADING_DELTA:-2}"
-  if [ "$HEADING_DELTA" -gt 0 ] 2>/dev/null; then HEAD_SPEC="{\"interval_seconds\": $FAST_LOC, \"minimum_delta\": $HEADING_DELTA}"
-  else HEAD_SPEC="{\"interval_seconds\": $FAST_LOC}"; fi
-  say "Fast live stream: speed, distance, energy, gear and location every second (stored history stays at 10-30 s); heading only when it turns ${HEADING_DELTA} degrees"
+  say "Fast live stream: speed, distance, energy, gear and location every second (stored history stays at 10-30 s)"
 else
   FAST_DRIVE=10 FAST_LEVEL=60 FAST_RANGE=300 FAST_GEAR=5 FAST_LOC=30
-  HEAD_SPEC="{\"interval_seconds\": $FAST_LOC}"
   say "Bridge has no pacer yet: keeping the classic intervals. Update it first:
      sudo curl -sL $APP_URL/scripts/telemetry/bridge.py -o /opt/tesla-bridge/bridge.py && sudo systemctl restart tesla-bridge"
 fi
@@ -369,7 +359,7 @@ cat > "$WORK/config.json" <<EOF
       "VehicleSpeed":              {"interval_seconds": $FAST_DRIVE},
       "Odometer":                  {"interval_seconds": $FAST_DRIVE},
       "Location":                  {"interval_seconds": $FAST_LOC},
-      "GpsHeading":                $HEAD_SPEC,
+      "GpsHeading":                {"interval_seconds": $FAST_LOC},
       "DestinationName":           {"interval_seconds": 10},
       "DestinationLocation":       {"interval_seconds": 10},
       "MinutesToArrival":          {"interval_seconds": 10},

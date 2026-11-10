@@ -5055,9 +5055,6 @@ function glLiveQuery() {
   const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
   if (cap) q.set("capacity_kwh", cap);
   if (lastData && lastData.vehicle && lastData.vehicle.vin) q.set("vin", lastData.vehicle.vin);
-  // Dimmed, the page redraws once a second: it asks the server for no more
-  // frames than that (the stream is reopened when the dimming changes).
-  if (document.body.classList.contains("gl-dim")) q.set("pace", "slow");
   return q.toString();
 }
 
