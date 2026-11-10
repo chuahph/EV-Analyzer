@@ -5055,6 +5055,9 @@ function glLiveQuery() {
   const cap = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
   if (cap) q.set("capacity_kwh", cap);
   if (lastData && lastData.vehicle && lastData.vehicle.vin) q.set("vin", lastData.vehicle.vin);
+  // Dimmed, the page redraws once a second: it asks the server for no more
+  // frames than that (the stream is reopened when the dimming changes).
+  if (document.body.classList.contains("gl-dim")) q.set("pace", "slow");
   return q.toString();
 }
 
@@ -5604,7 +5607,7 @@ ${glMapArea("dial", `<div class="gl-map-slot gl-map-mini gl-twin-map" data-map="
           <b>${pct != null ? n(pct, 1, true) : "—"}<small>%</small></b>
           <span class="gl-twin-cells">${Array.from({ length: 10 }, (_, i) => `<i class="${pct != null && pct >= (9 - i) * 10 + 5 ? "on" : ""}"></i>`).join("")}</span>
           <em>${range != null ? n(range) + " km" : ""}</em></div></div>
-      <div class="gl-twin-strip"><span class="gl-twin-h">${src ? (t ? "This drive" : "Last trip") : "Trip"}</span>${strip}</div>
+      <div class="gl-twin-strip"><span class="gl-twin-h">${src ? (t ? "This<br>drive" : "Last<br>trip") : "Trip"}</span>${strip}</div>
     </div>`;
   }
   if (skin === 6) {

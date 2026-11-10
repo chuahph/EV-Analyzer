@@ -14350,3 +14350,18 @@ def test_live_answer_stays_valid_json_with_absurd_readings():
         assert routes._live_finite({"a": [float("inf"), 1.0], "b": float("nan")}) == {"a": [None, 1.0], "b": None}
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_live_stream_frames_are_paced_and_a_dimmed_page_gets_fewer():
+    """Readings from the car arrive many times a second; each used to go down
+    the connection as a whole frame (ten a second). They now fold into
+    frames LIVE_STREAM_GAP_S apart, or LIVE_STREAM_SLOW_GAP_S for a dimmed
+    page (pace=slow), and the gaps are what the page redraws at."""
+    from app.api import routes as routes_mod
+
+    assert routes_mod.LIVE_STREAM_GAP_S >= 0.2          # at most about five a second
+    assert routes_mod.LIVE_STREAM_SLOW_GAP_S >= 1.0     # a dimmed page redraws once a second
+    assert routes_mod.LIVE_STREAM_SLOW_GAP_S > routes_mod.LIVE_STREAM_GAP_S
+    import inspect
+    sig = inspect.signature(routes_mod.live_stream)
+    assert "pace" in sig.parameters

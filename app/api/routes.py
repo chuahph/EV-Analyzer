@@ -17041,6 +17041,7 @@ async def live_stream(
     request: Request,
     vin: str | None = Query(None),
     capacity_kwh: float | None = Query(None, gt=20, lt=200, allow_inf_nan=False),
+    pace: str | None = Query(None, max_length=8),
 ):
     """The same answer as /api/live, pushed the instant a record arrives
     (Server-Sent Events), so the page shows each reading as the relay
@@ -17048,10 +17049,20 @@ async def live_stream(
     connection costs the database nothing. A comment line every 15 s keeps
     proxies from closing a quiet connection, and the stream ends after an
     hour so a forgotten tab does not hold one open for ever (the page simply
-    reconnects)."""
+    reconnects).
+
+    Frames are paced: the car sends several readings a second and each used
+    to go down the connection as a whole frame (a phone on mobile data was
+    getting up to ten a second, more than it can draw). A frame is always the
+    complete current answer, so readings that arrive within the gap fold into
+    the next one and nothing is lost. LIVE_STREAM_GAP_S apart normally; a page
+    that is dimmed (pace=slow) asks for LIVE_STREAM_SLOW_GAP_S, which is as
+    often as it redraws."""
     import asyncio
 
     from fastapi.responses import StreamingResponse
+
+    min_gap = LIVE_STREAM_SLOW_GAP_S if pace == "slow" else LIVE_STREAM_GAP_S
 
     async def events():
         # A frame goes out the moment the stream opens (the sentinel never
@@ -17059,6 +17070,7 @@ async def live_stream(
         # say left the page waiting 15 s for its first frame, polling meanwhile.
         last_v, last_beat, opened = object(), time.monotonic(), time.monotonic()
         last_touch = 0.0
+        last_sent = 0.0
         while time.monotonic() - opened < 3600:
             if await request.is_disconnected():
                 return
@@ -17073,9 +17085,9 @@ async def live_stream(
                     await asyncio.to_thread(_record_live_view, target, *closed)
             car = _LIVE_MEM.get(target) if target else None
             v = (car or {}).get("_v")
-            if v != last_v:
+            if v != last_v and time.monotonic() - last_sent >= min_gap:
                 last_v = v
-                last_beat = time.monotonic()
+                last_beat = last_sent = time.monotonic()
                 yield "data: " + _json_mod.dumps(_live_payload_safe(target, capacity_kwh)) + "\n\n"
             elif time.monotonic() - last_beat > 15:
                 last_beat = time.monotonic()
@@ -17085,6 +17097,10 @@ async def live_stream(
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+LIVE_STREAM_GAP_S = 0.25
+LIVE_STREAM_SLOW_GAP_S = 1.0
 
 
 @router.api_route("/telemetry/charge-end-level", methods=["GET", "POST"])

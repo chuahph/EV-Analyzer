@@ -3680,3 +3680,13 @@ main > .card { max-width: 100%; }
 /* A narrow full map (small phones): the destination box leaves room for a
    three-digit speed beside it. */
 @container (max-width: 620px) { .gl-mapo-nav { max-width: 46%; } }
+/* The Dial's trip boxes kept low, so the dials and the map above get the
+   height: label and figure close together, little padding. */
+.gl-twin { row-gap: 6px; }
+.gl-twin-strip .gl-hud-stat { padding: 3px 8px 4px; gap: 0; justify-content: center; }
+.gl-twin-strip .gl-hud-stat span { font-size: clamp(8px, calc(2.3 * var(--gh)), 11px); line-height: 1.15; margin: 0; }
+.gl-twin-strip .gl-hud-stat strong { font-size: clamp(14px, calc(4.3 * var(--gh)), 22px); line-height: 1.05; margin: 0; }
+.gl-twin-strip .gl-hud-stat .gl-ic { width: 11px; height: 11px; }
+/* Its heading in two short lines, not upright: upright it was taller than
+   the boxes and set the whole strip's height. */
+.gl-twin-h { writing-mode: horizontal-tb; transform: none; text-align: right; line-height: 1.15; font-size: clamp(8px, calc(2.2 * var(--gh)), 10px); }
