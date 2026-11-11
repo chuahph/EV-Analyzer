@@ -3349,7 +3349,10 @@ main > .card { max-width: 100%; }
   color: var(--muted); font: 600 13px system-ui, sans-serif; letter-spacing: .04em;
   background: rgba(8, 12, 18, .82); text-align: center; padding: 0 10px; }
 .gl-mapo { position: absolute; z-index: 2; color: #e8fbff; border-radius: 10px; padding: 5px 10px;
-  background: rgba(5, 10, 16, .8); border: 1px solid rgba(34, 211, 238, .3); backdrop-filter: blur(3px); }
+  background: rgba(5, 10, 16, .88); border: 1px solid rgba(34, 211, 238, .3); }
+/* No backdrop blur on a box over the map: the map under it moves many times
+   a second, and the phone had to blur that patch again on every frame. The
+   box is a little more solid instead. */
 .gl-mapo small { font-size: .45em; color: var(--muted); margin-left: 3px; letter-spacing: .04em; text-transform: uppercase; }
 .gl-mapo-spd { left: 8px; top: 8px; display: flex; align-items: baseline; gap: 4px; }
 .gl-mapo-spd strong { font: 700 clamp(30px, calc(11 * var(--gh, 4px)), 52px)/1 "Chakra Petch", system-ui, sans-serif;
