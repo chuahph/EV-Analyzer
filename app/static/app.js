@@ -7084,6 +7084,7 @@ function glFitRow(row) {
 
 // Sizes that depend on a box's own height, set once per draw: the Cockpit's
 // trip tiles (data-fit on the pager: short, small, tiny) and Mix's speed.
+const GL_CUT = { sig: "", n: 0 };
 function glFitSized(root) {
   // The Dial's power dial takes the speed dial's drawn size, whichever of its
   // box's height or width limits that (the gear column narrows it on a small
@@ -7104,10 +7105,23 @@ function glFitSized(root) {
     // From the full set each time: after a resize to a taller screen, figures
     // dropped for the shorter one come back.
     const steps = ["cut2", "cut1", "cut0", "cuth", "cutf", "cutg", "cutx"];
-    box.classList.remove(...steps);
-    for (const step of steps) {
-      if (box.scrollHeight <= box.clientHeight + 1) break;
-      box.classList.add(step);
+    // The answer for this box, screen and set of figures is kept: a redraw
+    // (once a second) applies it and checks it still fits, one measurement
+    // in place of one per step. A change of screen or figures starts over.
+    const sig = [box.dataset.mapflip, innerWidth, innerHeight, box.querySelectorAll("b").length, box.querySelectorAll("em").length].join("|");
+    let done = false;
+    if (GL_CUT.sig === sig) {
+      box.classList.add(...steps.slice(0, GL_CUT.n));
+      done = box.scrollHeight <= box.clientHeight + 1;
+      if (!done) box.classList.remove(...steps);
+    }
+    if (!done) {
+      let n = 0;
+      for (const step of steps) {
+        if (box.scrollHeight <= box.clientHeight + 1) break;
+        box.classList.add(step); n++;
+      }
+      GL_CUT.sig = sig; GL_CUT.n = n;
     }
   }
   const vp = root.querySelector(".gl-vpages"), t = vp && vp.querySelector(".gl-vpage > .gl-rt");
@@ -7139,34 +7153,51 @@ function glFit(root) {
   for (const [e, fs] of fix) e.style.fontSize = fs.toFixed(1) + "px";
   // A box title that does not fit takes its short form (Est. range: Range).
   for (const e of root.querySelectorAll("[data-short]")) {
-    if (!e.dataset.long) e.dataset.long = e.textContent;
-    e.textContent = e.dataset.long;
+    // Written only when it changes: every write here makes the browser lay
+    // the whole page out again at the next measurement (once a second).
+    const long = e.dataset.long || e.textContent;
+    if (e.textContent !== long) e.textContent = long;
     const rg = document.createRange(); rg.selectNodeContents(e);
-    if (rg.getBoundingClientRect().width > e.clientWidth - 0.5) e.textContent = e.dataset.short;
+    if (rg.getBoundingClientRect().width > e.clientWidth - 0.5) { e.dataset.long = long; e.textContent = e.dataset.short; }
   }
   // A tile label that still runs past its tile: the tile's icon gives way.
+  // Measured for every tile together, then written together (and once more
+  // for the second step): a write between two measurements makes the browser
+  // lay the whole page out again, and tile by tile that was two layouts a
+  // tile, every second.
+  const tiles = [];
   for (const t of root.querySelectorAll(".gl-rt")) {
     const ic = t.querySelector("i"), lab = t.querySelector("span");
     if (!ic || !lab) continue;
-    ic.style.display = "";
-    lab.style.fontSize = "";
+    if (ic.style.display) ic.style.display = "";
+    if (lab.style.fontSize) lab.style.fontSize = "";
     const rg = document.createRange(); rg.selectNodeContents(lab);
-    const edge = t.getBoundingClientRect().right - parseFloat(getComputedStyle(t).paddingRight || 0);
-    // A label a little too wide shrinks (to 85% at most) and keeps its icon;
-    // only a label still too wide then loses the icon.
-    let past = rg.getBoundingClientRect().right - edge;
-    if (past > 0.5) {
-      const fs0 = parseFloat(getComputedStyle(lab).fontSize), w0 = rg.getBoundingClientRect().width;
-      const fit = fs0 * (w0 - past) / w0 * 0.98;
-      if (fit >= fs0 * 0.85) lab.style.fontSize = fit.toFixed(1) + "px";
-      else ic.style.display = "none";
-    }
-    // Still past the edge with the icon gone: the label shrinks to fit.
-    const over = rg.getBoundingClientRect().right - edge;
-    if (over > 0.5) {
-      const fs = parseFloat(getComputedStyle(lab).fontSize), w = rg.getBoundingClientRect().width;
-      lab.style.fontSize = Math.max(6.5, fs * (w - over) / w * 0.97).toFixed(1) + "px";
-    }
+    tiles.push({ t, ic, lab, rg });
+  }
+  for (const x of tiles) {
+    const r = x.rg.getBoundingClientRect();
+    x.edge = x.t.getBoundingClientRect().right - parseFloat(getComputedStyle(x.t).paddingRight || 0);
+    x.past = r.right - x.edge; x.w0 = r.width;
+    if (x.past > 0.5) x.fs0 = parseFloat(getComputedStyle(x.lab).fontSize);
+  }
+  // A label a little too wide shrinks (to 85% at most) and keeps its icon;
+  // only a label still too wide then loses the icon.
+  const again = [];
+  for (const x of tiles) {
+    if (!(x.past > 0.5)) continue;
+    const fit = x.fs0 * (x.w0 - x.past) / x.w0 * 0.98;
+    if (fit >= x.fs0 * 0.85) x.lab.style.fontSize = fit.toFixed(1) + "px";
+    else x.ic.style.display = "none";
+    again.push(x);
+  }
+  // Still past the edge with the icon gone: the label shrinks to fit.
+  for (const x of again) {
+    const r = x.rg.getBoundingClientRect();
+    x.over = r.right - x.edge; x.w = r.width;
+    if (x.over > 0.5) x.fs = parseFloat(getComputedStyle(x.lab).fontSize);
+  }
+  for (const x of again) {
+    if (x.over > 0.5) x.lab.style.fontSize = Math.max(6.5, x.fs * (x.w - x.over) / x.w * 0.97).toFixed(1) + "px";
   }
   // Heading rows (the odometer line, the trace and battery headings, the
   // power line): measured as laid out. Too wide for the box, the optional
