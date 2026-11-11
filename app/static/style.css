@@ -3690,3 +3690,19 @@ main > .card { max-width: 100%; }
 /* Its heading in two short lines, not upright: upright it was taller than
    the boxes and set the whole strip's height. */
 .gl-twin-h { writing-mode: horizontal-tb; transform: none; text-align: right; line-height: 1.15; font-size: clamp(8px, calc(2.2 * var(--gh)), 10px); }
+/* Navigating, a side box's figures: the route, the rest of it, this drive.
+   Two across, three where the box is wide (the Dial's middle). */
+.gl-nv-sub { grid-column: 1 / -1; font: 700 min(4.2cqw, 2.5vh, 11px)/1.2 system-ui, sans-serif; font-style: normal;
+  letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; margin-bottom: 1px; }
+.gl-numsv .gl-nv-go { border-top: 1px solid #1d2a38; }
+.gl-numsv .gl-nv-go b { font-size: min(8.5cqw, 4.8vh, 24px); }
+@container (min-width: 380px) {
+  .gl-numsv .gl-nv-go { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .gl-numsv .gl-nv-go b { font-size: min(6.5cqw, 4.8vh, 26px); }
+}
+.gl-numsv.cut0 .gl-nv-nav ~ .gl-nv-go { display: grid; }
+.gl-numsv.cut0 .gl-nv-so, .gl-numsv.cuth .gl-nv-sub { display: none; }
+.gl-numsv.cutf .gl-nv-go b { font-size: min(7cqw, 4vh, 20px); }
+/* Shortest boxes: two of the rest-of-route figures, then none of them. */
+.gl-numsv.cutg .gl-nv-go b:nth-of-type(n+3), .gl-numsv.cutx .gl-nv-go { display: none; }
+.gl-numsv.cut0 .gl-nv-nav ~ .gl-nv-so { display: none; }

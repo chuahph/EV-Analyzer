@@ -5818,7 +5818,7 @@ function glMapArea(key, slot, o) {
     return slot.slice(0, at) + slot.slice(at).replace('<div class="gl-map-slot', `<div data-mapflip="${key}"${fin} class="gl-map-slot${inCls}`);
   }
   const cls = (slot.match(/<div class="(gl-map-slot[^"]*)"/) || [, "gl-map-slot"])[1];
-  return `<div class="${cls} gl-numsv${inCls}" data-mapflip="${key}"${fin}>${glNumsView(o, cls.includes("gl-map-mini"))}</div>`;
+  return `<div class="${cls} gl-numsv${inCls}" data-mapflip="${key}"${fin}>${glNumsView(o, cls.includes("gl-map-mini"), key)}</div>`;
 }
 // The footer's flip chip, for a page with a map (or its figures) on it.
 function glFlipChip(body) {
@@ -5829,7 +5829,7 @@ function glFlipChip(body) {
   const zoom = nums ? "" : `<button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="-1" aria-label="Zoom the map out">−</button><button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="1" aria-label="Zoom the map in">+</button>`;
   return `${zoom}<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
 }
-function glNumsView(o, mini) {
+function glNumsView(o, mini, key) {
   const { nav, t, lt, kw, pct, tw, n, spd, nw, navOnly } = o;
   const dist = t ? t.distance_km : lt && lt.distance_km;
   const mins = t ? t.duration_min : lt && lt.duration_min;
@@ -5881,6 +5881,50 @@ function glNumsView(o, mini) {
     const speedF = nw ? `<div class="gl-nv-spd" style="color:${spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff"}">${spd != null ? Math.round(spd) : "—"}<small>km/h</small>
     <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
     return `${speedF}${side}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
+  }
+  // A side box navigating: the route, then what the rest of it takes (all
+  // from the car's own % on arrival and route figures), then this drive's
+  // figures the design shows nowhere else. o1 / o2 give way on short screens.
+  if (mini && nav) {
+    const L = glLiveState.data || {}, now = nw || L.now || {};
+    const pctNow = pct ?? now.battery_level ?? now.soc ?? null;
+    const pack = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+    const estFull = lastData && lastData.battery && lastData.battery.est_full_range_km;
+    const lc = (lastData && lastData.last_charge) || {};
+    const rate = o.costRate ?? (lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null);
+    const cur = o.cur || (lastData && lastData.currency) || "RM";
+    const f = (val, unit, tone = "", cls = "") => `<b class="${tone}${cls ? " " + cls : ""}">${val}<small>${unit}</small></b>`;
+    const ap = nav.arrive_pct;
+    const needPct = pctNow != null && ap != null ? Math.max(0, pctNow - ap) : null;
+    const needKwh = needPct != null && pack ? needPct * pack / 100 : null;
+    const whGo = needKwh != null && nav.km > 0.5 ? needKwh * 1000 / nav.km : null;
+    const spdGo = nav.km != null && nav.minutes > 0 ? nav.km / (nav.minutes / 60) : null;
+    const rangeNow = now.range_km ?? o.range ?? null;
+    const kmLeft = ap == null ? null : estFull ? estFull * ap / 100 : rangeNow != null && pctNow > 0 ? rangeNow * ap / pctNow : null;
+    const togo = [
+      f(needKwh != null ? n(needKwh, 1, true) : "—", "kWh to go"),
+      f(needPct != null ? n(needPct, 1, true) : "—", "% batt to go"),
+      // Over a short way the car's % on arrival (to 0.1) is too coarse for this.
+      ...(whGo != null && nav.km >= 3 ? [f(n(whGo), "Wh/km to go")] : []),
+      f(kmLeft != null ? n(kmLeft) : "—", "km range there", ap != null && ap < 15 ? "warn" : "", "o1"),
+      f(spdGo != null ? n(spdGo) : "—", "avg km/h to go", "", "o1"),
+      f(rate != null && needKwh != null ? n(needKwh * rate, 2, true) : "—", `cost to go ${cur}`, "", "o2"),
+    ];
+    // This drive: only what the design has no other place for.
+    const used = o.usedPct ?? (t && pack && t.energy_kwh > 0 ? Math.min(100, t.energy_kwh / pack * 100) : null);
+    const costSoFar = rate != null && t && t.energy_kwh != null ? n(t.energy_kwh * rate, 2, true) : "—";
+    const kwTxt = kw == null ? "—" : n(Math.abs(kw), 1);
+    const kwF = f(kwTxt, kw != null && kw < 0 ? (now.charging ? "charge kW" : "regen kW") : "kW now", kw != null && kw < 0 ? "good" : "");
+    const drive = !t ? [] : key === "dial" ? [
+      f(v(t.regen_kwh, 2), "regen kWh", "good"), f(v(used, 2, true), "% batt used"), f(costSoFar, `cost ${cur}`, "", "o2"),
+    ] : key === "cockpit" ? [
+      f(v(t.distance_km, 1, true), "km"), f(v(t.duration_min), "min"), kwF, f(costSoFar, `cost ${cur}`, "", "o2"),
+      f(v(now.out_temp), "°C outside", "", "o2"),
+    ] : [
+      f(costSoFar, `cost ${cur}`),
+    ];
+    return `${navBlock}<div class="gl-nv-trip gl-nv-mini gl-nv-go"><em class="gl-nv-sub">Rest of the route</em>${togo.join("")}</div>${
+      drive.length ? `<div class="gl-nv-trip gl-nv-mini gl-nv-go gl-nv-so"><em class="gl-nv-sub">This drive so far</em>${drive.join("")}</div>` : ""}`;
   }
   // A side box (Round Mix, Dial, the Cockpit) with no destination: the
   // drive, or parked the last trip, in full, then the battery now. Figures
@@ -7048,7 +7092,7 @@ function glFitSized(root) {
   if (box) {
     // From the full set each time: after a resize to a taller screen, figures
     // dropped for the shorter one come back.
-    const steps = ["cut2", "cut1", "cut0", "cuth", "cutf"];
+    const steps = ["cut2", "cut1", "cut0", "cuth", "cutf", "cutg", "cutx"];
     box.classList.remove(...steps);
     for (const step of steps) {
       if (box.scrollHeight <= box.clientHeight + 1) break;
