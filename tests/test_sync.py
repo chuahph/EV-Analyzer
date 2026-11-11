@@ -2792,3 +2792,32 @@ def test_rising_energy_on_the_move_does_not_end_a_trip():
         if r:
             closed.append(r)
     assert closed == [] and shadow.get("open")
+
+
+def test_a_tesla_destination_charger_is_ac_though_the_car_names_it_tesla():
+    """Charge #106 (11 Nov 2026): 11.6 kW for 132 minutes from 74%, filed DC
+    because the car named the charger Tesla, as it does a Supercharger."""
+    from app.sync import stream_charge_is_dc
+
+    def tel(ts, ac, dc, kwh, **extra):
+        f = {"EnergyRemaining": kwh, "Soc": 74.5, "Gear": "ShiftStateP", "VehicleSpeed": 0.0,
+             "DetailedChargeState": "DetailedChargeStateCharging",
+             "ACChargingEnergyIn": ac, "DCChargingEnergyIn": dc, "ACChargingPower": 11.6}
+        f.update(extra)
+        return snapshot_from_telemetry(f, ts=ts)
+
+    shadow: dict = {}
+    advance_charge(shadow, tel(0, 0.0, 0.0, 50.0))
+    advance_charge(shadow, tel(120, 0.38, 0.36, 50.36, FastChargerType="Tesla", _kt={"FastChargerType": 120}))
+    for minute in range(5, 131, 5):
+        advance_charge(shadow, tel(minute * 60, minute * 0.19, minute * 0.18, 50.0 + minute * 0.18))
+    done = advance_charge(shadow, _charge_tel(132 * 60, 0, 0, 50.0 + 130 * 0.18, charging=False))
+    assert done is not None and done["network"] == "Tesla" and done["fast"] is False
+
+    base = {"fast": True, "duration_min": 132.3, "soc_start": 74.49, "peak_kw": 11.6,
+            "kwh_pack_meter": 18.02, "kwh_pack_level": 17.4, "kwh_wall": None}
+    assert stream_charge_is_dc(base) is False
+    # Energy in faster than the onboard charger passes: DC, whatever the power read.
+    assert stream_charge_is_dc({**base, "duration_min": 40.0, "kwh_wall": 19.0}) is True
+    # Too short to judge: the car's word stands.
+    assert stream_charge_is_dc({**base, "duration_min": 12.0, "kwh_pack_meter": 2.0, "kwh_pack_level": 2.0}) is True

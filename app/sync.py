@@ -2607,7 +2607,7 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
         fast = True
     soc_start, soc_end, soc_via = _charge_end_levels(start, end, level_first, level_last)
 
-    return {
+    rec = {
         "start_ts": float(start["ts"]),
         "end_ts": float(end["ts"]),
         "start_time": _dt(start["ts"]).isoformat(timespec="seconds"),
@@ -2683,6 +2683,58 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
         # Nothing writes a Charge row from this. It is evidence.
         "state_raw": end.get("charge_state_raw"),
     }
+    # "Tesla" names the plug, not the speed: a Tesla destination (wall)
+    # charger is AC and reports the same name a Supercharger does. Charge
+    # #106 (11 Nov 2026): 11.6 kW for 132 minutes, filed DC on the name alone.
+    rec["fast"] = stream_charge_is_dc(rec)
+    return rec
+
+
+# A streamed charge called DC (by the charger's name or the car's state) is AC
+# all the same when its own figures say it ran through the onboard charger:
+#   * its power never passed what any onboard charger takes, and
+#   * the AC meter (ACChargingEnergyIn, which a DC session bypasses) rose with
+#     the pack; or, with no AC meter reading, the power stayed within this
+#     car's onboard charger over a session long enough, and starting low
+#     enough in the pack, that a DC charger would have shown more.
+CHARGE_ONBOARD_MAX_KW = 22.0
+CHARGE_AC_METER_MIN_KWH = 0.5
+CHARGE_AC_METER_MIN_SHARE = 0.5
+CHARGE_AC_BY_POWER_MAX_KW = 12.0
+CHARGE_AC_BY_POWER_MIN_MIN = 20.0
+CHARGE_AC_BY_POWER_MAX_START_SOC = 85.0
+
+
+def stream_charge_is_dc(c: dict[str, Any]) -> bool:
+    """Whether a closed streamed charge (see _charge_close) was DC."""
+    if not c.get("fast"):
+        return False
+    try:
+        wall = float(c["kwh_wall"]) if c.get("kwh_wall") is not None else None
+        pack = max((float(c[k]) for k in ("kwh_pack_meter", "kwh_pack_level")
+                    if c.get(k) is not None), default=0.0)
+        peak = float(c.get("peak_kw") or 0.0)
+        mins = float(c.get("duration_min") or 0.0)
+        soc0 = float(c["soc_start"]) if c.get("soc_start") is not None else None
+    except (TypeError, ValueError):
+        return True
+    if peak > CHARGE_ONBOARD_MAX_KW:
+        return True
+    # Nor is it AC when the energy came in faster than the onboard charger
+    # can pass, whatever the power readings were (the rule above this one).
+    if mins >= AC_CLASSIFY_MIN_MIN and max(wall or 0.0, pack) / (mins / 60.0) > AC_MAX_KW:
+        return True
+    # Too short a session says too little either way: the car's word stands.
+    if mins < CHARGE_AC_BY_POWER_MIN_MIN:
+        return True
+    if (wall is not None and wall >= CHARGE_AC_METER_MIN_KWH
+            and wall >= CHARGE_AC_METER_MIN_SHARE * pack):
+        return False
+    if ((wall is None or wall < CHARGE_AC_METER_MIN_KWH) and 0 < peak < CHARGE_AC_BY_POWER_MAX_KW
+            and mins >= CHARGE_AC_BY_POWER_MIN_MIN
+            and soc0 is not None and soc0 < CHARGE_AC_BY_POWER_MAX_START_SOC):
+        return False
+    return True
 
 
 def recover_sleep_gap(prev: dict[str, Any], nxt: dict[str, Any],

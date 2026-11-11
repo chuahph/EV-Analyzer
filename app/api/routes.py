@@ -5203,7 +5203,9 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             charger_network=(
                 (str(c.get("network") or "") in (("", "CCS") if fast else ("", "Tesla"))
                  and pricing_prefs.place_network(session, loc_label, "DC" if fast else "AC"))
-                or str(c.get("network") or ""))[:16],
+                # A charger the car names Tesla, on AC, is a destination charger.
+                or ("TDC" if not fast and str(c.get("network") or "") == "Tesla"
+                    else str(c.get("network") or "")))[:16],
         )
         session.add(row)
         # Usable capacity is fitted from charges, so a session that only the
@@ -5373,47 +5375,12 @@ ARRIVAL_REPAIR_EVERY_SEC = 24 * 3600.0
 ARRIVAL_REPAIR_RECENT_DAYS = 2
 
 
-# A streamed charge the car's state called DC is AC all the same when its own
-# figures say so (charge #106, 11 Nov 2026: 11.6 kW for 132 minutes at QBM's
-# destination charger, filed DC):
-#   * the AC meter (ACChargingEnergyIn) rose with the pack. It only counts
-#     energy through the onboard charger, which a DC session bypasses; or
-#   * with no AC meter to read, the power never passed what the onboard
-#     charger can take, over a session long enough and low enough in the pack
-#     that a DC charger would have shown more.
-CHARGE_AC_METER_MIN_KWH = 0.5
-CHARGE_AC_METER_MIN_SHARE = 0.5
-CHARGE_ONBOARD_MAX_KW = 22.0     # no onboard (AC) charger takes more
-CHARGE_AC_MAX_KW = 12.0          # this car's onboard charger: 11 kW
-CHARGE_AC_BY_POWER_MIN_MIN = 20.0
-CHARGE_AC_BY_POWER_MAX_START_SOC = 85.0
-
-
 def _stream_charge_is_dc(c: dict) -> bool:
-    """Whether a streamed charge was DC: the car's state, unless its own
-    meters or power say it ran through the onboard (AC) charger."""
-    if not c.get("fast"):
-        return False
-    try:
-        wall = float(c["kwh_wall"]) if c.get("kwh_wall") is not None else None
-        pack = max((float(c[k]) for k in ("kwh_pack_meter", "kwh_pack_level")
-                    if c.get(k) is not None), default=0.0)
-        peak = float(c.get("peak_kw") or 0.0)
-        mins = float(c.get("duration_min") or 0.0)
-        soc0 = float(c["soc_start"]) if c.get("soc_start") is not None else None
-    except (TypeError, ValueError):
-        return True
-    # Above what any onboard charger takes, it is DC whatever a meter reads.
-    if peak > CHARGE_ONBOARD_MAX_KW:
-        return True
-    if wall is not None and wall >= CHARGE_AC_METER_MIN_KWH and wall >= CHARGE_AC_METER_MIN_SHARE * pack:
-        return False
-    # (A meter that barely moved is no reading either.)
-    if ((wall is None or wall < CHARGE_AC_METER_MIN_KWH) and 0 < peak < CHARGE_AC_MAX_KW
-            and mins >= CHARGE_AC_BY_POWER_MIN_MIN
-            and soc0 is not None and soc0 < CHARGE_AC_BY_POWER_MAX_START_SOC):
-        return False
-    return True
+    """Whether a streamed charge was DC (sync.stream_charge_is_dc): what the
+    car called it, unless its own meters or power say it ran through the
+    onboard (AC) charger. Re-read here so records closed before that rule
+    are judged by it too."""
+    return sync_mod.stream_charge_is_dc(c)
 
 
 CHARGE_TEMP_DRIVE_GAP_MIN = 60   # a drive ending this close before a charge arrived at it
