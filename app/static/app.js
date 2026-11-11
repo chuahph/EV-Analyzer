@@ -5842,17 +5842,22 @@ function glToGo(o, f) {
   const rate = o.costRate ?? (lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null);
   const cur = o.cur || (lastData && lastData.currency) || "RM";
   const ap = nav.arrive_pct;
-  const needPct = pctNow != null && ap != null ? Math.max(0, pctNow - ap) : null;
+  // Arriving with more than now, the route has a charging stop in it: what
+  // the rest takes cannot be told from the two figures, so none is shown.
+  const needPct = pctNow != null && ap != null && ap <= pctNow + 0.05 ? Math.max(0, pctNow - ap) : null;
   const needKwh = needPct != null && pack ? needPct * pack / 100 : null;
   const whGo = needKwh != null && nav.km > 0.5 ? needKwh * 1000 / nav.km : null;
   const spdGo = nav.km != null && nav.minutes > 0 ? nav.km / (nav.minutes / 60) : null;
   const rangeNow = now.range_km ?? o.range ?? null;
-  const kmLeft = ap == null ? null : estFull ? estFull * ap / 100 : rangeNow != null && pctNow > 0 ? rangeNow * ap / pctNow : null;
+  // The range on arrival: the car's own range now, scaled to the % it will
+  // arrive with, so it agrees with the range shown beside it.
+  const kmLeft = ap == null ? null : rangeNow != null && pctNow > 0 ? rangeNow * ap / pctNow : estFull ? estFull * ap / 100 : null;
   return { now, pctNow, pack, rate, cur, rangeNow, togo: [
     f(needKwh != null ? n(needKwh, 1, true) : "—", "kWh to go"),
     f(needPct != null ? n(needPct, 1, true) : "—", "% batt to go"),
     // Over a short way the car's % on arrival (to 0.1) is too coarse for this.
-    ...(whGo != null && nav.km >= 3 ? [f(n(whGo), "Wh/km to go")] : []),
+    // Nor is a figure no car drives at (the two % readings disagreeing).
+    ...(whGo != null && nav.km >= 3 && whGo >= 40 && whGo <= 500 ? [f(n(whGo), "Wh/km to go")] : []),
     f(kmLeft != null ? n(kmLeft) : "—", "km range there", ap != null && ap < 15 ? "warn" : "", "o1"),
     f(spdGo != null ? n(spdGo) : "—", "avg km/h to go", "", "o1"),
     f(rate != null && needKwh != null ? n(needKwh * rate, 2, true) : "—", `cost to go ${cur}`, "", "o2"),
@@ -7113,11 +7118,14 @@ function glFitSized(root) {
     const sig = [box.dataset.mapflip, innerWidth, innerHeight, box.querySelectorAll("b").length, box.querySelectorAll("em").length].join("|");
     let done = false;
     if (GL_CUT.sig === sig) {
+      box.classList.remove(...steps);
       box.classList.add(...steps.slice(0, GL_CUT.n));
       done = box.scrollHeight <= box.clientHeight + 1;
       if (!done) box.classList.remove(...steps);
     }
     if (!done) {
+      // From the full set (a fit after a resize runs on markup already cut).
+      box.classList.remove(...steps);
       let n = 0;
       for (const step of steps) {
         if (box.scrollHeight <= box.clientHeight + 1) break;
