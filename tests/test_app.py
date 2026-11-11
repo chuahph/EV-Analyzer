@@ -14459,3 +14459,38 @@ def test_streamed_charge_the_car_called_dc_is_ac_when_its_figures_say_so():
         state.put(sess, state.TELEMETRY_CHARGES_KEY, prev or "[]")
         sess.commit(); sess.close()
         settings.app_passcode = old_pc
+
+
+def test_a_tesla_destination_charger_session_is_free_of_charge():
+    from app import sync as sync_mod
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+    from app.models import Charge, Vehicle
+
+    with TestClient(app):
+        pass
+    with SessionLocal() as s:
+        vid = s.scalars(select(Vehicle.id)).first()
+        at = sync_mod.now_local().replace(microsecond=0) - timedelta(days=500)
+
+        def mk(**kw):
+            base = dict(vehicle_id=vid, start_time=at, end_time=at + timedelta(hours=2), duration_min=120,
+                        start_soc=74, end_soc=100, energy_added_kwh=18.0, charge_type="AC", max_power_kw=11.6,
+                        location="T", cost=18.73, source="telemetry", charger_network="TDC")
+            base.update(kw)
+            return Charge(**base)
+
+        tdc, receipt, dc, plain = mk(), mk(billed_kwh=19.5, cost=20.0), mk(charge_type="DC", charger_network="Tesla"), mk(charger_network="")
+        s.add_all([tdc, receipt, dc, plain]); s.commit()
+        try:
+            assert routes_mod.repair_tdc_free(s) >= 1
+            for r in (tdc, receipt, dc, plain):
+                s.refresh(r)
+            assert tdc.cost == 0.0 and tdc.is_free is True
+            assert receipt.cost == 20.0                      # a receipt's price stands
+            assert dc.cost == 18.73 and plain.cost == 18.73  # not a destination charger
+            assert routes_mod.repair_tdc_free(s) == 0        # nothing left to do
+        finally:
+            for r in (tdc, receipt, dc, plain):
+                s.delete(r)
+            s.commit()

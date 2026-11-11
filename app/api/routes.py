@@ -5138,7 +5138,9 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             row.price_source = src
             row.is_free = rate == 0
             if (row.charger_network or "") in ("Tesla", "CCS", "CHAdeMO", "GB"):
-                row.charger_network = (pricing_prefs.place_network(session, row.location, "AC") or "")[:16]
+                row.charger_network = (pricing_prefs.place_network(session, row.location, "AC")
+                                       or ("TDC" if row.charger_network == "Tesla" else ""))[:16]
+            _tdc_is_free(row)
         # Duration follows the boundaries it is derived from.
         row.duration_min = round(
             (row.end_time - row.start_time).total_seconds() / 60.0, 1)
@@ -5207,6 +5209,7 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
                 or ("TDC" if not fast and str(c.get("network") or "") == "Tesla"
                     else str(c.get("network") or "")))[:16],
         )
+        _tdc_is_free(row)
         session.add(row)
         # Usable capacity is fitted from charges, so a session that only the
         # stream saw has to feed the same EMA a polled one does — otherwise
@@ -5409,6 +5412,30 @@ def _charge_temp_kw(session: Session, vehicle_id: int, c: dict, c_start: datetim
     if t is None:
         t = _arrival_temp(session, vehicle_id, c_start)
     return {} if t is None else {"outside_temp_c": round(float(t), 1)}
+
+
+def _tdc_is_free(row) -> bool:
+    """A Tesla Destination Charger session is free of charge (the owner's
+    rule, 11 Nov 2026): cost 0 and marked free. Never a session priced from a
+    receipt. Returns whether the row changed."""
+    if (row.charger_network or "") != "TDC" or (row.charge_type or "AC") == "DC":
+        return False
+    if (row.price_source or "") == "receipt" or (row.billed_kwh or 0) > 0:
+        return False
+    if row.is_free and not (row.cost or 0):
+        return False
+    row.cost = 0.0
+    row.is_free = True
+    return True
+
+
+def repair_tdc_free(session: Session) -> int:
+    """Every saved TDC session not yet free is made so. Idempotent."""
+    n = sum(1 for row in session.scalars(
+        select(Charge).where(Charge.charger_network == "TDC")).all() if _tdc_is_free(row))
+    if n:
+        session.commit()
+    return n
 
 
 def repair_streamed_charges(session: Session) -> int:
@@ -13026,6 +13053,10 @@ def set_charger_network(
             pricing_prefs.remember_place_network(session, c.location, label, kind)
         if new_cost is not None:
             c.price_source, c.cost = "public", new_cost
+        # A destination charger is free of charge.
+        if _tdc_is_free(c):
+            plan["cost"] = [plan.get("cost", [None])[0], 0.0]
+            plan["is_free"] = True
         session.commit()
     return plan
 
