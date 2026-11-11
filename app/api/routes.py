@@ -5097,11 +5097,19 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
                 if value is not None and abs(
                         float(getattr(row, field) or 0.0) - float(value)) >= 0.01:
                     fixes[field] = float(value)
+            # A streamed row filed DC that its own figures say was AC (see
+            # _stream_charge_is_dc): its type, and the price that follows
+            # from it. Never a row priced from a receipt.
+            if ((row.source or "") == "telemetry" and row.charge_type == "DC"
+                    and c.get("fast") and not _stream_charge_is_dc(c)
+                    and (row.price_source or "") != "receipt"
+                    and not (getattr(row, "billed_kwh", None) or 0)):
+                fixes["charge_type"] = "AC"
             if fixes:
                 entry["action"] = "correct"
                 entry["corrections"] = {
-                    k: (v.isoformat(timespec="seconds")
-                        if hasattr(v, "isoformat") else round(v, 3))
+                    k: (v.isoformat(timespec="seconds") if hasattr(v, "isoformat")
+                        else v if isinstance(v, str) else round(v, 3))
                     for k, v in fixes.items()}
                 corrections.append((row, fixes, c))
         changed.append(entry)
@@ -5118,6 +5126,19 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
     for row, fixes, c in corrections:
         for field, value in fixes.items():
             setattr(row, field, value)
+        if fixes.get("charge_type") == "AC":
+            lat, lon = c.get("lat"), c.get("lon")
+            where = (f"{float(lat):.4f}, {float(lon):.4f}"
+                     if lat is not None and lon is not None else (row.location or ""))
+            src, rate, _prof = pricing_prefs.resolve_pricing(
+                session, settings, where, False, row.start_time, float(c.get("peak_kw") or 0.0))
+            payable = pricing_prefs.payable_kwh(row.energy_added_kwh, "AC", settings, session=session)
+            row.payable_kwh = round(payable, 3)
+            row.cost = round(payable * rate, 2)
+            row.price_source = src
+            row.is_free = rate == 0
+            if (row.charger_network or "") in ("Tesla", "CCS", "CHAdeMO", "GB"):
+                row.charger_network = (pricing_prefs.place_network(session, row.location, "AC") or "")[:16]
         # Duration follows the boundaries it is derived from.
         row.duration_min = round(
             (row.end_time - row.start_time).total_seconds() / 60.0, 1)
@@ -5144,7 +5165,7 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
         lat, lon = c.get("lat"), c.get("lon")
         raw_coords = (f"{float(lat):.4f}, {float(lon):.4f}"
                       if lat is not None and lon is not None else "")
-        fast = bool(c.get("fast"))
+        fast = _stream_charge_is_dc(c)
         loc_label = _place(raw_coords, session) if raw_coords else ""
         source, rate, charger_profile = pricing_prefs.resolve_pricing(
             session, settings, raw_coords or loc_label, fast, c_start,
@@ -5350,6 +5371,47 @@ ARRIVAL_REPAIR_EVERY_SEC = 24 * 3600.0
 # days can have changed, and scanning a month to fix yesterday is most of the
 # cost for none of the benefit.
 ARRIVAL_REPAIR_RECENT_DAYS = 2
+
+
+# A streamed charge the car's state called DC is AC all the same when its own
+# figures say so (charge #106, 11 Nov 2026: 11.6 kW for 132 minutes at QBM's
+# destination charger, filed DC):
+#   * the AC meter (ACChargingEnergyIn) rose with the pack. It only counts
+#     energy through the onboard charger, which a DC session bypasses; or
+#   * with no AC meter to read, the power never passed what the onboard
+#     charger can take, over a session long enough and low enough in the pack
+#     that a DC charger would have shown more.
+CHARGE_AC_METER_MIN_KWH = 0.5
+CHARGE_AC_METER_MIN_SHARE = 0.5
+CHARGE_ONBOARD_MAX_KW = 22.0     # no onboard (AC) charger takes more
+CHARGE_AC_MAX_KW = 12.0          # this car's onboard charger: 11 kW
+CHARGE_AC_BY_POWER_MIN_MIN = 20.0
+CHARGE_AC_BY_POWER_MAX_START_SOC = 85.0
+
+
+def _stream_charge_is_dc(c: dict) -> bool:
+    """Whether a streamed charge was DC: the car's state, unless its own
+    meters or power say it ran through the onboard (AC) charger."""
+    if not c.get("fast"):
+        return False
+    try:
+        wall = float(c["kwh_wall"]) if c.get("kwh_wall") is not None else None
+        pack = max((float(c[k]) for k in ("kwh_pack_meter", "kwh_pack_level")
+                    if c.get(k) is not None), default=0.0)
+        peak = float(c.get("peak_kw") or 0.0)
+        mins = float(c.get("duration_min") or 0.0)
+        soc0 = float(c["soc_start"]) if c.get("soc_start") is not None else None
+    except (TypeError, ValueError):
+        return True
+    # Above what any onboard charger takes, it is DC whatever a meter reads.
+    if peak > CHARGE_ONBOARD_MAX_KW:
+        return True
+    if wall is not None and wall >= CHARGE_AC_METER_MIN_KWH and wall >= CHARGE_AC_METER_MIN_SHARE * pack:
+        return False
+    if (not wall and 0 < peak < CHARGE_AC_MAX_KW and mins >= CHARGE_AC_BY_POWER_MIN_MIN
+            and soc0 is not None and soc0 < CHARGE_AC_BY_POWER_MAX_START_SOC):
+        return False
+    return True
 
 
 CHARGE_TEMP_DRIVE_GAP_MIN = 60   # a drive ending this close before a charge arrived at it

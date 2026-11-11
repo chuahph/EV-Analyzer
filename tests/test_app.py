@@ -14402,3 +14402,60 @@ def test_streamed_charge_temperature_is_a_reading_or_the_arrival_drives_never_20
             assert c.outside_temp_c == before
         finally:
             s.delete(c); s.delete(d); s.commit()
+
+
+def test_streamed_charge_the_car_called_dc_is_ac_when_its_figures_say_so():
+    # Charge #106 (11 Nov 2026): 11.6 kW for 132 min at a destination charger, filed DC.
+    import json as _json
+
+    from app import state, sync as sync_mod
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+    from app.models import Charge, Vehicle
+
+    is_dc = routes_mod._stream_charge_is_dc
+    base = {"fast": True, "duration_min": 132.3, "soc_start": 74.49, "peak_kw": 11.6,
+            "kwh_pack_meter": 18.02, "kwh_pack_level": 17.4}
+    assert is_dc({**base, "kwh_wall": 19.3}) is False          # the AC meter rose with the pack
+    assert is_dc({**base, "kwh_wall": None}) is False          # no meter: the power says AC
+    assert is_dc({**base, "kwh_wall": 0.0}) is False
+    # A real DC stop stays DC: no AC energy, real DC power.
+    assert is_dc({**base, "kwh_wall": 0.0, "peak_kw": 120.0, "duration_min": 25}) is True
+    assert is_dc({**base, "kwh_wall": None, "peak_kw": 11.0, "duration_min": 8}) is True      # too short to tell
+    assert is_dc({**base, "kwh_wall": None, "peak_kw": 11.0, "soc_start": 93.0}) is True      # a taper at the top
+    assert is_dc({**base, "fast": False, "peak_kw": 120.0}) is False
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_CHARGES_KEY)
+    try:
+        with TestClient(app) as client:
+            vin = sess.scalars(select(Vehicle.vin)).first()
+            at = sync_mod.now_local().replace(microsecond=0) - timedelta(hours=40)
+            ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
+            rec = {"vin": vin, "start_ts": ts, "end_ts": ts + 7938,
+                   "start_time": at.isoformat(timespec="seconds"),
+                   "end_time": (at + timedelta(seconds=7938)).isoformat(timespec="seconds"),
+                   "duration_min": 132.3, "kwh_pack_level": 17.4, "kwh_pack_meter": 18.02,
+                   "kwh_wall": 19.3, "soc_start": 74.49, "soc_end": 99.94, "peak_kw": 11.6, "fast": True}
+            state.put(sess, state.TELEMETRY_CHARGES_KEY, _json.dumps([rec]))
+            sess.commit()
+            client.post("/api/telemetry/promote-charges?apply=true")
+            with SessionLocal() as s:
+                row = s.scalars(select(Charge).where(Charge.start_time == at)).first()
+                assert row is not None and row.charge_type == "AC"
+                # One saved as DC before the rule is put right on the next pass.
+                row.charge_type = "DC"; row.cost = 99.0
+                s.commit()
+                cid = row.id
+            client.post("/api/telemetry/promote-charges?apply=true")
+            with SessionLocal() as s:
+                row = s.get(Charge, cid)
+                assert row.charge_type == "AC" and row.cost != 99.0
+                s.delete(row); s.commit()
+    finally:
+        state.put(sess, state.TELEMETRY_CHARGES_KEY, prev or "[]")
+        sess.commit(); sess.close()
+        settings.app_passcode = old_pc
