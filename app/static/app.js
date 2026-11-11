@@ -5852,6 +5852,10 @@ function glToGo(o, f) {
   // The range on arrival: the car's own range now, scaled to the % it will
   // arrive with, so it agrees with the range shown beside it.
   const kmLeft = ap == null ? null : rangeNow != null && pctNow > 0 ? rangeNow * ap / pctNow : estFull ? estFull * ap / 100 : null;
+  // A figure with nothing to show (arrived, or a charging stop on the way)
+  // is left out, never shown as a dash.
+  const had = f;
+  f = (val, ...rest) => (val === "—" ? "" : had(val, ...rest));
   return { now, pctNow, pack, rate, cur, rangeNow, togo: [
     f(needKwh != null ? n(needKwh, 1, true) : "—", "kWh to go"),
     f(needPct != null ? n(needPct, 1, true) : "—", "% batt to go"),
@@ -5861,7 +5865,7 @@ function glToGo(o, f) {
     f(kmLeft != null ? n(kmLeft) : "—", "km range there", ap != null && ap < 15 ? "warn" : "", "o1"),
     f(spdGo != null ? n(spdGo) : "—", "avg km/h to go", "", "o1"),
     f(rate != null && needKwh != null ? n(needKwh * rate, 2, true) : "—", `cost to go ${cur}`, "", "o2"),
-  ] };
+  ].filter(Boolean) };
 }
 
 function glNumsView(o, mini, key) {
@@ -5917,7 +5921,7 @@ function glNumsView(o, mini, key) {
     <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
     // Navigating, the rest of the route under the destination.
     const go = nav ? glToGo(o, (val, unit, tone = "", cls = "") => `<b class="${tone}${cls ? " " + cls : ""}">${val}<small>${unit}</small></b>`).togo : null;
-    const side2 = go ? side.replace(/<\/div>$/, `<div class="gl-nv-go2"><em>Rest of the route</em>${go.join("")}</div></div>`) : side;
+    const side2 = go && go.length ? side.replace(/<\/div>$/, `<div class="gl-nv-go2"><em>Rest of the route</em>${go.join("")}</div></div>`) : side;
     return `${speedF}${side2}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
   }
   // A side box navigating: the route, then what the rest of it takes (all
@@ -5939,7 +5943,7 @@ function glNumsView(o, mini, key) {
     ] : [
       f(costSoFar, `cost ${cur}`),
     ];
-    return `${navBlock}<div class="gl-nv-trip gl-nv-mini gl-nv-go"><em class="gl-nv-sub">Rest of the route</em>${togo.join("")}</div>${
+    return `${navBlock}${togo.length ? `<div class="gl-nv-trip gl-nv-mini gl-nv-go"><em class="gl-nv-sub">Rest of the route</em>${togo.join("")}</div>` : ""}${
       drive.length ? `<div class="gl-nv-trip gl-nv-mini gl-nv-go gl-nv-so"><em class="gl-nv-sub">This drive so far</em>${drive.join("")}</div>` : ""}`;
   }
   // A side box (Round Mix, Dial, the Cockpit) with no destination: the
