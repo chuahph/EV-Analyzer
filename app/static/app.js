@@ -7006,7 +7006,9 @@ function glZoomBy(dz, now = false) {
 // glMapUpdate), so the view slides instead of stepping. Frames are capped:
 // GL_MAP_FPS while the screen is bright, GL_MAP_FPS_DIM while dimmed (most
 // of a drive), since each frame repaints the map. Nothing else is redrawn.
-const GL_MAP_FPS = 30, GL_MAP_FPS_DIM = 4;
+// Bright: 15 a second, half the earlier 30, to halve the map drawing (battery);
+// it still reads as motion. One number to put back if it looks too stepped.
+const GL_MAP_FPS = 15, GL_MAP_FPS_DIM = 4;
 let glMapFrameAt = 0;
 function glMapFrame(ts) {
   requestAnimationFrame(glMapFrame);
