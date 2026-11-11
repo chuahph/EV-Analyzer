@@ -420,6 +420,14 @@ def _startup() -> None:
             _load_learned_signals(s)
     except Exception:  # noqa: BLE001 — a missing override, never a failed start
         pass
+    try:
+        from .api.routes import repair_charge_temps
+        from .database import SessionLocal
+
+        with SessionLocal() as s:
+            repair_charge_temps(s)
+    except Exception:  # noqa: BLE001 — a repair, never a failed start
+        pass
     if settings.demo_mode:
         # Seed sample data so the dashboard is usable out of the box.
         seed_demo_if_empty()

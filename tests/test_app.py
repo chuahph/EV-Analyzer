@@ -14350,3 +14350,55 @@ def test_live_answer_stays_valid_json_with_absurd_readings():
         assert routes._live_finite({"a": [float("inf"), 1.0], "b": float("nan")}) == {"a": [None, 1.0], "b": None}
     finally:
         routes._LIVE_MEM.clear()
+
+
+def test_live_energy_wins_when_it_matched_the_car_on_trip_3343():
+    # 11 Nov 2026: the car's trip card said 1.5 kWh, Live 1.53, the stored
+    # figure (fall in EnergyRemaining) 1.28. Live must be the one saved.
+    from app.api import routes as routes_mod
+
+    trip = {"vin": "V", "energy_kwh": 1.28, "start_odo_km": 34272.286, "end_odo_km": 34281.345}
+    rec = {"vin": "V", "start_odo": 34272.29, "end_odo": 34281.34, "cover": 0.91, "kwh": 1.53}
+    assert routes_mod._live_energy_for(trip, [rec]) == 1.53
+    # Still not a figure far from the stored one (another drive, lost power).
+    assert routes_mod._live_energy_for(trip, [{**rec, "kwh": 1.75}]) is None
+    assert routes_mod._live_energy_for({**trip, "energy_kwh": 10.0}, [{**rec, "kwh": 13.0}]) is None
+    assert routes_mod._live_energy_for({**trip, "energy_kwh": 10.0}, [{**rec, "kwh": 12.4}]) == 12.4
+
+
+def test_streamed_charge_temperature_is_a_reading_or_the_arrival_drives_never_20():
+    from app import sync as sync_mod
+    from app.api import routes as routes_mod
+    from app.database import SessionLocal
+    from app.models import Charge, Drive, Vehicle
+
+    # The snapshot keeps the reading apart from its 20 C stand-in.
+    assert sync_mod.snapshot_from_telemetry({"OutsideTemp": 27.5}, 1000.0)["out_temp_raw"] == 27.5
+    assert sync_mod.snapshot_from_telemetry({}, 1000.0)["out_temp_raw"] is None
+
+    with TestClient(app):       # the app's start seeds the car this needs
+        pass
+    with SessionLocal() as s:
+        vid = s.scalars(select(Vehicle.id)).first()
+        at = sync_mod.now_local().replace(microsecond=0) - timedelta(days=400)
+        d = Drive(vehicle_id=vid, start_time=at - timedelta(minutes=40), end_time=at - timedelta(minutes=3),
+                  start_soc=30, end_soc=25, distance_km=10, duration_min=37, energy_used_kwh=1.5,
+                  avg_speed_kmh=20, max_speed_kmh=60, outside_temp_c=28.4, out_temp_end_c=27.1)
+        c = Charge(vehicle_id=vid, start_time=at, end_time=at + timedelta(hours=1), duration_min=60,
+                   start_soc=25, end_soc=35, energy_added_kwh=7.0, charge_type="AC", max_power_kw=7.5,
+                   location="T", cost=5.0, source="telemetry")
+        s.add_all([d, c]); s.commit()
+        try:
+            assert c.outside_temp_c == 20.0          # the column default, as before
+            assert routes_mod._charge_temp_kw(s, vid, {"out_temp": 26.04}, at) == {"outside_temp_c": 26.0}
+            assert routes_mod._charge_temp_kw(s, vid, {}, at) == {"outside_temp_c": 27.1}
+            assert routes_mod._charge_temp_kw(s, vid, {}, at + timedelta(hours=5)) == {}
+            assert routes_mod.repair_charge_temps(s) >= 1
+            s.refresh(c)
+            assert c.outside_temp_c == 27.1
+            before = c.outside_temp_c
+            routes_mod.repair_charge_temps(s)
+            s.refresh(c)
+            assert c.outside_temp_c == before
+        finally:
+            s.delete(c); s.delete(d); s.commit()

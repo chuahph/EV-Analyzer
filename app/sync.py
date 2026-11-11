@@ -1244,6 +1244,9 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         "charger_type_ts": (fields.get("_kt") or {}).get("FastChargerType")
         if isinstance(fields.get("_kt"), dict) else None,
         "out_temp": num("OutsideTemp") if num("OutsideTemp") is not None else 20.0,
+        # The reading itself, None when the car sent none (no 20 C stand-in):
+        # a charge records this, so an absent reading never looks measured.
+        "out_temp_raw": num("OutsideTemp"),
         "shift": _shift_of(fields, speed * MILES_TO_KM if speed is not None else None),
         "speed_kmh": (speed * MILES_TO_KM) if speed is not None else 0.0,
         "locked": bool(fields.get("Locked")),
@@ -2669,6 +2672,10 @@ def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any]
         "level_pair_start": level_first,
         "level_pair_end": level_last,
         "peak_kw": round(peak, 1),
+        # Outside temperature as the car read it at the start (else the end)
+        # of the session; None when it sent none.
+        "out_temp": (start.get("out_temp_raw") if start.get("out_temp_raw") is not None
+                     else end.get("out_temp_raw")),
         "fast": fast,
         "network": net,
         "lat": start.get("lat"), "lon": start.get("lon"),

@@ -5172,10 +5172,10 @@ def _promote_shadow_charges(session: Session, apply: bool = False,
             # analytics split on this flag, so a free charge in the paid group
             # drags its average toward zero.
             is_free=rate == 0,
-            # outside_temp_c is deliberately left to the column default. The
-            # shadow charge does not carry it — OutsideTemp is streamed but
-            # the charge machine never recorded it — and inventing 20 C from
-            # an absent reading would look like a measurement.
+            # The car's own reading when the session carried one; else the
+            # temperature the drive that arrived here ended at. Only with
+            # neither does the column default (20 C) stand.
+            **_charge_temp_kw(session, vehicle_id, c, c_start),
             source="telemetry",
             shadow_start_ts=float(int(float(c["start_ts"]))),
             energy_source=energy_source,
@@ -5350,6 +5350,50 @@ ARRIVAL_REPAIR_EVERY_SEC = 24 * 3600.0
 # days can have changed, and scanning a month to fix yesterday is most of the
 # cost for none of the benefit.
 ARRIVAL_REPAIR_RECENT_DAYS = 2
+
+
+CHARGE_TEMP_DRIVE_GAP_MIN = 60   # a drive ending this close before a charge arrived at it
+
+
+def _arrival_temp(session: Session, vehicle_id: int, c_start: datetime) -> float | None:
+    """The outside temperature of the drive that ended just before a charge
+    began (its end reading, else its own), when there is one."""
+    d = session.scalars(
+        select(Drive).where(Drive.vehicle_id == vehicle_id,
+                            Drive.end_time <= c_start + timedelta(minutes=5),
+                            Drive.end_time >= c_start - timedelta(minutes=CHARGE_TEMP_DRIVE_GAP_MIN))
+        .order_by(Drive.end_time.desc()).limit(1)).first()
+    if d is None:
+        return None
+    for v in (d.out_temp_end_c, d.outside_temp_c):
+        # 20.0 exactly is the stand-in an absent reading was given, not a reading.
+        if v is not None and abs(float(v) - 20.0) > 1e-9:
+            return round(float(v), 1)
+    return None
+
+
+def _charge_temp_kw(session: Session, vehicle_id: int, c: dict, c_start: datetime) -> dict:
+    """outside_temp_c for a streamed charge, as a keyword dict (empty when unknown)."""
+    t = c.get("out_temp")
+    if t is None:
+        t = _arrival_temp(session, vehicle_id, c_start)
+    return {} if t is None else {"outside_temp_c": round(float(t), 1)}
+
+
+def repair_charge_temps(session: Session) -> int:
+    """Streamed charges saved before the reading was recorded carry the
+    column default (20 C). Each takes its arrival drive's temperature where
+    one exists. Idempotent: a repaired row no longer reads exactly 20."""
+    n = 0
+    for row in session.scalars(select(Charge).where(
+            Charge.source == "telemetry", Charge.outside_temp_c == 20.0)).all():
+        t = _arrival_temp(session, row.vehicle_id, row.start_time)
+        if t is not None:
+            row.outside_temp_c = t
+            n += 1
+    if n:
+        session.commit()
+    return n
 
 
 def _repair_after_new_trips(session: Session, changed: list) -> int:
@@ -16111,8 +16155,13 @@ _LIVE_DONE: list[dict] = []
 LIVE_DONE_KEEP_DAYS = 14
 LIVE_ENERGY_MIN_COVER = 0.8      # share of the drive's seconds summed from power
 LIVE_ENERGY_ODO_TOL_KM = 0.15    # both ends must meet the saved trip this closely
-LIVE_ENERGY_AGREE_KWH = 0.2      # and Live must agree with the stored figure within
-LIVE_ENERGY_AGREE_FRAC = 0.15    # the larger of these
+# and Live must agree with the stored figure within the larger of these. Was
+# 0.2 kWh / 15%: trip #3343 (11 Nov 2026) had Live at 1.53 kWh against the
+# car's trip card 1.5 and a stored 1.28 (the fall in EnergyRemaining, which
+# the BMS re-estimates while driving): 0.25 apart, so the figure that matched
+# the car was turned away by 0.05 kWh.
+LIVE_ENERGY_AGREE_KWH = 0.3
+LIVE_ENERGY_AGREE_FRAC = 0.25
 
 
 def _live_finish(vin: str, car: dict, go: dict | None, last_ts: float | None = None) -> None:
