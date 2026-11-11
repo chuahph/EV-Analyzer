@@ -3706,3 +3706,18 @@ main > .card { max-width: 100%; }
 /* Shortest boxes: two of the rest-of-route figures, then none of them. */
 .gl-numsv.cutg .gl-nv-go b:nth-of-type(n+3), .gl-numsv.cutx .gl-nv-go { display: none; }
 .gl-numsv.cut0 .gl-nv-nav ~ .gl-nv-so { display: none; }
+/* The Map design's figures, navigating: the rest of the route under the
+   destination, three across. */
+.gl-nv-go2 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(2px, 1.2vh, 8px) 10px;
+  margin-top: clamp(4px, 1.4vh, 10px); padding-top: clamp(4px, 1.4vh, 10px); border-top: 1px solid #1d2a38; }
+.gl-nv-go2 em { grid-column: 1 / -1; font: 700 min(1.6cqw, 2.6vh, 11px)/1.2 system-ui, sans-serif; font-style: normal;
+  letter-spacing: .1em; text-transform: uppercase; color: #22d3ee; }
+.gl-mapd .gl-nv-go2 b { font-size: min(2.6cqw, 5.2vh, 24px); }
+.gl-mapd .gl-nv-go2 b small { font-size: min(1.4cqw, 2.6vh, 10px); }
+/* With it, the destination's figures one row of four, the speed a size down,
+   and three of the rest-of-route figures (the box is short). */
+.gl-mapd .gl-numsv:has(.gl-nv-go2) .gl-nv-spd { font-size: min(5.5cqw, 11vh, 52px); }
+.gl-mapd .gl-nv-nav:has(.gl-nv-go2) .gl-nv-row { flex-wrap: nowrap; column-gap: clamp(8px, 2cqw, 20px); }
+.gl-mapd .gl-nv-nav:has(.gl-nv-go2) .gl-nv-row b { font-size: min(2.8cqw, 5.6vh, 26px); }
+.gl-mapd .gl-nv-nav:has(.gl-nv-go2) b small { font-size: min(1.4cqw, 2.6vh, 10px); }
+.gl-nv-go2 b:nth-of-type(n+4) { display: none; }

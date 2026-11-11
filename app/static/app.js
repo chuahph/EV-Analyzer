@@ -5829,6 +5829,36 @@ function glFlipChip(body) {
   const zoom = nums ? "" : `<button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="-1" aria-label="Zoom the map out">−</button><button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="1" aria-label="Zoom the map in">+</button>`;
   return `${zoom}<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
 }
+// What the rest of the route takes, from the car's own % on arrival (to 0.1),
+// the route's km and minutes and the battery now. Shared by every design's
+// figures box while navigating.
+function glToGo(o, f) {
+  const { nav, pct, nw, n } = o;
+  const L = glLiveState.data || {}, now = nw || L.now || {};
+  const pctNow = pct ?? now.battery_level ?? now.soc ?? null;
+  const pack = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
+  const estFull = lastData && lastData.battery && lastData.battery.est_full_range_km;
+  const lc = (lastData && lastData.last_charge) || {};
+  const rate = o.costRate ?? (lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null);
+  const cur = o.cur || (lastData && lastData.currency) || "RM";
+  const ap = nav.arrive_pct;
+  const needPct = pctNow != null && ap != null ? Math.max(0, pctNow - ap) : null;
+  const needKwh = needPct != null && pack ? needPct * pack / 100 : null;
+  const whGo = needKwh != null && nav.km > 0.5 ? needKwh * 1000 / nav.km : null;
+  const spdGo = nav.km != null && nav.minutes > 0 ? nav.km / (nav.minutes / 60) : null;
+  const rangeNow = now.range_km ?? o.range ?? null;
+  const kmLeft = ap == null ? null : estFull ? estFull * ap / 100 : rangeNow != null && pctNow > 0 ? rangeNow * ap / pctNow : null;
+  return { now, pctNow, pack, rate, cur, rangeNow, togo: [
+    f(needKwh != null ? n(needKwh, 1, true) : "—", "kWh to go"),
+    f(needPct != null ? n(needPct, 1, true) : "—", "% batt to go"),
+    // Over a short way the car's % on arrival (to 0.1) is too coarse for this.
+    ...(whGo != null && nav.km >= 3 ? [f(n(whGo), "Wh/km to go")] : []),
+    f(kmLeft != null ? n(kmLeft) : "—", "km range there", ap != null && ap < 15 ? "warn" : "", "o1"),
+    f(spdGo != null ? n(spdGo) : "—", "avg km/h to go", "", "o1"),
+    f(rate != null && needKwh != null ? n(needKwh * rate, 2, true) : "—", `cost to go ${cur}`, "", "o2"),
+  ] };
+}
+
 function glNumsView(o, mini, key) {
   const { nav, t, lt, kw, pct, tw, n, spd, nw, navOnly } = o;
   const dist = t ? t.distance_km : lt && lt.distance_km;
@@ -5880,36 +5910,17 @@ function glNumsView(o, mini, key) {
           : fig(nw && nw.energy_kwh != null && lt && lt.wh_per_km > 0 ? n(nw.energy_kwh * 1000 / lt.wh_per_km) : "—", "km at last trip's rate")}${fig(odo != null ? n(odo, 0) : "—", "odo km")}${nw && nw.out_temp != null ? fig(n(nw.out_temp, 0), "°C outside") : ""}</div></div>`;
     const speedF = nw ? `<div class="gl-nv-spd" style="color:${spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff"}">${spd != null ? Math.round(spd) : "—"}<small>km/h</small>
     <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
-    return `${speedF}${side}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
+    // Navigating, the rest of the route under the destination.
+    const go = nav ? glToGo(o, (val, unit, tone = "", cls = "") => `<b class="${tone}${cls ? " " + cls : ""}">${val}<small>${unit}</small></b>`).togo : null;
+    const side2 = go ? side.replace(/<\/div>$/, `<div class="gl-nv-go2"><em>Rest of the route</em>${go.join("")}</div></div>`) : side;
+    return `${speedF}${side2}<div class="gl-nv-trip gl-nv-full">${full}</div>`;
   }
   // A side box navigating: the route, then what the rest of it takes (all
   // from the car's own % on arrival and route figures), then this drive's
   // figures the design shows nowhere else. o1 / o2 give way on short screens.
   if (mini && nav) {
-    const L = glLiveState.data || {}, now = nw || L.now || {};
-    const pctNow = pct ?? now.battery_level ?? now.soc ?? null;
-    const pack = lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh;
-    const estFull = lastData && lastData.battery && lastData.battery.est_full_range_km;
-    const lc = (lastData && lastData.last_charge) || {};
-    const rate = o.costRate ?? (lc.cost != null && lc.energy_added_kwh > 0 ? lc.cost / lc.energy_added_kwh : null);
-    const cur = o.cur || (lastData && lastData.currency) || "RM";
     const f = (val, unit, tone = "", cls = "") => `<b class="${tone}${cls ? " " + cls : ""}">${val}<small>${unit}</small></b>`;
-    const ap = nav.arrive_pct;
-    const needPct = pctNow != null && ap != null ? Math.max(0, pctNow - ap) : null;
-    const needKwh = needPct != null && pack ? needPct * pack / 100 : null;
-    const whGo = needKwh != null && nav.km > 0.5 ? needKwh * 1000 / nav.km : null;
-    const spdGo = nav.km != null && nav.minutes > 0 ? nav.km / (nav.minutes / 60) : null;
-    const rangeNow = now.range_km ?? o.range ?? null;
-    const kmLeft = ap == null ? null : estFull ? estFull * ap / 100 : rangeNow != null && pctNow > 0 ? rangeNow * ap / pctNow : null;
-    const togo = [
-      f(needKwh != null ? n(needKwh, 1, true) : "—", "kWh to go"),
-      f(needPct != null ? n(needPct, 1, true) : "—", "% batt to go"),
-      // Over a short way the car's % on arrival (to 0.1) is too coarse for this.
-      ...(whGo != null && nav.km >= 3 ? [f(n(whGo), "Wh/km to go")] : []),
-      f(kmLeft != null ? n(kmLeft) : "—", "km range there", ap != null && ap < 15 ? "warn" : "", "o1"),
-      f(spdGo != null ? n(spdGo) : "—", "avg km/h to go", "", "o1"),
-      f(rate != null && needKwh != null ? n(needKwh * rate, 2, true) : "—", `cost to go ${cur}`, "", "o2"),
-    ];
+    const { now, pack, rate, cur, rangeNow, togo } = glToGo(o, f);
     // This drive: only what the design has no other place for.
     const used = o.usedPct ?? (t && pack && t.energy_kwh > 0 ? Math.min(100, t.energy_kwh / pack * 100) : null);
     const costSoFar = rate != null && t && t.energy_kwh != null ? n(t.energy_kwh * rate, 2, true) : "—";
