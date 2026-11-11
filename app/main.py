@@ -421,10 +421,11 @@ def _startup() -> None:
     except Exception:  # noqa: BLE001 — a missing override, never a failed start
         pass
     try:
-        from .api.routes import repair_charge_temps
+        from .api.routes import repair_charge_temps, repair_streamed_charges
         from .database import SessionLocal
 
         with SessionLocal() as s:
+            repair_streamed_charges(s)
             repair_charge_temps(s)
     except Exception:  # noqa: BLE001 — a repair, never a failed start
         pass

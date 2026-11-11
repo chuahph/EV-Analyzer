@@ -5408,7 +5408,9 @@ def _stream_charge_is_dc(c: dict) -> bool:
         return True
     if wall is not None and wall >= CHARGE_AC_METER_MIN_KWH and wall >= CHARGE_AC_METER_MIN_SHARE * pack:
         return False
-    if (not wall and 0 < peak < CHARGE_AC_MAX_KW and mins >= CHARGE_AC_BY_POWER_MIN_MIN
+    # (A meter that barely moved is no reading either.)
+    if ((wall is None or wall < CHARGE_AC_METER_MIN_KWH) and 0 < peak < CHARGE_AC_MAX_KW
+            and mins >= CHARGE_AC_BY_POWER_MIN_MIN
             and soc0 is not None and soc0 < CHARGE_AC_BY_POWER_MAX_START_SOC):
         return False
     return True
@@ -5440,6 +5442,20 @@ def _charge_temp_kw(session: Session, vehicle_id: int, c: dict, c_start: datetim
     if t is None:
         t = _arrival_temp(session, vehicle_id, c_start)
     return {} if t is None else {"outside_temp_c": round(float(t), 1)}
+
+
+def repair_streamed_charges(session: Session) -> int:
+    """Run the streamed-charge pass once at start, so a correction to how a
+    saved charge is read (its type, its boundaries) reaches the rows already
+    saved without waiting for the next charge to finish. Adds are held to the
+    same limit as the automatic pass."""
+    try:
+        return sum(1 for c in _promote_shadow_charges(
+            session, apply=True, max_add=PROMOTE_AUTO_MAX_ADD)
+            if c.get("action") == "correct")
+    except Exception:  # noqa: BLE001 - a repair, never a failed start
+        session.rollback()
+        return 0
 
 
 def repair_charge_temps(session: Session) -> int:
