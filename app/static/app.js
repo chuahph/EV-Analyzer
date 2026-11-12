@@ -5554,7 +5554,7 @@ function glAltPage(skin, c) {
       ${bar}
       <div class="gl-en-trace">${c.trace}</div>
       <div class="gl-en-bot"><span>Battery <strong>${pct != null ? n(pct, 1, true) : "—"}%</strong></span>
-        <span>Est. range <strong>${c.rangeHere != null ? n(c.rangeHere) : "—"} km</strong></span>
+        <span>Est. range <strong>${c.rangeHere != null ? n(c.rangeHere) : c.range != null ? n(c.range) : "—"} km</strong></span>
         <span>Speed <strong style="color:${col}">${num} km/h</strong></span></div>
     </div>`;
   }
@@ -5915,7 +5915,8 @@ function glNumsView(o, mini, key) {
     ].join("") : `<em class="gl-nv-th">No trip yet</em>${fig(v(pct, 1, true), "% batt now")}${fig(v(range), "range km now")}`;
     // Not navigating, the space under the speed holds what is left.
     const side = nav ? navBlock : `<div class="gl-nv-nav gl-nv-left"><em>On this charge</em><div class="gl-nv-row">
-        ${rangeHere != null || t ? fig(v(rangeHere), "km at this rate")
+        ${rangeHere != null ? fig(v(rangeHere), "km at this rate")
+          : t ? fig(v(range), "rated range km")
           : fig(nw && nw.energy_kwh != null && lt && lt.wh_per_km > 0 ? n(nw.energy_kwh * 1000 / lt.wh_per_km) : "—", "km at last trip's rate")}${fig(odo != null ? n(odo, 0) : "—", "odo km")}${nw && nw.out_temp != null ? fig(n(nw.out_temp, 0), "°C outside") : ""}</div></div>`;
     const speedF = nw ? `<div class="gl-nv-spd" style="color:${spd != null && spd > 0.5 ? glSkinColour(spd) : "#e8fbff"}">${spd != null ? Math.round(spd) : "—"}<small>km/h</small>
     <span class="gl-mapo-gear">${["P", "R", "N", "D"].map((g) => `<b class="${nw.shift === g ? "on" : ""}">${g}</b>`).join("")}</span></div>` : "";
@@ -6143,7 +6144,11 @@ function renderGlance(d) {
           t, nw, spd, kw: inst && inst.kw != null ? inst.kw : null, tw: twA, pct: pct ?? (bal && (bal.current_level_pct ?? bal.current_soc_pct)) ?? null, odo: odoA, hist, regenKwh: t && t.regen_kwh != null ? t.regen_kwh : null,
           range: nw.range_km ?? null, rated, lt, trace: traceHtml,
           nowWh: inst && inst.whkm != null ? inst.whkm : null,
-          rangeHere: nw.energy_kwh != null && twA > 0 ? nw.energy_kwh * 1000 / twA : null, n,
+          // Range at this drive's rate, once the drive is long enough for
+          // its rate to mean something: 0.2 km in, pulling away at 499 Wh/km,
+          // it read 122 km against a rated 384 (12 Nov 2026). Until then the
+          // car's own rated range shows.
+          rangeHere: nw.energy_kwh != null && twA > 0 && t && +t.distance_km >= GL_RANGE_MIN_KM ? nw.energy_kwh * 1000 / twA : null, n,
           usedPct: t ? Math.min(100, Math.max(+t.soc_used || 0, lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh && t.energy_kwh > 0
             ? t.energy_kwh / lastData.vehicle.usable_capacity_kwh * 100 : 0)) : null,
           packKwh: lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh,
@@ -6624,7 +6629,10 @@ const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" 
 // to draw at full sharpness again.
 // 1.25 (64% of the pixels): 1.5 saved more, but the Google logo, drawn 1.5
 // times its size, ran into the terms strip on the small side maps.
-const GL_GMAP_SOFT = 1.25;
+// Then 1.15 (76%): at 1.25 the logo still touched the strip.
+const GL_GMAP_SOFT = 1.15;
+// The least a drive must have covered before its own Wh/km sets the range shown.
+const GL_RANGE_MIN_KM = 2;
 function glMapGoogle(host) {
   const g = window.google.maps;
   const mapId = GL_MAP.cfg && GL_MAP.cfg.map_id;
