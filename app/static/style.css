@@ -3724,3 +3724,27 @@ main > .card { max-width: 100%; }
 .gl-mapd .gl-nv-nav:has(.gl-nv-go2) .gl-nv-row b { font-size: min(2.8cqw, 5.6vh, 26px); }
 .gl-mapd .gl-nv-nav:has(.gl-nv-go2) b small { font-size: min(1.4cqw, 2.6vh, 10px); }
 .gl-nv-go2 b:nth-of-type(n+4) { display: none; }
+/* Dimmed, the pieces that still stood out (12 Nov 2026): the figures box in
+   the map's place, the dials' rings, the speed line under the header and the
+   Dial's battery cells come down to the level of the rest. Figures stay
+   readable (.8), their labels and headings lower, borders and glows off. */
+.gl-dim .gl-numsv { background: #06090d; border-color: #12181f; box-shadow: none; }
+.gl-dim .gl-numsv b, .gl-dim .gl-nv-spd { opacity: .8; text-shadow: none; }
+.gl-dim .gl-numsv b small, .gl-dim .gl-nv-spd small { opacity: .6; }
+.gl-dim .gl-nv-nav em, .gl-dim .gl-nv-sub, .gl-dim .gl-nv-th, .gl-dim .gl-nv-head, .gl-dim .gl-nv-now em,
+.gl-dim .gl-nv-go2 em, .gl-dim .gl-nv-delay { opacity: .5; }
+.gl-dim .gl-numsv .gl-nv-go, .gl-dim .gl-nv-go2, .gl-dim .gl-nv-now, .gl-dim .gl-nv-trip { border-color: #12181f; }
+.gl-dim .gl-nv-spd .gl-mapo-gear b:not(.on) { opacity: .3; }
+.gl-dim .gl-nv-spd .gl-mapo-gear b.on { box-shadow: none; }
+.gl-dim .gl-rmix-mid svg > :not(.gl-g3-spd), .gl-dim .gl-twin-spd > svg > :not(.gl-g3-spd),
+.gl-dim .gl-dialbox svg > :not(.gl-g3-spd) { opacity: .35; }
+.gl-dim .gl-twin-pwr > svg > :not([filter*="-sh"]):not(text:nth-last-of-type(-n+2)) { opacity: .35; }
+.gl-dim .gl-twin-pwr::before { opacity: .3; }
+.gl-dim .gl-g3-spd { opacity: .8; }
+.gl-dim .gl-twin-cells i.on { opacity: .4; box-shadow: none; }
+.gl-dim .gl-altwrap::before { opacity: .35; }
+.gl-dim .gl-rmix-mid svg > :not(.gl-g3-spd), .gl-dim .gl-twin-spd > svg > :not(.gl-g3-spd),
+.gl-dim .gl-dialbox svg > :not(.gl-g3-spd) { opacity: .28; }
+.gl-dim .gl-twin-pwr > svg > :not([filter*="-sh"]):not(text:nth-last-of-type(-n+2)) { opacity: .28; }
+.gl-dim .gl-twin-pwr > svg > [filter*="-sh"] { opacity: .6; }
+.gl-dim .gl-twin-pwr > svg > text:nth-last-of-type(-n+2) { opacity: .8; }
