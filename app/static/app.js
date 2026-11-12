@@ -6622,7 +6622,9 @@ const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" 
 // log2(K) to show the same ground, so the motion and the car's place are
 // unchanged; roads and names come out a little larger and softer. Set to 1
 // to draw at full sharpness again.
-const GL_GMAP_SOFT = 1.5;
+// 1.25 (64% of the pixels): 1.5 saved more, but the Google logo, drawn 1.5
+// times its size, ran into the terms strip on the small side maps.
+const GL_GMAP_SOFT = 1.25;
 function glMapGoogle(host) {
   const g = window.google.maps;
   const mapId = GL_MAP.cfg && GL_MAP.cfg.map_id;
