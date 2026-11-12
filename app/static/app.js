@@ -6615,6 +6615,14 @@ const GL_CAR_ARROW = "M0,-11 L8,9 L0,4 L-8,9 Z";
 // map's markers (which stay upright on screen while the map turns).
 const GL_CAR_LOW = 0.78;   // how far down the turning map the car sits
 const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15"/><path d="M17 6 25 26 17 21 9 26Z"/></svg>';
+// A trial (12 Nov 2026) to cut the phone's map drawing: on a sharp screen
+// (3 pixels to the point on an iPhone) the vector map is drawn in a box 1/K
+// the size and magnified K times to fill its place, so the phone paints
+// 1/K² of the pixels (44% at 1.5) on every frame. The view is zoomed out by
+// log2(K) to show the same ground, so the motion and the car's place are
+// unchanged; roads and names come out a little larger and softer. Set to 1
+// to draw at full sharpness again.
+const GL_GMAP_SOFT = 1.5;
 function glMapGoogle(host) {
   const g = window.google.maps;
   const mapId = GL_MAP.cfg && GL_MAP.cfg.map_id;
@@ -6635,6 +6643,12 @@ function glMapGoogle(host) {
     fixCar.innerHTML = GL_CAR_SVG;
     host.append(mapDiv, fixCar);
   }
+  const K = vec && GL_GMAP_SOFT > 1 && (window.devicePixelRatio || 1) >= 2 ? GL_GMAP_SOFT : 1;
+  const DZ = Math.log2(K);
+  if (K > 1) {
+    Object.assign(mapDiv.style, { inset: "auto", left: "0", top: "0", width: (100 / K) + "%", height: (100 / K) + "%",
+      transform: `scale(${K})`, transformOrigin: "0 0" });
+  }
   const map = new g.Map(mapDiv, Object.assign({ center: { lat: 3.14, lng: 101.69 }, zoom: 3, disableDefaultUI: true,
     gestureHandling: "none", keyboardShortcuts: false, clickableIcons: false, backgroundColor: "#11161c" },
     vec ? { mapId, colorScheme: "DARK", renderingType: "VECTOR", headingInteractionEnabled: false, tiltInteractionEnabled: false }
@@ -6644,8 +6658,9 @@ function glMapGoogle(host) {
   let car = null, dest = null, casing = null, line = null, lineDim = null, lastHd;
   let heading = 0, tilt = 0;
   const ll = (p) => ({ lat: p[0], lng: p[1] });
+  // z here and below is the zoom the app asks for; the map itself is DZ less.
   const ahead = (p, z) => {
-    const mPerPx = 156543.03 * Math.cos(p[0] * Math.PI / 180) / Math.pow(2, z);
+    const mPerPx = 156543.03 * Math.cos(p[0] * Math.PI / 180) / Math.pow(2, z - DZ);
     const m = (mapDiv.clientHeight || host.clientHeight) * (GL_CAR_LOW - 0.5) * mPerPx, rad = heading * Math.PI / 180;
     return [p[0] + (m * Math.cos(rad)) / 111320, p[1] + (m * Math.sin(rad)) / (111320 * Math.cos(p[0] * Math.PI / 180))];
   };
@@ -6657,8 +6672,8 @@ function glMapGoogle(host) {
       }
       // Solid blue with a dark edge, over the traffic, as the car draws it.
       if (!line) {
-        casing = new g.Polyline({ map, clickable: false, strokeColor: "#0a1a33", strokeOpacity: 0.9, strokeWeight: 10, zIndex: 1 });
-        line = new g.Polyline({ map, clickable: false, strokeColor: "#3b8bff", strokeOpacity: 1, strokeWeight: 6, zIndex: 2 });
+        casing = new g.Polyline({ map, clickable: false, strokeColor: "#0a1a33", strokeOpacity: 0.9, strokeWeight: 10 / K, zIndex: 1 });
+        line = new g.Polyline({ map, clickable: false, strokeColor: "#3b8bff", strokeOpacity: 1, strokeWeight: 6 / K, zIndex: 2 });
       }
       const path = pts.map(ll);
       casing.setPath(path); line.setPath(path);
@@ -6670,8 +6685,8 @@ function glMapGoogle(host) {
     setDim(dim) {
       if (!line || lineDim === dim) return;
       lineDim = dim;
-      line.setOptions(dim ? { strokeColor: "#1fd6ff", strokeWeight: 7 } : { strokeColor: "#3b8bff", strokeWeight: 6 });
-      casing.setOptions({ strokeWeight: dim ? 11 : 10 });
+      line.setOptions(dim ? { strokeColor: "#1fd6ff", strokeWeight: 7 / K } : { strokeColor: "#3b8bff", strokeWeight: 6 / K });
+      casing.setOptions({ strokeWeight: (dim ? 11 : 10) / K });
     },
     setDest(p) {
       if (!p) { if (dest) { if (dest.setMap) dest.setMap(null); else dest.map = null; dest = null; } return; }
@@ -6679,7 +6694,7 @@ function glMapGoogle(host) {
         if (vec && adv) {
           const el = document.createElement("div");
           el.className = "gl-map-dest"; el.innerHTML = "<b></b>";
-          el.style.transform = "translateY(50%)";
+          el.style.transform = K > 1 ? `translateY(50%) scale(${1 / K})` : "translateY(50%)";
           dest = new g.marker.AdvancedMarkerElement({ map, content: el, zIndex: 900 });
         } else {
           dest = new g.Marker({ map, clickable: false, zIndex: 900, icon: { path: g.SymbolPath.CIRCLE, scale: 8,
@@ -6713,19 +6728,19 @@ function glMapGoogle(host) {
       if (vec) {
         // Flat, so the car's place on screen is exact.
         tilt = 0;
-        map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
+        map.moveCamera({ center: ll(ahead(p, z)), zoom: z - DZ, heading, tilt });
       } else { map.setZoom(z); map.setCenter(ll(p)); }
     },
     // A zoom step on the way to a new zoom (GL_ZOOM): fractional on the
     // vector map, so it glides; the older raster map takes whole levels.
     zoomTo(p, z) {
-      if (vec) map.moveCamera({ center: ll(ahead(p, z)), zoom: z, heading, tilt });
+      if (vec) map.moveCamera({ center: ll(ahead(p, z)), zoom: z - DZ, heading, tilt });
       else if (Math.round(z) !== map.getZoom()) { map.setZoom(Math.round(z)); map.setCenter(ll(p)); }
     },
     // A frame (many a second): an instant move, the frames make the motion.
     // A redraw (once a second, car slow or stopped): a short pan.
     follow(p, frame) {
-      if (vec) map.moveCamera({ center: ll(ahead(p, map.getZoom() || 16)), heading, tilt });
+      if (vec) map.moveCamera({ center: ll(ahead(p, (map.getZoom() || 16 - DZ) + DZ)), heading, tilt });
       else if (frame || document.body.classList.contains("gl-dim")) map.setCenter(ll(p));
       else map.panTo(ll(p));
     },
