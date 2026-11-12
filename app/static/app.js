@@ -6962,6 +6962,20 @@ function glMapUpdate(mode, frame = false) {
     }
   }
   GL_MAP.disp = { pos, hd, t: tNow };
+  // A frame that would move the map less than can be seen is not drawn: the
+  // map is only moved once the car's place has shifted GL_MAP_MOVE_PX on
+  // screen or its heading GL_MAP_TURN_DEG since the last move. In slow
+  // traffic most of the 30 frames a second fall under that (at 17 km/h the
+  // map shifts about a sixth of a pixel a frame), and each one drawn costs
+  // the phone a full repaint of the map. The once-a-second redraw always moves it.
+  if (frame && GL_MAP.pushed && mode === GL_MAP.zoomKey && GL_ZOOM.cur != null) {
+    const q = GL_MAP.pushed, cosLat = Math.cos(pos[0] * Math.PI / 180);
+    const mPerPx = 156543.03 * cosLat / Math.pow(2, GL_ZOOM.cur);
+    const dy = (pos[0] - q.pos[0]) * 111320, dx = (pos[1] - q.pos[1]) * 111320 * cosLat;
+    const turn = Math.abs(((hd - q.hd + 540) % 360) - 180);
+    if (dx * dx + dy * dy < (GL_MAP_MOVE_PX * mPerPx) ** 2 && turn < GL_MAP_TURN_DEG) return;
+  }
+  GL_MAP.pushed = { pos, hd };
   eng.setCar(pos, hd);
   glRouteTrim(eng, pos);
   // Follow the car, closer in town and further out on the highway; the zoom
@@ -7033,6 +7047,10 @@ function glZoomBy(dz, now = false) {
 // Bright: 30 a second. 15 was tried (11 Nov 2026) to save battery and showed
 // no saving on the phone, so the smoother rate is back.
 const GL_MAP_FPS = 30, GL_MAP_FPS_DIM = 4;
+// The least movement worth a repaint (see glMapUpdate): half a point on
+// screen, or a quarter of a degree of turn (about a point at the map's edge).
+// A trial, 12 Nov 2026: set both to 0 to draw every frame again.
+const GL_MAP_MOVE_PX = 0.5, GL_MAP_TURN_DEG = 0.25;
 let glMapFrameAt = 0;
 function glMapFrame(ts) {
   requestAnimationFrame(glMapFrame);
