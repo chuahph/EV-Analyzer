@@ -6671,7 +6671,10 @@ function glMapGoogle(host) {
   // z here and below is the zoom the app asks for; the map itself is DZ less.
   const ahead = (p, z) => {
     const mPerPx = 156543.03 * Math.cos(p[0] * Math.PI / 180) / Math.pow(2, z - DZ);
-    const m = (mapDiv.clientHeight || host.clientHeight) * (GL_CAR_LOW - 0.5) * mPerPx, rad = heading * Math.PI / 180;
+    // The map's own height: its place's height over K, unrounded (the box's
+    // whole-pixel height put the car a fraction of a point off at K 1.15).
+    const hPx = K > 1 && host.clientHeight ? host.clientHeight / K : (mapDiv.clientHeight || host.clientHeight);
+    const m = hPx * (GL_CAR_LOW - 0.5) * mPerPx, rad = heading * Math.PI / 180;
     return [p[0] + (m * Math.cos(rad)) / 111320, p[1] + (m * Math.sin(rad)) / (111320 * Math.cos(p[0] * Math.PI / 180))];
   };
   return {
