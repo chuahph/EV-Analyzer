@@ -6554,6 +6554,31 @@ function glRouteTrim(eng, pos) {
   eng.setRoute([at, ...pts.slice(bi + 1)]);
 }
 
+// The car's arrow sits on the navigation line while the car is on the route:
+// its place is moved to the nearest point of the line when that is within
+// GL_SNAP_M. The car's own fix is often a lane or two off the line's centre
+// (8 m at a wide junction, 13 Nov 2026), and between fixes its place is
+// carried straight on, which leaves a bend. Further off than that (a side
+// road, a missed turn) the arrow shows where the car really is. The map
+// only: nothing recorded about the drive uses this.
+const GL_SNAP_M = 15;
+function glRouteSnap(pos) {
+  const r = GL_MAP.route, pts = r && r.points;
+  if (!pts || pts.length < 2 || GL_MAP.cut == null) return pos;
+  const k = Math.cos(pos[0] * Math.PI / 180) * 111320, M = 110540;
+  const from = Math.max(0, GL_MAP.cut - 2), to = Math.min(pts.length - 1, GL_MAP.cut + 30);
+  let best = GL_SNAP_M * GL_SNAP_M, at = null;
+  for (let i = from; i < to; i++) {
+    const ax = (pts[i][1] - pos[1]) * k, ay = (pts[i][0] - pos[0]) * M;
+    const dx = (pts[i + 1][1] - pts[i][1]) * k, dy = (pts[i + 1][0] - pts[i][0]) * M;
+    const L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / L2)) : 0;
+    const ex = ax + t * dx, ey = ay + t * dy, d = ex * ex + ey * ey;
+    if (d <= best) { best = d; at = [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t]; }
+  }
+  return at || pos;
+}
+
 function glMapGoogleFailed() {
   // A refused key (Google calls gm_authFailure) or no script: CARTO instead,
   // for the rest of this visit.
@@ -6949,6 +6974,9 @@ function glMapUpdate(mode, frame = false) {
     pos = [nw.lat + (m * Math.cos(rad)) / 111320,
       nw.lon + (m * Math.sin(rad)) / (111320 * Math.cos(nw.lat * Math.PI / 180))];
   }
+  // On the navigation line while the car is on the route (before the
+  // easing below, so coming onto and off the line is eased too).
+  pos = glRouteSnap(pos);
   // The way the car points: the car's own figure, else the last one this
   // phone saw (a parked car still faces that way, even after the server has
   // restarted), else north. Always an arrow, never a bare dot.
