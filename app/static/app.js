@@ -6515,7 +6515,7 @@ const ROUTE_SHORT_CHARS = 64;
 const GL_EASE_MS = 350;   // how quickly the map takes up a new reading (see glMapUpdate)
 function glRouteTrim(eng, pos) {
   const r = GL_MAP.route, pts = r && r.points;
-  if (!pts || pts.length < 2) return;
+  if (!pts || pts.length < 2 || GL_MAP.routeGone) return;
   const now = Date.now();
   if (now - (GL_MAP.trimAt || 0) < 1000) return;
   GL_MAP.trimAt = now;
@@ -6547,6 +6547,12 @@ function glRouteTrim(eng, pos) {
     if (f.bi < 0 || f.best > 80 * 80) f = near(from, end, true);
   }
   const { best, bi, bt } = f;
+  // Past the line's far end and off it (into the car park, say): the stub
+  // left between the last cut and the end is taken off with the rest.
+  if (bi === end - 1 && bt >= 1 && best > GL_ROUTE_END_M * GL_ROUTE_END_M) {
+    eng.setRoute(null); GL_MAP.routeGone = "end";
+    return;
+  }
   if (bi < 0 || best > 80 * 80) return;
   GL_MAP.cut = bi;
   const a = pts[bi], b = pts[bi + 1];
@@ -6562,9 +6568,11 @@ function glRouteTrim(eng, pos) {
 // road, a missed turn) the arrow shows where the car really is. The map
 // only: nothing recorded about the drive uses this.
 const GL_SNAP_M = 15;
+// How far past the route's last point the car is before its line is taken off.
+const GL_ROUTE_END_M = 25;
 function glRouteSnap(pos) {
   const r = GL_MAP.route, pts = r && r.points;
-  if (!pts || pts.length < 2 || GL_MAP.cut == null) return pos;
+  if (!pts || pts.length < 2 || GL_MAP.cut == null || GL_MAP.routeGone) return pos;
   const k = Math.cos(pos[0] * Math.PI / 180) * 111320, M = 110540;
   const from = Math.max(0, GL_MAP.cut - 2), to = Math.min(pts.length - 1, GL_MAP.cut + 30);
   let best = GL_SNAP_M * GL_SNAP_M, at = null;
@@ -6888,7 +6896,7 @@ function glMapMount(root) {
     slot.prepend(host);
     GL_MAP.host = host; GL_MAP.kind = kind; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_MAP.routeAsk = null; GL_ZOOM.cur = null;
     GL_MAP.eng = kind === "google" ? glMapGoogle(host) : glMapLeaflet(host);
-    if (GL_MAP.route) { GL_MAP.eng.setRoute(GL_MAP.route.points); GL_MAP.trimAt = 0; }
+    if (GL_MAP.route && !GL_MAP.routeGone) { GL_MAP.eng.setRoute(GL_MAP.route.points); GL_MAP.trimAt = 0; }
   } else {
     slot.prepend(GL_MAP.host);
   }
@@ -6905,7 +6913,7 @@ function glMapUpdate(mode, frame = false) {
     GL_MAP.routeAsk = rv;
     if (!rv) {
       eng.setRoute(null);
-      GL_MAP.routeV = null; GL_MAP.route = null; GL_MAP.routeDest = "";
+      GL_MAP.routeV = null; GL_MAP.route = null; GL_MAP.routeDest = ""; GL_MAP.routeGone = "";
     } else {
       fetch("/api/live/route?" + new URLSearchParams(D.vin ? { vin: D.vin } : {}), { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : null)).then((r) => {
@@ -6922,6 +6930,7 @@ function glMapUpdate(mode, frame = false) {
             return;
           }
           GL_MAP.routeV = r.v; GL_MAP.route = r; GL_MAP.cut = null; GL_MAP.trimAt = 0;
+          GL_MAP.routeGone = "";
           GL_MAP.routeDest = dest;
           GL_MAP.eng.setRoute(r.points || []);
           // A very short RouteLine (a point or two, as near the destination)
@@ -6932,6 +6941,16 @@ function glMapUpdate(mode, frame = false) {
             : `Route unreadable (${r.raw_chars || 0} chars)`);
         }).catch(() => { GL_MAP.routeAsk = null; GL_MAP.routeRetryAt = Date.now() + 5000; });
     }
+  }
+  // Arrived: the car stops giving a distance and a time to go but keeps its
+  // route for a while, and the last stretch of line stayed on the map after
+  // the car had turned off it into the car park (13 Nov 2026). With neither
+  // figure the line is taken off; it comes back if the car gives them again.
+  const navOver = !!nav && nav.km == null && nav.minutes == null;
+  if (navOver && GL_MAP.route && !GL_MAP.routeGone) { eng.setRoute(null); GL_MAP.routeGone = "over"; }
+  else if (!navOver && GL_MAP.routeGone === "over" && GL_MAP.route) {
+    GL_MAP.routeGone = ""; GL_MAP.cut = null; GL_MAP.trimAt = 0;
+    eng.setRoute(GL_MAP.route.points || []);
   }
   const destKey = nav && nav.dest_lat != null ? nav.dest_lat + "," + nav.dest_lon : "";
   if (destKey !== GL_MAP.destKey || eng !== GL_MAP.destEng) {
