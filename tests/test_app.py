@@ -14494,3 +14494,26 @@ def test_a_tesla_destination_charger_session_is_free_of_charge():
             for r in (tdc, receipt, dc, plain):
                 s.delete(r)
             s.commit()
+
+
+def test_a_streamed_trips_battery_used_is_the_cars_own_drop():
+    # Trip #3347 (12 Nov 2026): the car said 2.3% consumed; its % fell 98.94 to
+    # 96.6 (2.34) while energy over capacity gave 2.0.
+    from types import SimpleNamespace
+
+    from app.analysis import driving
+
+    def trip(**kw):
+        base = dict(source="telemetry", start_soc=98.94, end_soc=96.6, energy_used_kwh=1.38,
+                    distance_km=9.0, duration_min=29.0, wh_per_km=153.0)
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    cap = 68.3
+    assert driving._trip_pct_used(trip(), cap) == 2.3
+    # Whole-number ends are the polled level, too coarse: energy over capacity.
+    assert driving._trip_pct_used(trip(start_soc=99.0, end_soc=97.0), cap) == 2.0
+    assert driving._trip_pct_used(trip(source=""), cap) == 2.0
+    # A drop far from the energy figure (a charge inside the trip): energy.
+    assert driving._trip_pct_used(trip(start_soc=98.94, end_soc=90.1), cap) == 2.0
+    assert driving._trip_pct_used(trip(start_soc=60.2, end_soc=71.4), cap) == 2.0

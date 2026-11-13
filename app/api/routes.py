@@ -9915,7 +9915,11 @@ def _car_rated_line(driving: dict, balance: dict | None, battery: dict,
             continue
         rated = float(km) / full * 100.0
         t["rated_pct"] = round(rated, 2)
-        t["vs_rated_pts"] = round(float(kwh) / capacity_kwh * 100.0 - rated, 1)
+        # Against the trip's own % used (the car's drop where the trip has
+        # it), as the car states it; else energy over capacity.
+        used = t.get("soc_used_pct")
+        t["vs_rated_pts"] = round((float(used) if used is not None
+                                   else float(kwh) / capacity_kwh * 100.0) - rated, 1)
     # The car's Drive tab, since its last charge, counts driving and leaves
     # parked drain to the Park tab — so the trip side, not Battery Used.
     if (balance and balance.get("used_pct") is not None

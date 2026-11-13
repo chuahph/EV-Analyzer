@@ -46,6 +46,39 @@ CONTINUITY_TOLERANCE_KM = 0.15
 PARKED_GAP_MAX_MOVE_KM = 1.0
 
 
+# The car's own % drop over a streamed trip stands for its battery used when
+# it is within this of the energy figure (the larger of the two); further
+# off, something else moved the % (a charge inside the trip, a reading from
+# another moment) and the energy figure is kept.
+PCT_DROP_AGREE_PTS = 0.6
+PCT_DROP_AGREE_FRAC = 0.35
+
+
+def car_pct_drop(d) -> float | None:
+    """The car's own fractional % drop over a streamed trip, or None."""
+    if (getattr(d, "source", "") or "") != "telemetry":
+        return None
+    a, b = getattr(d, "start_soc", None), getattr(d, "end_soc", None)
+    if not a or not b or a <= b:
+        return None
+    # Whole numbers at both ends are the polled integer level, not the stream's.
+    if float(a).is_integer() and float(b).is_integer():
+        return None
+    return float(a) - float(b)
+
+
+def _trip_pct_used(d, capacity_kwh) -> float:
+    from_energy = (d.energy_used_kwh / capacity_kwh * 100.0
+                   if has_valid_energy(d) and capacity_kwh else None)
+    drop = car_pct_drop(d)
+    if drop is not None and (from_energy is None or abs(drop - from_energy) <= max(
+            PCT_DROP_AGREE_PTS, PCT_DROP_AGREE_FRAC * from_energy)):
+        return round(drop, 1)
+    if from_energy is not None:
+        return round(from_energy, 1)
+    return round(max(d.start_soc - d.end_soc, 0.0), 1)
+
+
 def _gap_moved_km(a: Any, b: Any) -> float | None:
     """How far the odometer moved between two trips, or None if it cannot say.
 
@@ -2728,11 +2761,12 @@ def analyze(drives: list[Drive], rated_wh_per_km: float = 150.0,
                 # (from the fractional range delta) derive the % from that
                 # instead, giving true sub-1% precision; fall back to the
                 # integer delta only when energy is unknown (a range gap).
-                "soc_used_pct": (
-                    round(d.energy_used_kwh / capacity_kwh * 100.0, 1)
-                    if has_valid_energy(d) and capacity_kwh
-                    else round(max(d.start_soc - d.end_soc, 0.0), 1)
-                ),
+                # A streamed trip carries the car's own fractional % at both
+                # ends: its drop is what the car's Energy screen calls
+                # "consumed", and is used when it sits near the energy figure
+                # (see car_pct_drop). On trip #3347 the car said 2.3%, the
+                # drop 2.34 and energy over capacity 2.0.
+                "soc_used_pct": _trip_pct_used(d, capacity_kwh),
                 # The parked gap immediately before this trip, if it was long
                 # enough and charge-free to count as vampire drain (see
                 # vampire_drain()) — None when this is the first drive in the

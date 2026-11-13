@@ -6451,7 +6451,7 @@ function renderGlance(d) {
   for (const ms of [450, 1200, 1400, 1600, 2400, 3100, 3200, 4500, 7000]) {
     el.style.setProperty(`--p${ms}`, `-${clock % ms}ms`);
   }
-  el.innerHTML = `<div class="gl-main" style="--tc:${cur_tab.c}">${GL_FRAME}
+  glPaint(el, `<div class="gl-main" style="--tc:${cur_tab.c}">${GL_FRAME}
     <div class="gl-head"><span class="gl-tabname">${h(cur_tab.label)}</span><h2>${h(name)}</h2>
       <span class="gl-sub">${h(glanceTab === "live"
         ? (glLiveState.data && glLiveState.data.driving ? `drive since ${tripWhen(glLiveState.data.trip.start_time)}` : "right now")
@@ -6462,9 +6462,58 @@ function renderGlance(d) {
         <path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></svg></button>
       <button class="gl-close" type="button" data-glance-close>Close</button></div>
     <div class="gl-body">${rail}${pg.body}</div>
-    ${pg.foot ? `<div class="gl-foot">${glanceTab === "live" ? pg.foot.replace(/(data-gl-dim>[^<]*<\/button>)/, (m) => m + glFlipChip(pg.body)) : pg.foot}</div>` : ""}</div>`;
+    ${pg.foot ? `<div class="gl-foot">${glanceTab === "live" ? pg.foot.replace(/(data-gl-dim>[^<]*<\/button>)/, (m) => m + glFlipChip(pg.body)) : pg.foot}</div>` : ""}</div>`);
   glFit(el);
   glMapMount(el);
+}
+
+// Puts a redraw on the page. With a map showing, and the new page having a
+// map in the same place, the map stays where it is and the page is rebuilt
+// around it: the boxes that hold the map are kept (their classes and styles
+// brought up to date) and everything else is replaced. Until 13 Nov 2026
+// the whole page was replaced and the map lifted out and put back into it,
+// once a second, which made the phone set the map's drawing up again each
+// time. Anything else (no map, figures, another layout) replaces the page.
+function glPaint(el, html) {
+  const host = GL_MAP.host;
+  const slot = host && host.parentElement && el.contains(host) ? host.parentElement : null;
+  if (slot && slot.classList.contains("gl-map-slot")) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    const next = tpl.content.querySelector(".gl-map-slot:not(.gl-numsv)");
+    if (next && glPaintAround(el, slot, host, tpl.content, next)) return;
+  }
+  el.innerHTML = html;
+}
+function glPaintAround(el, slot, host, root, next) {
+  // The boxes from the page down to the map, in the page as it is and as
+  // it is to be. They must match in depth and kind, or the page is replaced.
+  const was = [], now = [];
+  for (let n = slot; n && n !== el; n = n.parentElement) was.unshift(n);
+  for (let n = next; n && n !== root; n = n.parentNode) now.unshift(n);
+  if (!was.length || was.length !== now.length) return false;
+  for (let i = 0; i < was.length; i++) if (was[i].tagName !== now[i].tagName) return false;
+  const sync = (a, b) => {
+    for (const at of [...a.attributes]) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
+    for (const at of [...b.attributes]) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+  };
+  let pa = el, pb = root;
+  for (let i = 0; i < was.length; i++) {
+    const keep = was[i], fresh = now[i];
+    // Around the kept box: the old neighbours out, the new ones in, in order.
+    for (const c of [...pa.childNodes]) if (c !== keep) c.remove();
+    let before = true;
+    for (const c of [...pb.childNodes]) {
+      if (c === fresh) { before = false; continue; }
+      if (before) pa.insertBefore(c, keep); else pa.appendChild(c);
+    }
+    sync(keep, fresh);
+    pa = keep; pb = fresh;
+  }
+  // Inside the map's box: the map stays, what is drawn over it is renewed.
+  for (const c of [...slot.childNodes]) if (c !== host) c.remove();
+  for (const c of [...next.childNodes]) slot.appendChild(c);
+  return true;
 }
 
 // The Live page's map. One map for the whole session, made the first time a
@@ -6897,7 +6946,7 @@ function glMapMount(root) {
     GL_MAP.host = host; GL_MAP.kind = kind; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_MAP.routeAsk = null; GL_ZOOM.cur = null;
     GL_MAP.eng = kind === "google" ? glMapGoogle(host) : glMapLeaflet(host);
     if (GL_MAP.route && !GL_MAP.routeGone) { GL_MAP.eng.setRoute(GL_MAP.route.points); GL_MAP.trimAt = 0; }
-  } else {
+  } else if (GL_MAP.host.parentElement !== slot) {
     slot.prepend(GL_MAP.host);
   }
   GL_MAP.eng.resize();
