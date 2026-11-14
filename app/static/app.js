@@ -4801,6 +4801,14 @@ const glWake = { lock: null, supported: "wakeLock" in navigator, failed: false, 
 // screen on during video playback.
 const glWakeIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
   || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+// From iOS 18.4 the Wake Lock holds in a home-screen app, so there the video
+// plays only while no lock is held: the video, small as it is, is decoded and
+// put on screen ten times a second for the whole drive. (iOS 26 still reports
+// 18_x in its user agent, so 18.4 or later covers it.)
+const glWakeIOSLockOk = (() => {
+  const m = navigator.userAgent.match(/OS (\d+)_(\d+)/);
+  return !!m && (+m[1] > 18 || (+m[1] === 18 && +m[2] >= 4));
+})();
 function glWakeVideo(on) {
   if (on) {
     if (!glWake.video) {
@@ -4862,17 +4870,24 @@ async function glWakeSync() {
   document.body.classList.toggle("gl-eco", want);
   if (!want || !glDimAllowed()) { clearTimeout(glDimTimer); glDimTimer = null; document.body.classList.remove("gl-dim"); }
   else if (!glDimTimer && !document.body.classList.contains("gl-dim")) glDimArm();
-  if (glWakeIOS) glWakeVideo(want);
+  // Before 18.4 the video as before: started here, inside the tap that may
+  // be needed to let it play.
+  if (glWakeIOS && !glWakeIOSLockOk) glWakeVideo(want);
   if (want && !glWake.lock && glWake.supported) {
     try {
       glWake.lock = await navigator.wakeLock.request("screen");
       glWake.failed = false;
-      glWake.lock.addEventListener("release", () => { glWake.lock = null; });
+      glWake.lock.addEventListener("release", () => {
+        glWake.lock = null;
+        // Lost while still wanted: the video holds the screen until a new lock.
+        if (glWakeIOS && glWakeWanted()) glWakeVideo(true);
+      });
     } catch (_) { glWake.failed = true; }
   } else if (!want && glWake.lock) {
     try { await glWake.lock.release(); } catch (_) { /* already gone */ }
     glWake.lock = null;
   }
+  if (glWakeIOS && glWakeIOSLockOk) glWakeVideo(want && !glWake.lock);
 }
 // A tap counts as the gesture iOS wants before it plays media, and lets a
 // refused Wake Lock be asked for again.
