@@ -4841,8 +4841,10 @@ function glWakeWanted() { return glanceTab === "live" && glanceVisible() && !doc
 // On by default every time the app opens. The chip at the bottom of the page
 // switches it to "always bright" for the rest of that visit — for a phone on
 // a cable in the car; reopening the app goes back to auto-dim.
-const GL_DIM_MS = 10000;
-const GL_DIM_EVENT_MS = 8000;
+// 5 s and 4 s from 14 Nov 2026 (were 10 and 8): in stop-go traffic the car's
+// own events kept the screen bright for much of a drive.
+const GL_DIM_MS = 5000;
+const GL_DIM_EVENT_MS = 4000;
 const GL_BRAKE_KMH_S = 10;   // about 0.28 g: firmer than the strongest regen
 let glDimTimer = null;
 const glDim = { off: false };
