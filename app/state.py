@@ -259,6 +259,7 @@ CHARGER_PROFILE_KEY = "charger_profile_home"  # JSON {name, kind, rate|null}: th
 # rate feed to auto-refresh from, so this is a manual-review reminder
 # instead: the Rates page shows it and links to TNB's official tariff page.
 PRICE_UPDATED_AT_KEY = "price_updated_at"
+BAD_ROUTES_KEY = "telemetry_bad_routes"  # JSON list (newest last, at most 5): navigation routes the app could not read, as the car sent them, kept so the format can be worked out after the drive
 
 
 # Request-scoped read cache, opt-in via enable_cache().

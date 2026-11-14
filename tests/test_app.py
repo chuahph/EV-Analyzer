@@ -14517,3 +14517,43 @@ def test_a_streamed_trips_battery_used_is_the_cars_own_drop():
     # A drop far from the energy figure (a charge inside the trip): energy.
     assert driving._trip_pct_used(trip(start_soc=98.94, end_soc=90.1), cap) == 2.0
     assert driving._trip_pct_used(trip(start_soc=60.2, end_soc=71.4), cap) == 2.0
+
+
+def test_a_route_line_cut_short_is_read_and_an_unreadable_one_is_kept():
+    # 14 Nov 2026: "Route unreadable (124 chars)" 0.2 km from home.
+    import base64
+    import json as _json
+
+    from app import navroute, state
+    from app.api import routes
+    from app.database import SessionLocal
+
+    pts = [[round(5.3427 + k * 2e-4, 6), round(100.3103 + k * 1e-4, 6)] for k in range(8)]
+    text = _encode_polyline(pts)
+    for drop in (1, 2, 3):
+        got, how = navroute.decode_route_info(base64.b64encode(text[:-drop].encode()).decode())
+        assert got == pts[:-1] and how.endswith("cut short")
+    # A whole line is still read whole, and junk is still no route.
+    assert navroute.decode_route_info(base64.b64encode(text.encode()).decode())[1].endswith("precision 6")
+    assert navroute.decode_route("hello world this is not a route at all ok") is None
+
+    with TestClient(app) as client:
+        with SessionLocal() as s:
+            prev = state.get(s, state.BAD_ROUTES_KEY)
+        try:
+            routes._BAD_ROUTES_SEEN.clear()
+            raw = base64.b64encode(b"\x01\x02garbage!!\xff" * 5).decode()
+            routes._bad_route_keep("abc12345", raw, "not readable: test", (5.3427, 100.3103))
+            routes._bad_route_keep("abc12345", raw, "not readable: test", None)      # once per route
+            listed = client.get("/api/live/route?bad=1").json()["unreadable_routes"]
+            mine = [r for r in listed if r["v"] == "abc12345"]
+            assert len(mine) == 1 and mine[0]["raw"] == raw and mine[0]["chars"] == len(raw)
+            assert mine[0]["car"] == [5.3427, 100.3103] and mine[0]["reads_now"] == "still unreadable"
+            for k in range(7):
+                routes._bad_route_keep(f"v{k}", raw + "A" * k, "not readable", None)
+            assert len(client.get("/api/live/route?bad=1").json()["unreadable_routes"]) == routes.BAD_ROUTES_KEEP
+        finally:
+            with SessionLocal() as s:
+                state.put(s, state.BAD_ROUTES_KEY, prev or "[]")
+                s.commit()
+            routes._BAD_ROUTES_SEEN.clear()

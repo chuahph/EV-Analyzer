@@ -16989,10 +16989,55 @@ ROUTE_SHORT_CHARS = 64        # a RouteLine this short is a point or two, not a 
 ROUTE_RAW_SHOW_CHARS = 2000   # an unreadable RouteLine up to this size is shown as sent, to be read off
 
 
+BAD_ROUTES_KEEP = 5
+BAD_ROUTE_MAX_CHARS = 4000
+_BAD_ROUTES_SEEN: set[str] = set()
+
+
+def _bad_route_keep(v: str, raw: str, how: str, here) -> None:
+    """Keep a route the app could not read, as the car sent it (once per
+    route, the newest few), so it can be read after the drive: the note on
+    the map lasts only while the car is still sending that route. Own
+    session; never raises."""
+    if v in _BAD_ROUTES_SEEN or len(raw) > BAD_ROUTE_MAX_CHARS:
+        return
+    _BAD_ROUTES_SEEN.add(v)
+    from ..database import SessionLocal
+    try:
+        with SessionLocal() as s:
+            try:
+                kept = _json_mod.loads(state.get(s, state.BAD_ROUTES_KEY) or "[]") or []
+            except ValueError:
+                kept = []
+            kept = [r for r in kept if isinstance(r, dict) and r.get("v") != v]
+            kept.append({"v": v, "at": sync_mod.now_local().isoformat(timespec="seconds"),
+                         "chars": len(raw), "format": how, "raw": raw,
+                         "car": [round(here[0], 5), round(here[1], 5)] if here else None})
+            state.put(s, state.BAD_ROUTES_KEY, _json_mod.dumps(kept[-BAD_ROUTES_KEEP:]))
+            s.commit()
+    except Exception:   # noqa: BLE001 - a record for diagnosis, never a failed answer
+        pass
+
+
 @router.get("/live/route")
-def live_route(vin: str | None = Query(None)):
+def live_route(vin: str | None = Query(None), bad: int = Query(0)):
     """The active navigation route as [[lat, lon], ...] (at most
-    navroute.ROUTE_MAX_POINTS), decoded once per route and kept in memory."""
+    navroute.ROUTE_MAX_POINTS), decoded once per route and kept in memory.
+
+    ``bad=1`` lists the last few routes the app could not read, as the car
+    sent them, each with what the reader now makes of it."""
+    if bad:
+        from ..database import SessionLocal
+        try:
+            with SessionLocal() as s:
+                kept = _json_mod.loads(state.get(s, state.BAD_ROUTES_KEY) or "[]") or []
+        except Exception:   # noqa: BLE001
+            kept = []
+        for r in kept:
+            pts, how = navroute.decode_route_info(r.get("raw"))
+            r["reads_now"] = how if pts else "still unreadable"
+            r["points_now"] = len(pts or [])
+        return {"unreadable_routes": kept}
     target = vin or _live_latest_vin()
     with _LIVE_LOCK:
         car = (_LIVE_MEM.get(target) or {}) if target else {}
@@ -17026,6 +17071,8 @@ def live_route(vin: str | None = Query(None)):
             pts, how = [], f"{how}, but it passes {near:.0f} km from the car"
     out = {"v": v, "points": pts, "raw_chars": len(raw), "format": how}
     if not pts:
+        if not how.endswith("from the car"):
+            _bad_route_keep(v, raw, how, here)
         out["reason"] = "RouteLine arrived but did not decode as a route"
         # An unreadable value is shown as sent (up to a size), so what the car
         # sent can be read off this page and the format worked out.

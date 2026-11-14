@@ -17,8 +17,10 @@ ROUTE_MAX_POINTS = 1500       # sent to the phone; a long route is thinned to th
 ROUTE_MAX_CHARS = 400_000     # a RouteLine longer than this is not believed
 
 
-def _decode_polyline(text: str, precision: int) -> list[list[float]] | None:
-    """Google's polyline algorithm; None when the text is not one."""
+def _decode_polyline(text: str, precision: int, cut: bool = False) -> list[list[float]] | None:
+    """Google's polyline algorithm; None when the text is not one. With
+    ``cut``, a text that stops partway through a point gives the points
+    before it (a line cut short), where it would otherwise be refused."""
     factor = 10.0 ** precision
     pts: list[list[float]] = []
     lat = lon = 0
@@ -30,6 +32,9 @@ def _decode_polyline(text: str, precision: int) -> list[list[float]] | None:
                 shift = result = 0
                 while True:
                     if i >= n:
+                        if cut and len(pts) >= 2:
+                            i = n + 1          # leave both loops with what was read
+                            break
                         return None
                     b = ord(text[i]) - 63
                     i += 1
@@ -39,7 +44,11 @@ def _decode_polyline(text: str, precision: int) -> list[list[float]] | None:
                     shift += 5
                     if b < 0x20:
                         break
+                if i > n:
+                    break
                 vals.append(~(result >> 1) if result & 1 else result >> 1)
+            if i > n:
+                break
             lat += vals[0]
             lon += vals[1]
             pts.append([round(lat / factor, 6), round(lon / factor, 6)])
@@ -180,39 +189,55 @@ def decode_route_info(raw) -> tuple[list[list[float]] | None, str]:
     if not isinstance(raw, str) or not raw.strip() or len(raw) > ROUTE_MAX_CHARS:
         return None, "empty"
 
-    def poly(text: str, how: str):
+    def poly(text: str, how: str, cut: bool = False):
         for precision in (6, 5):
-            pts = _decode_polyline(text, precision)
+            pts = _decode_polyline(text, precision, cut)
             if _plausible(pts) and len(pts) >= 2:
-                return _thin(pts, ROUTE_MAX_POINTS), f"{how}, polyline precision {precision}"
+                return _thin(pts, ROUTE_MAX_POINTS), (
+                    f"{how}, polyline precision {precision}" + (", cut short" if cut else ""))
         return None
 
     raw = raw.strip()
     blobs = _b64_variants(raw)
+    got = _read_blobs(blobs, poly, False)
+    if got:
+        return got
+    got = poly(raw, "plain")
+    if got:
+        return got
+    # Nothing reads whole: a line that stops partway through its last point
+    # (as a short one near the destination has been seen to, 14 Nov 2026:
+    # "Route unreadable (124 chars)" 0.2 km from home) is read up to there.
+    got = _read_blobs(blobs, poly, True) or poly(raw, "plain", True)
+    if got:
+        return got
+    head = blobs[0][:12].hex(" ") if blobs else ""
+    return None, (f"not readable: base64 to {len(blobs[0])} bytes, starting {head}" if blobs
+                  else "not readable: not base64")
+
+
+def _read_blobs(blobs: list[bytes], poly, cut: bool):
     for k, data in enumerate(blobs):
         tag = "base64" if k == 0 else "base64 (url-safe)"
         for body, how in ((data, tag), (_inflate(data), tag + ", compressed")):
             if not body:
                 continue
             try:
-                got = poly(body.decode("ascii"), how)
+                got = poly(body.decode("ascii"), how, cut)
                 if got:
                     return got
             except UnicodeDecodeError:
                 pass
             for run in _poly_runs(body)[:3]:
-                got = poly(run, how + ", wrapped")
+                got = poly(run, how + ", wrapped", cut)
                 if got:
                     return got
+            if cut:
+                continue
             pts = _proto_coords(body)
             if _plausible(pts) and len(pts) >= 2:
                 return _thin(pts, ROUTE_MAX_POINTS), how + ", coordinate pairs"
-    got = poly(raw, "plain")
-    if got:
-        return got
-    head = blobs[0][:12].hex(" ") if blobs else ""
-    return None, (f"not readable: base64 to {len(blobs[0])} bytes, starting {head}" if blobs
-                  else "not readable: not base64")
+    return None
 
 
 def decode_route(raw) -> list[list[float]] | None:
