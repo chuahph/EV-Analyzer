@@ -16989,6 +16989,7 @@ ROUTE_SHORT_CHARS = 64        # a RouteLine this short is a point or two, not a 
 ROUTE_RAW_SHOW_CHARS = 2000   # an unreadable RouteLine up to this size is shown as sent, to be read off
 
 
+_ROUTE_LAST: dict[str, tuple[list, str]] = {}   # vin -> the last route that read, for traffic-only updates
 BAD_ROUTES_KEEP = 5
 BAD_ROUTE_MAX_CHARS = 4000
 _BAD_ROUTES_SEEN: set[str] = set()
@@ -17057,6 +17058,13 @@ def live_route(vin: str | None = Query(None), bad: int = Query(0)):
         _ROUTE_CACHE.clear()          # one route at a time is all the page needs
         _ROUTE_CACHE[v] = got
     pts, how = got
+    if pts:
+        _ROUTE_LAST[target] = (pts, how)
+    elif how == navroute.TRAFFIC_ONLY and target in _ROUTE_LAST:
+        # The car sent the traffic along its route and not the route: the
+        # route it last sent still stands (until a destination change, when
+        # the car sends a new line, or the route ends).
+        pts, how = _ROUTE_LAST[target][0], "traffic update; the route as last sent"
     # The car is on its own route: a reading that passes nowhere near where
     # the car is (with a fix from the last 10 minutes) is not its route.
     try:
@@ -17071,7 +17079,7 @@ def live_route(vin: str | None = Query(None), bad: int = Query(0)):
             pts, how = [], f"{how}, but it passes {near:.0f} km from the car"
     out = {"v": v, "points": pts, "raw_chars": len(raw), "format": how}
     if not pts:
-        if not how.endswith("from the car"):
+        if not how.endswith("from the car") and how != navroute.TRAFFIC_ONLY:
             _bad_route_keep(v, raw, how, here)
         out["reason"] = "RouteLine arrived but did not decode as a route"
         # An unreadable value is shown as sent (up to a size), so what the car

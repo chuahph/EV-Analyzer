@@ -181,6 +181,46 @@ def _proto_coords(data: bytes, depth: int = 0) -> list[list[float]]:
     return pts
 
 
+def _proto_top(data: bytes) -> list[tuple[int, int, object]] | None:
+    """The top-level fields of a protobuf message as (field, wire type,
+    value), or None when the bytes do not parse as one end to end."""
+    out, i, n = [], 0, len(data)
+    try:
+        while i < n:
+            key, i = _varint(data, i)
+            field, wt = key >> 3, key & 7
+            if field < 1:
+                return None
+            if wt == 0:
+                v, i = _varint(data, i)
+            elif wt == 1:
+                v, i = data[i:i + 8], i + 8
+            elif wt == 2:
+                ln, i = _varint(data, i)
+                v, i = data[i:i + ln], i + ln
+            elif wt == 5:
+                v, i = data[i:i + 4], i + 4
+            else:
+                return None
+            if i > n:
+                return None
+            out.append((field, wt, v))
+    except (IndexError, ValueError):
+        return None
+    return out
+
+
+# What the car sends, read 15 Nov 2026 from five saved RouteLines: a protobuf
+# message whose field 1 is the route as a polyline (precision 6) and whose
+# repeated field 2 holds the traffic along it, each entry a distance (km, a
+# float, fixed32) with a congestion level (varint) where it is not the
+# default. An update can carry the traffic alone, with no field 1: the route
+# itself has not changed. Read as a stretch of polyline characters, the
+# length byte in front of field 1 (0x58, "X") was taken as its first
+# character, which spoilt the whole line.
+TRAFFIC_ONLY = "traffic only: no route line in this update"
+
+
 def decode_route_info(raw) -> tuple[list[list[float]] | None, str]:
     """(points, how they were read), or (None, a short description of the
     bytes) when no reading gives a route. The car's RouteLine is documented
@@ -199,6 +239,21 @@ def decode_route_info(raw) -> tuple[list[list[float]] | None, str]:
 
     raw = raw.strip()
     blobs = _b64_variants(raw)
+    for data in blobs[:1]:
+        top = _proto_top(data)
+        if not top:
+            continue
+        line = next((v for f, wt, v in top if f == 1 and wt == 2), None)
+        if line is not None:
+            try:
+                got = poly(line.decode("ascii"), "base64 protobuf, field 1") or \
+                    poly(line.decode("ascii"), "base64 protobuf, field 1", True)
+                if got:
+                    return got
+            except UnicodeDecodeError:
+                pass
+        elif top and all(f == 2 and wt == 2 for f, wt, _ in top):
+            return None, TRAFFIC_ONLY
     got = _read_blobs(blobs, poly, False)
     if got:
         return got
