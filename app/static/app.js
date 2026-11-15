@@ -6730,6 +6730,11 @@ const GL_CAR_SVG = '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" 
 // times its size, ran into the terms strip on the small side maps.
 // Then 1.15 (76%): at 1.25 the logo still touched the strip.
 const GL_GMAP_SOFT = 1.15;
+// How dark the layer over the bright map is (0 = off).
+const GL_MAP_SHADE = 0.25;
+// The route's blue, a step lighter than before so it comes through the shade
+// as it looked without it (#3b8bff).
+const GL_ROUTE_BRIGHT = "#5ea3ff";
 // The least a drive must have covered before its own Wh/km sets the range shown.
 const GL_RANGE_MIN_KM = 2;
 function glMapGoogle(host) {
@@ -6750,7 +6755,15 @@ function glMapGoogle(host) {
     fixCar = document.createElement("div");
     fixCar.className = "gl-map-car gl-map-carfix";
     fixCar.innerHTML = GL_CAR_SVG;
-    host.append(mapDiv, fixCar);
+    // A darker map (14 Nov 2026, for battery: an iPhone screen draws less on
+    // darker pixels): a still, see-through black layer between the map and
+    // the car's arrow, so the arrow and the boxes over the map stay bright.
+    // A plain layer, not a filter on the map, which the phone would redo on
+    // every frame. Off while dimmed, where the map has its own darkening.
+    const shade = document.createElement("div");
+    shade.className = "gl-map-shade";
+    shade.style.setProperty("--shade", GL_MAP_SHADE);
+    host.append(mapDiv, shade, fixCar);
   }
   const K = vec && GL_GMAP_SOFT > 1 && (window.devicePixelRatio || 1) >= 2 ? GL_GMAP_SOFT : 1;
   const DZ = Math.log2(K);
@@ -6785,7 +6798,7 @@ function glMapGoogle(host) {
       // Solid blue with a dark edge, over the traffic, as the car draws it.
       if (!line) {
         casing = new g.Polyline({ map, clickable: false, strokeColor: "#0a1a33", strokeOpacity: 0.9, strokeWeight: 10 / K, zIndex: 1 });
-        line = new g.Polyline({ map, clickable: false, strokeColor: "#3b8bff", strokeOpacity: 1, strokeWeight: 6 / K, zIndex: 2 });
+        line = new g.Polyline({ map, clickable: false, strokeColor: GL_ROUTE_BRIGHT, strokeOpacity: 1, strokeWeight: 6 / K, zIndex: 2 });
       }
       const path = pts.map(ll);
       casing.setPath(path); line.setPath(path);
@@ -6797,7 +6810,7 @@ function glMapGoogle(host) {
     setDim(dim) {
       if (!line || lineDim === dim) return;
       lineDim = dim;
-      line.setOptions(dim ? { strokeColor: "#1fd6ff", strokeWeight: 7 / K } : { strokeColor: "#3b8bff", strokeWeight: 6 / K });
+      line.setOptions(dim ? { strokeColor: "#1fd6ff", strokeWeight: 7 / K } : { strokeColor: GL_ROUTE_BRIGHT, strokeWeight: 6 / K });
       casing.setOptions({ strokeWeight: (dim ? 11 : 10) / K });
     },
     setDest(p) {

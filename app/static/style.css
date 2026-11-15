@@ -3748,3 +3748,7 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-twin-pwr > svg > :not([filter*="-sh"]):not(text:nth-last-of-type(-n+2)) { opacity: .28; }
 .gl-dim .gl-twin-pwr > svg > [filter*="-sh"] { opacity: .6; }
 .gl-dim .gl-twin-pwr > svg > text:nth-last-of-type(-n+2) { opacity: .8; }
+/* The darker map: a still layer over the Google map, under the car's arrow
+   and the boxes drawn over the map (see glMapGoogle). Off while dimmed. */
+.gl-map-shade { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: rgba(0, 0, 0, var(--shade, .25)); }
+.gl-dim .gl-map-shade { display: none; }
