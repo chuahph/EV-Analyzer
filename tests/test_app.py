@@ -14433,7 +14433,12 @@ def test_streamed_charge_the_car_called_dc_is_ac_when_its_figures_say_so():
     try:
         with TestClient(app) as client:
             vin = sess.scalars(select(Vehicle.vin)).first()
+            # A time no saved charge covers (the demo data moves with the date;
+            # matched to a polled charge, the streamed one is not this row).
             at = sync_mod.now_local().replace(microsecond=0) - timedelta(hours=40)
+            taken = [(c.start_time, c.end_time) for c in sess.scalars(select(Charge)).all()]
+            while any(st <= at + timedelta(seconds=7938) and at <= en for st, en in taken):
+                at -= timedelta(hours=3)
             ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
             rec = {"vin": vin, "start_ts": ts, "end_ts": ts + 7938,
                    "start_time": at.isoformat(timespec="seconds"),
