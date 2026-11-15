@@ -3756,7 +3756,7 @@ main > .card { max-width: 100%; }
    paging); the odometer is in the speed panel, and what else the left had
    is in the header strip (.gl-hchips). */
 .gl-side > .gl-trip:has(.gl-rts8) { flex: 1 1 auto; min-height: 0; }
-.gl-rts8 { flex: 1 1 auto; min-height: 0; grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 6px; padding-top: clamp(5px, 1.4vh, 8px); }
+.gl-rts8 { flex: 1 1 auto; min-height: 0; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 7px; padding-top: clamp(5px, 1.4vh, 8px); }
 .gl-rts8 .gl-rt { padding: clamp(3px, .9vh, 6px) 8px; gap: 1px 5px; }
 .gl-rts8 .gl-rt i { width: 16px; height: 16px; border-radius: 5px; }
 .gl-rts8 .gl-rt i svg { width: 11px; height: 11px; }

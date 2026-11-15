@@ -6206,8 +6206,6 @@ function renderGlance(d) {
           `<div class="gl-trip">
             <div class="gl-trip-h"><b class="rec idle"></b>Car now<em>${!L ? "connecting…" : nw.age_sec != null ? `${nw.age_sec < 90 ? nw.age_sec + "s" : Math.round(nw.age_sec / 60) + " min"} ago` : ""}</em></div>
             <div class="gl-rts gl-rts8">
-              ${tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good")}
-              ${tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—")}
               ${lt ? [
                 tile("dist", "Trip km", lt.distance_km != null ? n(lt.distance_km, 1, true) : "—"),
                 tile("time", "Trip min", lt.duration_min != null ? n(lt.duration_min) : "—"),
@@ -6215,7 +6213,11 @@ function renderGlance(d) {
                 tile("speed", "Trip top", lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—"),
                 tile("whkm", "Trip Wh/km", lt.wh_per_km != null ? n(lt.wh_per_km, 1, true) : "—", ltTone),
                 tile("regen", "Trip kWh", lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—"),
-              ].join("") : ""}
+              ].join("") : [
+                // No trip yet: the car now (the battery bar on the right has these too).
+                tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good"),
+                tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—"),
+              ].join("")}
             </div>
           </div>`,
           glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed", odo: odo != null ? fmt(odo) : null }),
@@ -6292,8 +6294,6 @@ function renderGlance(d) {
               ${tile("speed", "Top km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—")}
               ${tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone)}
               ${tile("regen", "Regen kWh", t.regen_kwh != null ? n(t.regen_kwh, 2) : "—", "good")}
-              ${tile("batt", "Batt used %", n(usedPct, 2, true))}
-              ${tile("whkm", "Net kWh", t.energy_kwh != null ? n(t.energy_kwh, 2) : "—")}
             </div>
           </div>`,
           glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed",
