@@ -6282,7 +6282,6 @@ function renderGlance(d) {
               ${navC.km != null ? `<b>${n(navC.km, 1, true)}<small>km</small></b>` : ""}
               ${navC.arrive_pct != null ? `<b class="${navC.arrive_pct < 15 ? "warn" : "good"}">${n(navC.arrive_pct)}<small>% arrive</small></b>` : ""}
             </div>` : ""}
-            <div class="gl-mapo gl-mapo-kw ${kw != null && kw < 0 ? "regen" : ""}">${kw == null ? "—" : n(Math.abs(kw), 1)}<small>kW</small></div>
           </div>`, { nav: navC, t, lt, kw, pct, tw: t && (t.wh_per_km ?? t.driving_wh_per_km), n, navOnly: true });
         return page(
           `<div class="gl-trip">
@@ -6293,7 +6292,8 @@ function renderGlance(d) {
               ${tile("speed", "Avg km/h", n(t.avg_speed_kmh))}
               ${tile("speed", "Top km/h", t.max_speed_kmh != null ? n(t.max_speed_kmh) : "—")}
               ${tile("whkm", "Wh/km", tw != null ? n(tw, 1, true) : "—", twTone)}
-              ${tile("regen", "Regen kWh", t.regen_kwh != null ? n(t.regen_kwh, 2) : "—", "good")}
+              ${tile(kw != null && kw < 0 ? "regen" : "whkm", kw != null && kw < 0 ? (nw.charging ? "Charge kW" : "Regen kW") : "Power kW",
+                kw == null ? "—" : n(Math.abs(kw), 1, true), kw != null && kw < 0 ? "good" : "")}
             </div>
           </div>`,
           glSpeedo({ value: spd, max: 160, mark: t.max_speed_kmh, gear: nw.shift, acc: glLiveState.acc, label: "Speed",
@@ -6302,6 +6302,7 @@ function renderGlance(d) {
           foot, glHeadChips([
             // What is left and what it cost, in the header strip.
             t.distance_km >= GL_RANGE_MIN_KM && estRange != null ? ["At rate", `${n(estRange)} km`] : null,
+            t.regen_kwh != null ? ["Regen", `${n(t.regen_kwh, 2)} kWh`] : null,
             costRate != null && t.energy_kwh != null ? [`Cost ${cur || "RM"}`, n(t.energy_kwh * costRate, 2, true)] : null,
             nw.out_temp != null ? ["Outside", `${n(nw.out_temp, 0)}°C`] : null,
           ]));
