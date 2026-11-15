@@ -3752,3 +3752,20 @@ main > .card { max-width: 100%; }
    and the boxes drawn over the map (see glMapGoogle). Off while dimmed. */
 .gl-map-shade { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: rgba(0, 0, 0, var(--shade, .25)); }
 .gl-dim .gl-map-shade { display: none; }
+/* Cockpit: the trip computer two across and four down, all at once (no
+   paging); the odometer is in the speed panel, and what else the left had
+   is in the header strip (.gl-hchips). */
+.gl-side > .gl-trip:has(.gl-rts8) { flex: 1 1 auto; min-height: 0; }
+.gl-rts8 { flex: 1 1 auto; min-height: 0; grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 6px; padding-top: clamp(5px, 1.4vh, 8px); }
+.gl-rts8 .gl-rt { padding: clamp(3px, .9vh, 6px) 8px; gap: 1px 5px; }
+.gl-rts8 .gl-rt i { width: 16px; height: 16px; border-radius: 5px; }
+.gl-rts8 .gl-rt i svg { width: 11px; height: 11px; }
+.gl-rts8 .gl-rt span { font-size: clamp(7.5px, 2vh, 9.5px); }
+.gl-rts8 .gl-rt strong { font-size: clamp(14px, 5.2vh, 22px); }
+.gl-hchips { display: flex; gap: 6px; min-width: 0; overflow: hidden; margin-left: auto; flex: 0 1 auto; }
+.gl-hchips .gl-kb { flex: 0 0 auto; padding: 2px 9px; }
+.gl-hchips .gl-kb em { font-size: clamp(8px, 2.3vh, 11px); }
+.gl-hchips .gl-kb b { font-size: clamp(11px, 3.4vh, 15px); }
+.gl-dim .gl-hchips .gl-kb { opacity: .55; }
+.gl-dim .gl-spodo { opacity: .5; }
+.gl-head:has(.gl-hchips) .gl-swap { margin-left: 10px; }
