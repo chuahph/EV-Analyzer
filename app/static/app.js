@@ -6213,11 +6213,20 @@ function renderGlance(d) {
                 tile("speed", "Trip top", lt.max_speed_kmh != null ? n(lt.max_speed_kmh) : "—"),
                 tile("whkm", "Trip Wh/km", lt.wh_per_km != null ? n(lt.wh_per_km, 1, true) : "—", ltTone),
                 tile("regen", "Trip kWh", lt.energy_kwh != null ? n(lt.energy_kwh, 2) : "—"),
-              ].join("") : [
-                // No trip yet: the car now (the battery bar on the right has these too).
-                tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good"),
-                tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—"),
-              ].join("")}
+              ].join("") : (() => {
+                // No trip yet: the car now, six figures.
+                const lc = d.last_charge || {};
+                const at = Date.parse(lc.end_time || lc.start_time || "");
+                const hrs = at ? Math.max(0, (Date.now() - at) / 3600000) : null;
+                return [
+                  tile("batt", "Batt %", pctShown != null ? n(pctShown, 1, true) : "—", pctShown != null && pctShown < 20 ? "warn" : "good"),
+                  tile("range", "Range km", rangeShown != null ? n(rangeShown) : "—"),
+                  tile("odo", "Odo km", odo != null ? fmt(odo) : "—"),
+                  tile("temp", "Outside °C", nw.out_temp != null ? n(nw.out_temp, 0) : "—"),
+                  tile("batt", "Charged to %", lc.end_soc != null ? n(lc.end_soc) : "—"),
+                  tile("time", "Charged h ago", hrs == null ? "—" : hrs < 48 ? n(hrs) : `${n(hrs / 24)}d`),
+                ].join("");
+              })()}
             </div>
           </div>`,
           glSpeedo({ value: spd, max: 160, gear: nw.shift, acc: glLiveState.acc, label: "Speed", odo: odo != null ? fmt(odo) : null }),
