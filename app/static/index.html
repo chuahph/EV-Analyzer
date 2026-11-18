@@ -1318,6 +1318,16 @@ export default {
        battery-% readings, not the clock); duration and average speed are
        recalculated from the new times. The ✎ button on a Recent Trips row
        opens this. -->
+  <!-- Modal: the photos of where the car was parked (newest 30 kept). -->
+  <div id="spot-modal" class="modal hidden">
+    <div class="modal-card spot-card">
+      <button class="modal-close" data-close>×</button>
+      <h2>📷 Where I parked</h2>
+      <div id="spot-show"></div>
+      <div id="spot-grid"></div>
+    </div>
+  </div>
+
   <div id="edit-drive-modal" class="modal hidden">
     <div class="modal-card">
       <button class="modal-close" data-close>×</button>

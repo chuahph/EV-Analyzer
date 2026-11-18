@@ -14679,3 +14679,71 @@ def test_charge_plan_rate_from_recent_charge_to_charge_stretches():
         assert routes._charge_plan(sess, 1, None) is None
         assert routes._charge_plan(SimpleNamespace(scalars=lambda q: SimpleNamespace(all=lambda: [])), 1, 60.0) is None
         assert routes._charge_plan(sess, 1, 15.0)["days_left"] == 0
+
+
+def test_park_photo_save_keep_thirty_spot_and_delete(seeded):
+    """Spot photos: saved with where the car is, the newest 30 kept, the
+    current one shown until a trip starts, and deletable."""
+    from app.api import routes
+    from app.models import Drive, ParkPhoto
+
+    jpg = b"\xff\xd8\xff\xe0" + b"0" * 2000
+    with TestClient(app) as client:
+        bad = client.post("/api/park-photo", files={"file": ("x.txt", b"hello", "text/plain")})
+        assert bad.status_code == 415
+        ids = []
+        for i in range(32):
+            r = client.post("/api/park-photo?lat=3.1&lon=101.6",
+                            files={"file": ("spot.jpg", jpg, "image/jpeg")})
+            assert r.status_code == 200, r.text
+            ids.append(r.json()["saved"]["id"])
+        listing = client.get("/api/park-photos").json()
+        assert len(listing["photos"]) == routes.PARK_PHOTO_KEEP == 30
+        assert listing["photos"][0]["id"] == ids[-1]
+        assert ids[0] not in {p["id"] for p in listing["photos"]}
+        newest = listing["photos"][0]
+        assert newest["coords"] and newest["coords_from"] in ("car", "phone", "trip")
+        img = client.get(newest["url"])
+        assert img.status_code == 200 and img.content == jpg
+        assert img.headers["content-type"] == "image/jpeg"
+        s = client.get("/api/summary").json()
+        assert s["park_spot"]["id"] == ids[-1]
+        assert s["park_spot"]["moved"] is False
+        if newest["drive_id"] is not None:
+            assert s["park_photos_by_trip"][str(newest["drive_id"])] == ids[-1]
+        assert client.delete(f"/api/park-photo/{ids[-1]}").status_code == 200
+        assert client.get(f"/api/park-photo/{ids[-1]}.jpg").status_code == 404
+        assert client.get("/api/summary").json()["park_spot"]["id"] == ids[-2]
+        # A trip started after the photo: it no longer marks where the car is.
+        from app.database import SessionLocal
+        with SessionLocal() as s2:
+            p = s2.get(ParkPhoto, ids[-2])
+            assert routes._park_spot_line(s2, None) == ""
+            d = s2.scalars(select(Drive).order_by(Drive.start_time.desc())).first()
+            p.ts = d.start_time - timedelta(minutes=5)
+            for q in s2.scalars(select(ParkPhoto).where(ParkPhoto.id != p.id)).all():
+                s2.delete(q)
+            s2.commit()
+        assert client.get("/api/summary").json()["park_spot"] is None
+
+
+def test_park_spot_moved_only_when_carried_off_not_driven(seeded):
+    """The spot photo warns when the car's place changed with the odometer
+    standing still; a car driven on (odometer up) simply drops the photo."""
+    from app.api import routes
+    from app.database import SessionLocal
+    from app.models import ParkPhoto, Vehicle
+
+    with SessionLocal() as s:
+        v = routes._first_vehicle(s)
+        s.add(ParkPhoto(vehicle_id=v.id, ts=routes.sync_mod.now_local() + timedelta(days=1),
+                        coords="3.10000, 101.60000", coords_from="car", odo_km=1000.0,
+                        mime="image/jpeg", size=4, data=b"\xff\xd8\xff\x00"))
+        s.commit()
+        cases = [("3.10010, 101.60010", 1000.05, False), ("3.11000, 101.60000", 1000.0, True)]
+        for coords, odo, moved in cases:
+            with mock.patch.object(routes, "_car_live", return_value=(coords, odo, 50.0)):
+                spot = routes._park_spot(s, v)
+                assert spot is not None and spot["moved"] is moved
+        with mock.patch.object(routes, "_car_live", return_value=("3.11000, 101.60000", 1001.0, 50.0)):
+            assert routes._park_spot(s, v) is None

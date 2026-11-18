@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import DateTime, func, or_, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text as sa_text
@@ -40,7 +40,7 @@ from ..config import get_settings
 from .. import database as db
 from ..database import engine, get_session
 from ..importer import ImportError_, parse_upload
-from ..models import (ArrivalTailSample, BatteryReading, Charge, Drive, Place,
+from ..models import (ArrivalTailSample, BatteryReading, Charge, Drive, ParkPhoto, Place,
                       SecurityEvent, ServiceRecord, Vehicle)
 from ..schemas import ChargeOut, DriveOut, VehicleOut
 
@@ -3928,7 +3928,7 @@ def _evaluate_alerts(session: Session, vehicle, vin: str, snap: dict,
                 session, "Car opened while parked",
                 f"{what} was opened on {vehicle.name} while it sat parked and "
                 f"locked{', Sentry Mode on' if sentry_now else ''}, "
-                "with no key unlocking it.",
+                "with no key unlocking it." + _park_spot_line(session, vehicle),
                 tag="intrusion",
             )
             # Persisted as well as pushed. The alert alone left no trace
@@ -5488,6 +5488,182 @@ def _charge_plan(session: Session, vehicle_id: int, pct_now: float | None,
         "basis_days": round(days, 1),
         "stretches": len(spans),
     }
+
+
+# Photos of where the car was parked (ParkPhoto). The newest this many per car
+# are kept. A photo is held to PARK_PHOTO_MAX_BYTES: the phone shrinks it to
+# about 1600 px and 150 KB before sending.
+PARK_PHOTO_KEEP = 30
+PARK_PHOTO_MAX_BYTES = 2_500_000
+# The car counts as carried off its photo's spot when it is this far away
+# with its odometer standing still (parked-car GPS wanders in a basement, so
+# not less); once the odometer has gone on this far it was driven, and the
+# photo no longer marks where it is.
+PARK_MOVED_KM = 0.3
+PARK_MOVED_ODO_KM = 0.2
+
+
+def _car_live(vehicle: Vehicle) -> tuple[str, float | None, float | None]:
+    """Where the car says it is now ("lat, lon" or ""), its odometer in km and
+    its battery %, from the live stream's memory."""
+    with _LIVE_LOCK:
+        car = dict(_LIVE_MEM.get(vehicle.vin or "") or {})
+    loc, coords = car.get("Location"), ""
+    if isinstance(loc, dict):
+        try:
+            coords = f"{float(loc['latitude']):.5f}, {float(loc['longitude']):.5f}"
+        except (KeyError, TypeError, ValueError):
+            coords = ""
+    odo = car.get("Odometer")
+    try:
+        odo_km = float(odo) * sync_mod.MILES_TO_KM if odo is not None else None
+    except (TypeError, ValueError):
+        odo_km = None
+    lvl = car.get("BatteryLevel", car.get("Soc"))
+    soc = float(lvl) if isinstance(lvl, (int, float)) else None
+    return coords, odo_km, soc
+
+
+def _park_photo_meta(p: ParkPhoto) -> dict:
+    return {"id": p.id, "ts": p.ts.isoformat(timespec="seconds"), "drive_id": p.drive_id,
+            "coords": p.coords, "coords_from": p.coords_from, "place": p.place,
+            "odo_km": round(p.odo_km, 1) if p.odo_km is not None else None,
+            "soc": round(p.soc, 1) if p.soc is not None else None,
+            "note": p.note, "size": p.size, "url": f"/api/park-photo/{p.id}.jpg"}
+
+
+def _park_spot(session: Session, vehicle: Vehicle) -> dict | None:
+    """The photo of where the car is parked now: the newest one, as long as
+    no trip has started since it was taken. With whether the car has since
+    moved from that spot without a trip (its place, or its odometer)."""
+    p = session.scalars(select(ParkPhoto).where(ParkPhoto.vehicle_id == vehicle.id)
+                        .order_by(ParkPhoto.ts.desc()).limit(1)).first()
+    if p is None:
+        return None
+    later = session.scalars(select(Drive.id).where(
+        Drive.vehicle_id == vehicle.id, Drive.start_time > p.ts).limit(1)).first()
+    if later is not None:
+        return None
+    coords, odo_km, _ = _car_live(vehicle)
+    # Driven on since (the trip may not be saved yet): the photo is no
+    # longer where the car is.
+    if odo_km is not None and p.odo_km is not None and odo_km - p.odo_km > PARK_MOVED_ODO_KM:
+        return None
+    out = _park_photo_meta(p)
+    away = haversine_km(p.coords, coords) if (p.coords and coords) else None
+    out["away_km"] = round(away, 2) if away is not None else None
+    # Its place has changed with the odometer standing still: carried off
+    # (towed, or on a car carrier), or the car's GPS badly off.
+    out["moved"] = bool(away is not None and away > PARK_MOVED_KM)
+    return out
+
+
+def _park_spot_line(session: Session, vehicle: Vehicle | None) -> str:
+    """A line for a parked-car alert: that a photo of the spot is in the app."""
+    if vehicle is None:
+        return ""
+    try:
+        spot = _park_spot(session, vehicle)
+    except Exception:  # noqa: BLE001 - an alert is never held back by this
+        return ""
+    if not spot:
+        return ""
+    at = datetime.fromisoformat(spot["ts"])
+    return (f"\nSpot photo from {at:%H:%M}" + (f" at {spot['place']}" if spot["place"] else "")
+            + " is in the app (Where I parked).")
+
+
+@router.post("/park-photo")
+async def park_photo_add(
+    file: UploadFile = File(...),
+    lat: float | None = Query(None, ge=-90, le=90, allow_inf_nan=False),
+    lon: float | None = Query(None, ge=-180, le=180, allow_inf_nan=False),
+    note: str = Query("", max_length=120),
+    session: Session = Depends(get_session),
+):
+    """Save a photo of where the car is parked. The place is the car's own
+    location when the live stream has one; else the phone's (lat, lon); else
+    where the last trip ended."""
+    data = await file.read(PARK_PHOTO_MAX_BYTES + 1)
+    if len(data) > PARK_PHOTO_MAX_BYTES:
+        raise HTTPException(413, "Photo too large.")
+    if data[:3] == b"\xff\xd8\xff":
+        mime = "image/jpeg"
+    elif data[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    elif data[8:12] == b"WEBP":
+        mime = "image/webp"
+    else:
+        raise HTTPException(415, "Not a JPEG, PNG or WebP photo.")
+    vehicle = _first_vehicle(session)
+    coords, odo_km, soc = _car_live(vehicle)
+    src = "car" if coords else ""
+    if not coords and lat is not None and lon is not None:
+        coords, src = f"{lat:.5f}, {lon:.5f}", "phone"
+    last = session.scalars(select(Drive).where(
+        Drive.vehicle_id == vehicle.id, Drive.end_time.is_not(None))
+        .order_by(Drive.start_time.desc()).limit(1)).first()
+    if not coords and last is not None and last.end_coords:
+        coords, src = last.end_coords, "trip"
+    if odo_km is None and last is not None:
+        odo_km = last.end_odo_km
+    # The trip that brought the car here: the last one, when the car has not
+    # driven on since (or that cannot be told).
+    drive_id = None
+    if last is not None and (odo_km is None or last.end_odo_km is None
+                             or abs(float(odo_km) - float(last.end_odo_km)) <= 0.3):
+        drive_id = last.id
+    place = ""
+    if coords:
+        try:
+            name, area = _place_and_area(coords, session)
+            place = name or area or ""
+            if place.replace(" ", "") == coords.replace(" ", "") or place[:1].isdigit():
+                place = ""   # only the coordinates again: no name for it
+        except Exception:  # noqa: BLE001 - a place name is a nicety
+            place = ""
+    p = ParkPhoto(vehicle_id=vehicle.id, ts=sync_mod.now_local().replace(tzinfo=None),
+                  drive_id=drive_id, coords=coords, coords_from=src, place=place[:160],
+                  odo_km=odo_km, soc=soc, note=note.strip()[:120], mime=mime,
+                  size=len(data), data=data)
+    session.add(p)
+    session.flush()
+    old = session.scalars(select(ParkPhoto.id).where(ParkPhoto.vehicle_id == vehicle.id)
+                          .order_by(ParkPhoto.ts.desc(), ParkPhoto.id.desc())
+                          .offset(PARK_PHOTO_KEEP)).all()
+    if old:
+        session.execute(ParkPhoto.__table__.delete().where(ParkPhoto.id.in_(old)))
+    session.commit()
+    return {"saved": _park_photo_meta(p), "removed": len(old)}
+
+
+@router.get("/park-photos")
+def park_photos(session: Session = Depends(get_session)):
+    """The saved spot photos, newest first (without the images)."""
+    vehicle = _first_vehicle(session)
+    rows = session.scalars(select(ParkPhoto).where(ParkPhoto.vehicle_id == vehicle.id)
+                           .order_by(ParkPhoto.ts.desc())).all()
+    return {"keep": PARK_PHOTO_KEEP, "photos": [_park_photo_meta(p) for p in rows],
+            "current": _park_spot(session, vehicle)}
+
+
+@router.get("/park-photo/{photo_id}.jpg")
+def park_photo_image(photo_id: int, session: Session = Depends(get_session)):
+    p = session.get(ParkPhoto, photo_id)
+    if p is None:
+        raise HTTPException(404, "No such photo.")
+    return Response(content=p.data, media_type=p.mime or "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@router.delete("/park-photo/{photo_id}")
+def park_photo_delete(photo_id: int, session: Session = Depends(get_session)):
+    p = session.get(ParkPhoto, photo_id)
+    if p is None:
+        raise HTTPException(404, "No such photo.")
+    session.delete(p)
+    session.commit()
+    return {"deleted": photo_id}
 
 
 def repair_streamed_charges(session: Session) -> int:
@@ -14171,6 +14347,13 @@ def summary(
         "battery": battery,
         "battery_balance": battery_balance,
         "charge_plan": charge_plan,
+        "park_spot": _park_spot(session, vehicle),
+        # Which of the listed trips has a spot photo: {trip id: photo id}.
+        "park_photos_by_trip": {
+            str(did): pid for did, pid in session.execute(
+                select(ParkPhoto.drive_id, func.max(ParkPhoto.id))
+                .where(ParkPhoto.vehicle_id == vehicle.id, ParkPhoto.drive_id.is_not(None))
+                .group_by(ParkPhoto.drive_id)).all()},
         "petrol_comparison": petrol_comparison,
         "week_compare": week_compare,
         "narrative": narrative_lines,
@@ -14446,7 +14629,7 @@ def _sentry_alert(session: Session, vin: str, sentry_state: str, what: str,
     notifications.notify(
         session,
         "Sentry: alarm" if what == "panic" else "Sentry",
-        f"{headline}{detail}{where}",
+        f"{headline}{detail}{where}{_park_spot_line(session, session.scalars(select(Vehicle).where(Vehicle.vin == vin)).first())}",
         tag="sentry",
     )
 

@@ -3769,3 +3769,19 @@ main > .card { max-width: 100%; }
 .gl-dim .gl-hchips .gl-kb { opacity: .55; }
 .gl-dim .gl-spodo { opacity: .5; }
 .gl-head:has(.gl-hchips) .gl-swap { margin-left: 10px; }
+
+/* Where I parked: the spot photo card, the viewer and its thumbnails. */
+button.kpi-spot { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; }
+.kpi-spot { cursor: pointer; }
+.kpi-spot .spot-row { display: flex; align-items: center; gap: 10px; margin-top: 3px; min-width: 0; }
+.kpi-spot .spot-row img { width: 54px; height: 40px; object-fit: cover; border-radius: 5px; flex: none; border: 1px solid var(--border, rgba(255,255,255,.12)); }
+.kpi-spot .spot-row > div { min-width: 0; }
+.kpi-spot .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spot-card { max-width: 640px; }
+.spot-big { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 8px; background: #000; margin: 6px 0 10px; }
+.spot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-top: 6px; }
+.spot-th { border: 1px solid rgba(255,255,255,.12); background: none; padding: 0; border-radius: 6px; overflow: hidden; cursor: pointer; color: var(--muted); font: 10px/1.6 inherit; }
+.spot-th.on { border-color: var(--accent, #3ab0ff); }
+.spot-th img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.spot-th span { display: block; font-size: 10px; }
+#spot-modal { z-index: 10050; }

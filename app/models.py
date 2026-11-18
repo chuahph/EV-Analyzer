@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, event
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -641,6 +641,33 @@ class ServiceRecord(Base):
     odo_km: Mapped[float] = mapped_column(Float, default=0.0)
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str] = mapped_column(String(200), default="")
+
+
+class ParkPhoto(Base):
+    """A photo of where the car was parked, taken on the phone with one tap
+    on the parked Live page (the bay, the pillar number, the level sign).
+    Tesla gives outside apps no camera images, so this is the phone's.
+
+    Saved with where the car itself said it was, its odometer and battery,
+    and the trip that brought it there. The newest PARK_PHOTO_KEEP per car
+    are kept; older ones are deleted when a new one is saved."""
+
+    __tablename__ = "park_photos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    drive_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # "lat, lon" as Drive.end_coords; where the car was, else the phone.
+    coords: Mapped[str] = mapped_column(String(40), default="")
+    coords_from: Mapped[str] = mapped_column(String(8), default="")   # car / phone / trip
+    place: Mapped[str] = mapped_column(String(160), default="")
+    odo_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    soc: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(String(120), default="")
+    mime: Mapped[str] = mapped_column(String(24), default="image/jpeg")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class PushSubscription(Base):
