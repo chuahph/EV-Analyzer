@@ -1265,8 +1265,11 @@ function renderKpis(d) {
   }
   const cb = glChargeBy(d.charge_plan);
   if (cb) cards.push(kpiCard("Charge By", cb.when, cb.sub, cb.tone));
+  // Where I Parked goes last, in the boxes under "Show more"; only a car
+  // carried off its spot (red) stays up top.
   const sc = spotCard(d);
-  if (sc) cards.push(sc);
+  const scTop = sc && d.park_spot && d.park_spot.moved;
+  if (scTop) cards.push(sc);
   if (drv.available) {
     cards.push(kpiCard("Distance", fmt(drv.total_distance_km, 1, true) + " km",
       `${fmt(drv.total_drives)} drives · ${fmt(drv.total_duration_h)} h`, "blue"));
@@ -1511,6 +1514,7 @@ function renderKpis(d) {
     document.getElementById("show-more-kpis")?.classList.add("hidden");
     return;
   }
+  if (sc && !scTop) cards.push(sc);
   document.getElementById("kpis").innerHTML = cards.join("");
   wireInfoButtons(document.getElementById("kpis"));
   // Collapse to the first KPI_COLLAPSED_COUNT boxes so the dashboard opens
