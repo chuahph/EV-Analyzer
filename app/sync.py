@@ -1088,6 +1088,27 @@ def _shift_of(fields: dict[str, Any], speed_kmh: float | None) -> str:
     return shift
 
 
+def _climate_on(fields: dict[str, Any], hvac_on: bool | None,
+                fan: float | None) -> bool | None:
+    """Whether climate is running, from the car's two readings of it.
+
+    HvacPower is sent only when it changes, and a change has been lost: Off as
+    the car woke at 06:49 on 19 Nov, and the On a minute later never arrived,
+    so a whole drive with the A/C running read off. HvacFanSpeed (0 = fan
+    stopped) is a number, so the relay asks the car to resend it every few
+    minutes even unchanged. Whichever of the two the car reported last
+    decides; with no time for either, the fan when it is known."""
+    if fan is None:
+        return hvac_on
+    if hvac_on is None:
+        return fan > 0
+    kt = fields.get("_kt") if isinstance(fields.get("_kt"), dict) else {}
+    t_fan, t_hvac = float(kt.get("HvacFanSpeed") or 0.0), float(kt.get("HvacPower") or 0.0)
+    if t_hvac > t_fan:
+        return hvac_on
+    return fan > 0
+
+
 def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]:
     """Flatten accumulated telemetry field values into a sync snapshot.
 
@@ -1315,8 +1336,8 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         # ...Precondition / ...OverheatProtect. Anything that is not plainly
         # off means the system is drawing power, which is what climate_on
         # means to every caller of it.
-        "climate_on": enum_flag("HvacPower", ("On", "Precondition",
-                                              "OverheatProtect")),
+        "climate_on": _climate_on(fields, enum_flag("HvacPower", (
+            "On", "Precondition", "OverheatProtect")), num("HvacFanSpeed")),
 
         # --- Fields polling has never had. Carried through unconverted.
         #
@@ -1387,6 +1408,7 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         # Kept for the raw record. num() is None here because the value is an
         # enum string; climate_on above is the reading of it.
         "hvac_raw": enum_str("HvacPower"),
+        "hvac_fan": num("HvacFanSpeed"),
         "inside_temp": num("InsideTemp"),
         # The pack's own temperature. Cold-weather losses are a property of
         # the battery, not of the air the efficiency chart currently plots.

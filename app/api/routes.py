@@ -17271,8 +17271,12 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     # drive with the A/C running). An Off from the drive's first minutes with
     # nothing since is that wake-up reading, not a verdict: unknown, so the
     # page shows no Climate rather than a wrong "off".
-    if go and now.get("climate_on") is False:
-        hv_t = float((car.get("_kt") or {}).get("HvacPower") or 0.0)
+    # Only while the fan speed (resent by the car every few minutes) is not
+    # streaming or is older: then it, not this guess, decides.
+    kt_ = car.get("_kt") or {}
+    if (go and now.get("climate_on") is False
+            and float(kt_.get("HvacFanSpeed") or 0.0) < float(kt_.get("HvacPower") or 0.0) + 1):
+        hv_t = float(kt_.get("HvacPower") or 0.0)
         if hv_t and hv_t <= float(go.get("ts") or 0.0) + CLIMATE_WAKE_OFF_SEC:
             now["climate_on"] = None
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,

@@ -2821,3 +2821,27 @@ def test_a_tesla_destination_charger_is_ac_though_the_car_names_it_tesla():
     assert stream_charge_is_dc({**base, "duration_min": 40.0, "kwh_wall": 19.0}) is True
     # Too short to judge: the car's word stands.
     assert stream_charge_is_dc({**base, "duration_min": 12.0, "kwh_pack_meter": 2.0, "kwh_pack_level": 2.0}) is True
+
+
+def test_climate_on_from_hvacpower_and_fan_speed_newest_wins():
+    """Climate on/off from HvacPower and HvacFanSpeed: whichever the car
+    reported last decides, so a lost HvacPower On (19 Nov) is put right by the
+    fan speed the car resends."""
+    from app.sync import snapshot_from_telemetry
+
+    off_then_fan = {"HvacPower": "HvacPowerStateOff", "HvacFanSpeed": 4,
+                    "_kt": {"HvacPower": 1000.0, "HvacFanSpeed": 1300.0}}
+    assert snapshot_from_telemetry(off_then_fan, 1300.0)["climate_on"] is True
+    # Switched off after the last fan report: HvacPower is the newer word.
+    on_fan_then_off = {"HvacPower": "HvacPowerStateOff", "HvacFanSpeed": 4,
+                       "_kt": {"HvacPower": 1400.0, "HvacFanSpeed": 1300.0}}
+    assert snapshot_from_telemetry(on_fan_then_off, 1400.0)["climate_on"] is False
+    # HvacPower stuck On (its Off lost) while the fan reads 0 since.
+    stuck_on = {"HvacPower": "HvacPowerStateOn", "HvacFanSpeed": 0,
+                "_kt": {"HvacPower": 1000.0, "HvacFanSpeed": 5000.0}}
+    assert snapshot_from_telemetry(stuck_on, 5000.0)["climate_on"] is False
+    # Only one of the two known, or no times at all.
+    assert snapshot_from_telemetry({"HvacPower": "HvacPowerStateOn"}, 1.0)["climate_on"] is True
+    assert snapshot_from_telemetry({"HvacFanSpeed": 2}, 1.0)["climate_on"] is True
+    assert snapshot_from_telemetry({"HvacFanSpeed": 0, "HvacPower": "HvacPowerStateOn"}, 1.0)["climate_on"] is False
+    assert snapshot_from_telemetry({}, 1.0)["climate_on"] is None

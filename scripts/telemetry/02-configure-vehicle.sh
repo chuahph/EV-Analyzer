@@ -386,6 +386,7 @@ $DEFAULT_DRIVE_COUNTER
       "ChargingCableType":         {"interval_seconds": 60},
       "ChargeLimitSoc":            {"interval_seconds": 300},
       "HvacPower":                 {"interval_seconds": 60},
+      "HvacFanSpeed":              {"interval_seconds": 30, "resend_interval_seconds": 300},
       "ModuleTempMin":             {"interval_seconds": 300},
       "InsideTemp":                {"interval_seconds": 300},
       "OutsideTemp":               {"interval_seconds": 300},
@@ -419,6 +420,19 @@ for attempt in $(seq 1 12); do
     --data-binary @"$WORK/config.json") || true
   UNKNOWN=$(jq -r '.error // ""' "$WORK/resp.json" 2>/dev/null \
             | sed -n 's/^Unknown field \([A-Za-z0-9_]*\).*/\1/p')
+  # resend_interval_seconds (HvacFanSpeed: the car resends it every 5 min
+  # even unchanged, so a lost change cannot stick) needs firmware 2024.44.32
+  # or later and may need prefer_typed. Refused, it is taken off and the
+  # rest sent as before: the fan then streams on change like every field.
+  if [ -z "$UNKNOWN" ] && [ "${HTTP:0:1}" != "2" ] \
+     && grep -qi 'resend' "$WORK/resp.json" 2>/dev/null \
+     && jq -e '[.config.fields[] | has("resend_interval_seconds")] | any' "$WORK/config.json" >/dev/null 2>&1; then
+    echo "  the car does not take resend_interval_seconds — sending without it"
+    DROPPED="$DROPPED resend_interval_seconds"
+    jq 'del(.config.fields[].resend_interval_seconds)' "$WORK/config.json" \
+      > "$WORK/config.next" && mv "$WORK/config.next" "$WORK/config.json"
+    continue
+  fi
   [ -n "$UNKNOWN" ] || break
   echo "  this car does not accept '$UNKNOWN' — dropping it and retrying"
   DROPPED="$DROPPED $UNKNOWN"
