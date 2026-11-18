@@ -14792,3 +14792,34 @@ def test_park_photo_taken_before_its_trip_closes_is_linked_later(seeded):
         assert "?t=" in routes._park_photo_meta(p)["url"]
         s.delete(p); s.delete(far); s.delete(d)
         s.commit()
+
+
+def test_live_climate_wake_off_is_unknown_not_off():
+    """HvacPower Off reported as the car wakes, with the On that should follow
+    a minute later lost, shows no Climate rather than "off" during the drive;
+    an Off reported mid-drive (climate switched off) still reads off."""
+    from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+    from app.api import routes as routes_mod
+
+    vin = "TESTCLIMATEWAKE01"
+    t0 = _dtm.now(_tz.utc) - _td(seconds=900)
+    at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fold = lambda d, f: routes_mod._live_mem_fold(vin, at(d), f)
+    payload = lambda: routes_mod._live_payload(vin, 68.3)
+    mi = 1.609344
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        fold(0, {"HvacPower": "HvacPowerStateOff", "Gear": "ShiftStateP"})
+        fold(60, {"Gear": "ShiftStateD", "VehicleSpeed": 20.0, "Odometer": 100.0 / mi})
+        for k in range(1, 40):
+            fold(60 + k * 20, {"VehicleSpeed": 30.0, "Odometer": (100.0 + k * 0.15) / mi})
+        p = payload()
+        assert p["driving"] is True
+        assert p["now"]["climate_on"] is None
+        # Climate on, then switched off well into the drive: a real "off".
+        fold(860, {"HvacPower": "HvacPowerStateOn", "VehicleSpeed": 30.0, "Odometer": 106.0 / mi})
+        assert payload()["now"]["climate_on"] is True
+        fold(880, {"HvacPower": "HvacPowerStateOff", "VehicleSpeed": 30.0, "Odometer": 106.2 / mi})
+        assert payload()["now"]["climate_on"] is False
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)

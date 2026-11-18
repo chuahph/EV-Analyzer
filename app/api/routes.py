@@ -17265,8 +17265,23 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         trip["wh_per_km_measured"] = trip["wh_per_km"]
         trip["wh_per_km"] = _whkm_calibrated(trip["wh_per_km"])
         trip["driving_wh_per_km"] = trip["wh_per_km"]
+    # The car reports HvacPower Off as it wakes and, about a minute later, On
+    # once climate starts; it sends the field only when it changes, and that
+    # second report has been lost (19 Nov 06:49 Off, then nothing for a whole
+    # drive with the A/C running). An Off from the drive's first minutes with
+    # nothing since is that wake-up reading, not a verdict: unknown, so the
+    # page shows no Climate rather than a wrong "off".
+    if go and now.get("climate_on") is False:
+        hv_t = float((car.get("_kt") or {}).get("HvacPower") or 0.0)
+        if hv_t and hv_t <= float(go.get("ts") or 0.0) + CLIMATE_WAKE_OFF_SEC:
+            now["climate_on"] = None
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "nav": _live_nav(car), "server_ts": round(time.time(), 1)}
+
+
+# An HvacPower Off reported this soon after the drive began (or before it),
+# with no report since, is the car's wake-up reading: see live_now's end.
+CLIMATE_WAKE_OFF_SEC = 180
 
 
 def _live_position(car: dict) -> dict:
