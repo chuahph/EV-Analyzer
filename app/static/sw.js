@@ -6,7 +6,7 @@
  *   - navigations & data  -> network-first, fall back to cache when offline
  *   - other assets        -> cache-first, fall back to network
  */
-const CACHE = "ev-analyzer-v537"; // bump to invalidate cached assets on update
+const CACHE = "ev-analyzer-v538"; // bump to invalidate cached assets on update
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -101,6 +101,9 @@ self.addEventListener("fetch", (event) => {
   // Video is fetched in byte ranges, which a cached whole file cannot answer
   // on iOS (the keep-awake clip would not play). The network handles both.
   if (url.pathname.startsWith("/api/live") || url.pathname.endsWith(".mp4")) return;
+  // Spot photos: the browser's own cache keeps them; copies here were never
+  // cleared when a photo was deleted.
+  if (url.pathname.startsWith("/api/park-photo")) return;
 
   if (request.mode === "navigate" || isData(url) || isAppAsset(url)) {
     event.respondWith(networkFirst(request));

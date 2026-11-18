@@ -5439,8 +5439,9 @@ def repair_tdc_free(session: Session) -> int:
 
 
 CHARGE_PLAN_FLOOR_PCT = 20.0     # charge before the battery falls below this
-CHARGE_PLAN_CYCLES = 4           # the last few charge-to-charge stretches
-CHARGE_PLAN_MIN_DAYS = 1.0       # a stretch shorter than this says little about a day
+CHARGE_PLAN_CYCLES = 4           # at least the last few charge-to-charge stretches
+CHARGE_PLAN_WINDOW_DAYS = 7.0    # ...and back until they cover a week
+CHARGE_PLAN_MIN_DAYS = 1.0       # less than a day in all says little about a day
 
 
 def _charge_plan(session: Session, vehicle_id: int, pct_now: float | None,
@@ -5457,23 +5458,31 @@ def _charge_plan(session: Session, vehicle_id: int, pct_now: float | None,
         select(Charge).where(Charge.vehicle_id == vehicle_id,
                              Charge.start_time >= now - timedelta(days=90))
         .order_by(Charge.start_time)).all()
-    spans: list[tuple[float, float]] = []      # (% fallen, days)
+    every: list[tuple[float, float]] = []      # (% fallen, days), oldest first
     for a, b in zip(charges, charges[1:]):
         if a.end_time is None or b.start_time is None or a.end_soc is None or b.start_soc is None:
             continue
         days = (b.start_time - a.end_time).total_seconds() / 86400.0
         drop = float(a.end_soc) - float(b.start_soc)
-        if days >= CHARGE_PLAN_MIN_DAYS and drop > 0:
-            spans.append((drop, days))
-    spans = spans[-CHARGE_PLAN_CYCLES:]
+        # A rise means a charge went unrecorded in between: not this car's use.
+        if days > 0 and drop >= 0:
+            every.append((drop, days))
     last = charges[-1] if charges else None
     if last is not None and last.end_time is not None and last.end_soc is not None:
         days = (now - last.end_time).total_seconds() / 86400.0
         drop = float(last.end_soc) - float(pct_now)
-        if days >= CHARGE_PLAN_MIN_DAYS and drop > 0:
-            spans.append((drop, days))
+        if days > 0 and drop >= 0:
+            every.append((drop, days))
+    # The newest stretches, back until they cover CHARGE_PLAN_WINDOW_DAYS (and
+    # at least CHARGE_PLAN_CYCLES of them): every stretch, short ones too, so
+    # a car charged every night still gets a rate, from its whole week.
+    spans: list[tuple[float, float]] = []
+    for sp in reversed(every):
+        if sum(d for _, d in spans) >= CHARGE_PLAN_WINDOW_DAYS and len(spans) >= CHARGE_PLAN_CYCLES:
+            break
+        spans.append(sp)
     fallen, days = sum(x for x, _ in spans), sum(d for _, d in spans)
-    if days <= 0 or fallen <= 0:
+    if days < CHARGE_PLAN_MIN_DAYS or fallen <= 0:
         return None
     per_day = fallen / days
     left = max(0.0, (float(pct_now) - floor_pct) / per_day)
@@ -5529,7 +5538,38 @@ def _park_photo_meta(p: ParkPhoto) -> dict:
             "coords": p.coords, "coords_from": p.coords_from, "place": p.place,
             "odo_km": round(p.odo_km, 1) if p.odo_km is not None else None,
             "soc": round(p.soc, 1) if p.soc is not None else None,
-            "note": p.note, "size": p.size, "url": f"/api/park-photo/{p.id}.jpg"}
+            # The time in the address: an id SQLite frees can come back for a
+            # new photo, and the image is cached for good.
+            "note": p.note, "size": p.size,
+            "url": f"/api/park-photo/{p.id}.jpg?t={int(p.ts.timestamp())}"}
+
+
+def _link_park_photos(session: Session, vehicle: Vehicle) -> int:
+    """Give a spot photo its trip once that trip is saved. A photo taken in P
+    before the driver gets out (Auto Spot, 5 s after parking) comes before the
+    trip closes, so at the time only the trip before it was known. The trip
+    is the one that started before the photo and ended at its odometer."""
+    try:
+        rows = session.scalars(select(ParkPhoto).where(
+            ParkPhoto.vehicle_id == vehicle.id, ParkPhoto.drive_id.is_(None),
+            ParkPhoto.odo_km.is_not(None),
+            ParkPhoto.ts >= sync_mod.now_local() - timedelta(days=3))).all()
+        n = 0
+        for p in rows:
+            d = session.scalars(select(Drive).where(
+                Drive.vehicle_id == vehicle.id, Drive.start_time <= p.ts,
+                Drive.end_time.is_not(None), Drive.end_odo_km.is_not(None))
+                .order_by(Drive.start_time.desc()).limit(1)).first()
+            if (d is not None and abs(float(d.end_odo_km) - float(p.odo_km)) <= 0.3
+                    and d.end_time >= p.ts - timedelta(hours=12)):
+                p.drive_id = d.id
+                n += 1
+        if n:
+            session.commit()
+        return n
+    except Exception:  # noqa: BLE001 - a link, never a failed summary
+        session.rollback()
+        return 0
 
 
 def _park_spot(session: Session, vehicle: Vehicle) -> dict | None:
@@ -5574,7 +5614,7 @@ def _park_spot_line(session: Session, vehicle: Vehicle | None) -> str:
 
 
 @router.post("/park-photo")
-async def park_photo_add(
+def park_photo_add(
     file: UploadFile = File(...),
     lat: float | None = Query(None, ge=-90, le=90, allow_inf_nan=False),
     lon: float | None = Query(None, ge=-180, le=180, allow_inf_nan=False),
@@ -5583,8 +5623,12 @@ async def park_photo_add(
 ):
     """Save a photo of where the car is parked. The place is the car's own
     location when the live stream has one; else the phone's (lat, lon); else
-    where the last trip ended."""
-    data = await file.read(PARK_PHOTO_MAX_BYTES + 1)
+    where the last trip ended.
+
+    A plain def, as every route here that touches the database: FastAPI runs
+    it on the thread pool, so the session and _LIVE_LOCK never hold up the
+    event loop the live stream runs on."""
+    data = file.file.read(PARK_PHOTO_MAX_BYTES + 1)
     if len(data) > PARK_PHOTO_MAX_BYTES:
         raise HTTPException(413, "Photo too large.")
     if data[:3] == b"\xff\xd8\xff":
@@ -14347,7 +14391,7 @@ def summary(
         "battery": battery,
         "battery_balance": battery_balance,
         "charge_plan": charge_plan,
-        "park_spot": _park_spot(session, vehicle),
+        "park_spot": (_link_park_photos(session, vehicle), _park_spot(session, vehicle))[1],
         # Which of the listed trips has a spot photo: {trip id: photo id}.
         "park_photos_by_trip": {
             str(did): pid for did, pid in session.execute(

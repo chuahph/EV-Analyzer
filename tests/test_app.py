@@ -14657,28 +14657,39 @@ def test_a_trip_end_read_from_a_stale_place_is_put_where_the_car_stood():
 
 
 def test_charge_plan_rate_from_recent_charge_to_charge_stretches():
-    """Next-charge estimate: % fallen per day across the stretches between
-    charges plus the stretch since the last one, run down to the 20% floor."""
+    """Next-charge estimate: % fallen per day over the newest charge-to-charge
+    stretches (at least 4, back to a week), run down to the 20% floor; a car
+    charged every night still gets one."""
     from app.api import routes
     from app import sync as sync_mod
 
     now = datetime(2026, 11, 18, 12, 0)
     C = lambda s, e, a, b: SimpleNamespace(start_time=s, end_time=e, start_soc=a, end_soc=b)
     charges = [
-        C(now - timedelta(days=14), now - timedelta(days=14) + timedelta(hours=1), 30, 80),
-        C(now - timedelta(days=9), now - timedelta(days=9) + timedelta(hours=1), 30, 80),  # 50% in 5 d
-        C(now - timedelta(days=4), now - timedelta(days=4), 40, 80),                      # 40% in ~4.96 d
-        C(now - timedelta(hours=3), now - timedelta(hours=2), 45, 80),                    # 35% in ~3.9 d
+        C(now - timedelta(days=20), now - timedelta(days=20), 30, 80),   # outside the week
+        C(now - timedelta(days=14), now - timedelta(days=14), 30, 80),   # 50% in 6 d (too old once 7 d are covered)
+        C(now - timedelta(days=9), now - timedelta(days=9), 30, 80),     # 50% in 5 d
+        C(now - timedelta(days=4), now - timedelta(days=4), 40, 80),     # 40% in 5 d
+        C(now - timedelta(days=1), now - timedelta(days=1), 50, 80),     # 30% in 3 d
     ]
     sess = SimpleNamespace(scalars=lambda q: SimpleNamespace(all=lambda: charges))
     with mock.patch.object(sync_mod, "now_local", return_value=now):
-        p = routes._charge_plan(sess, 1, 60.0)
-        assert p["stretches"] == 3           # the 2 hours since the last charge are too short to count
-        assert 8.9 <= p["pct_per_day"] <= 9.2
-        assert 4.3 <= p["days_left"] <= 4.5  # (60 - 20) / ~9.1
+        p = routes._charge_plan(sess, 1, 70.0)   # 10% in the day since
+        # Newest first: 1 d (10), 3 d (30), 5 d (40), 5 d (50) = 130% over 14 d.
+        assert p["stretches"] == 4 and p["basis_days"] == 14.0
+        assert p["pct_per_day"] == round(130 / 14, 1)
+        assert p["days_left"] == round(50 / (130 / 14), 1)
         assert routes._charge_plan(sess, 1, None) is None
         assert routes._charge_plan(SimpleNamespace(scalars=lambda q: SimpleNamespace(all=lambda: [])), 1, 60.0) is None
         assert routes._charge_plan(sess, 1, 15.0)["days_left"] == 0
+
+        # Charged every night to 80%, down to 62% by each evening.
+        nightly = [C(now - timedelta(days=k, hours=-2), now - timedelta(days=k, hours=-4), 62, 80)
+                   for k in range(10, 0, -1)]
+        sess2 = SimpleNamespace(scalars=lambda q: SimpleNamespace(all=lambda: nightly))
+        p2 = routes._charge_plan(sess2, 1, 75.0)
+        assert p2 is not None and 18.0 <= p2["pct_per_day"] <= 20.0
+        assert p2["basis_days"] >= 7.0
 
 
 def test_park_photo_save_keep_thirty_spot_and_delete(seeded):
@@ -14747,3 +14758,37 @@ def test_park_spot_moved_only_when_carried_off_not_driven(seeded):
                 assert spot is not None and spot["moved"] is moved
         with mock.patch.object(routes, "_car_live", return_value=("3.11000, 101.60000", 1001.0, 50.0)):
             assert routes._park_spot(s, v) is None
+
+
+def test_park_photo_taken_before_its_trip_closes_is_linked_later(seeded):
+    """Auto Spot snaps in P before the trip is saved: once the trip ending at
+    the photo's odometer is saved, the photo is linked to it."""
+    from app.api import routes
+    from app.database import SessionLocal
+    from app.models import Drive, ParkPhoto
+
+    with SessionLocal() as s:
+        v = routes._first_vehicle(s)
+        # Its own trip, later than anything else here (other tests clear or
+        # add trips).
+        d = Drive(vehicle_id=v.id, start_time=datetime(2031, 1, 1, 10, 0),
+                  end_time=datetime(2031, 1, 1, 10, 30), distance_km=9, duration_min=30,
+                  start_soc=60, end_soc=57, energy_used_kwh=1.4, avg_speed_kmh=18,
+                  max_speed_kmh=50, outside_temp_c=28, start_odo_km=99990.0, end_odo_km=99999.0)
+        s.add(d)
+        s.flush()
+        p = ParkPhoto(vehicle_id=v.id, ts=d.end_time - timedelta(seconds=40), coords="",
+                      odo_km=float(d.end_odo_km) + 0.05, mime="image/jpeg", size=4,
+                      data=b"\xff\xd8\xff\x00")
+        far = ParkPhoto(vehicle_id=v.id, ts=d.end_time - timedelta(seconds=30), coords="",
+                        odo_km=float(d.end_odo_km) + 5.0, mime="image/jpeg", size=4,
+                        data=b"\xff\xd8\xff\x00")
+        s.add_all([p, far])
+        s.commit()
+        with mock.patch.object(routes.sync_mod, "now_local", return_value=d.end_time + timedelta(hours=1)):
+            assert routes._link_park_photos(s, v) == 1
+        s.refresh(p); s.refresh(far)
+        assert p.drive_id == d.id and far.drive_id is None
+        assert "?t=" in routes._park_photo_meta(p)["url"]
+        s.delete(p); s.delete(far); s.delete(d)
+        s.commit()
