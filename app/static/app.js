@@ -280,6 +280,13 @@ function spotCard(d) {
     <div class="spot-row"><img src="${p.url}" alt="Parking spot photo" loading="lazy">
       <div><div class="value">${h(spotAgo(p.ts))}</div><div class="sub">${warn}</div></div></div></div>`;
 }
+function spotAutoToggle() {
+  return `<label class="spot-auto-set"><input type="checkbox" data-spot-autoset ${spotAutoOn() ? "checked" : ""}>
+    <span><b>Auto Spot</b>: with the Live page open, take the photo by itself 5 s after you park in P (the phone's back camera, through the windscreen)</span></label>`;
+}
+document.addEventListener("change", (e) => {
+  if (e.target.matches && e.target.matches("[data-spot-autoset]")) spotAutoSet(e.target.checked);
+});
 let spotInput = null;
 function spotTake() {
   if (!spotInput) {
@@ -314,10 +321,12 @@ function spotSay(msg) {
   if (lastData) { renderKpis(lastData); if (document.body.classList.contains("glance-on")) renderGlance(lastData); }
   setTimeout(() => { if (Date.now() - spot.msgT >= 5900) { spot.msg = ""; if (lastData) { renderKpis(lastData); if (document.body.classList.contains("glance-on")) renderGlance(lastData); } } }, 6000);
 }
-async function spotUpload(file) {
+async function spotUpload(file, auto) {
   spot.busy = true; spotSay("Saving…");
+  // A photo taken by hand this park: no Auto Spot after it.
+  if (!auto && typeof spotAuto !== "undefined") spotAuto.armed = false;
   try {
-    const blob = await spotShrink(file);
+    const blob = auto ? file : await spotShrink(file);
     const fd = new FormData();
     fd.append("file", blob, "spot.jpg");
     const nw = (glLiveState.data && glLiveState.data.now) || {};
@@ -328,8 +337,10 @@ async function spotUpload(file) {
     if (lastData) lastData.park_spot = Object.assign({ moved: false, away_km: 0 }, j.saved);
     if (lastData && j.saved.drive_id != null) (lastData.park_photos_by_trip ||= {})[j.saved.drive_id] = j.saved.id;
     spot.busy = false; spotSay("Spot saved ✓");
+    return j.saved;
   } catch (e) {
     spot.busy = false; spotSay("Photo not saved: " + String(e.message || e).slice(0, 60));
+    return null;
   }
 }
 async function spotOpen(id) {
@@ -342,21 +353,154 @@ async function spotOpen(id) {
   try { list = (await (await fetch("/api/park-photos")).json()).photos || []; } catch (_) { /* shown below */ }
   const draw = (pid) => {
     const p = list.find((x) => x.id === +pid) || list[0];
-    if (!p) { show.innerHTML = '<p class="modal-sub">No spot photos yet.</p>'; return; }
+    if (!p) { show.innerHTML = '<p class="modal-sub">No spot photos yet.</p>' + spotAutoToggle(); return; }
     const map = p.coords ? `<a class="btn" target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(p.coords)}">📍 Map</a>` : "";
     const from = { car: "the car's location", phone: "the phone's location", trip: "where the last trip ended" }[p.coords_from] || "";
     show.innerHTML = `<img class="spot-big" src="${p.url}" alt="Parking spot photo">
       <p class="modal-sub"><b>${h(spotTime(p.ts))}</b>${p.place ? " · " + h(p.place) : ""}${p.drive_id != null ? ` · after trip #${p.drive_id}` : ""}<br>
       ${p.odo_km != null ? `Odometer ${fmt(p.odo_km, 1, true)} km` : ""}${p.soc != null ? ` · battery ${fmt(p.soc)}%` : ""}${from ? ` · place from ${from}` : ""}</p>
       <div class="modal-actions">${map}<button type="button" class="btn" data-spot-take>📷 New photo</button>
-      <button type="button" class="btn btn-danger" data-spot-del="${p.id}">Delete</button></div>`;
+      <button type="button" class="btn btn-danger" data-spot-del="${p.id}">Delete</button></div>
+      ${spotAutoToggle()}`;
     grid.innerHTML = list.length > 1 ? `<p class="modal-hint">${list.length} of the last 30 kept · tap one to view</p><div class="spot-grid">` +
       list.map((x) => `<button type="button" class="spot-th${x.id === p.id ? " on" : ""}" data-spot-pick="${x.id}"><img src="${x.url}" loading="lazy" alt=""><span>${h(spotAgo(x.ts))}</span></button>`).join("") + "</div>" : "";
   };
   m._spotDraw = draw;
   draw(id);
 }
+// ---- Auto Spot: the photo taken by itself on parking ----
+// Once the car has been driven and then sits in P for SPOT_AUTO_P_MS with the
+// app open, the phone's back camera (facing out through the windscreen in its
+// mount) is switched on in a small box, counts down and takes one frame,
+// saved like a Spot photo. Once per park; off again until the car is driven.
+// A web page cannot press the camera button, but with camera permission it
+// can take a frame from the camera's live picture.
+const SPOT_AUTO_P_MS = 5000, SPOT_AUTO_COUNT = 3;
+const spotAuto = { armed: false, pSince: 0, run: null };
+function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
+function spotAutoTick(L) {
+  if (STATIC_MODE) return;
+  const nw = (L && L.now) || {};
+  const fresh = nw.age_sec == null || nw.age_sec < 90;
+  const gear = fresh ? nw.shift : null;
+  const moving = (+nw.speed_kmh || 0) > 0;
+  if ((gear && gear !== "P") || (fresh && moving)) { spotAuto.armed = true; spotAuto.pSince = 0; }
+  if (spotAuto.run) {
+    if (gear && gear !== "P") spotAutoStop("Cancelled: car in " + gear);
+    return;
+  }
+  if (!gear) return;   // a frame without the gear: wait for the next
+  if (!spotAuto.armed || gear !== "P" || moving) { spotAuto.pSince = 0; return; }
+  if (!spotAuto.pSince) spotAuto.pSince = Date.now();
+  if (Date.now() - spotAuto.pSince < SPOT_AUTO_P_MS) return;
+  if (!spotAutoOn() || document.visibilityState !== "visible" || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
+  spotAuto.armed = false;
+  spotAutoRun();
+}
+function spotAutoBox() {
+  let box = document.getElementById("spot-auto");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "spot-auto";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", "Auto Spot photo");
+    document.body.appendChild(box);
+  }
+  return box;
+}
+async function spotAutoRun(retake) {
+  const box = spotAutoBox();
+  const run = { stream: null, timer: 0, n: SPOT_AUTO_COUNT, id: null };
+  spotAuto.run = run;
+  box.className = "on";
+  box.innerHTML = `<video playsinline muted autoplay></video>
+    <div class="spa-bar"><b>📷 Auto Spot</b><span class="spa-msg">Starting camera…</span>
+    <button type="button" data-spa="cancel">Cancel</button></div>`;
+  try {
+    run.stream = await navigator.mediaDevices.getUserMedia({ audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  } catch (e) {
+    spotAutoStop(e && e.name === "NotAllowedError" ? "Camera not allowed: tap 📷 Spot instead" : "No camera: tap 📷 Spot instead", 6000);
+    return;
+  }
+  if (spotAuto.run !== run) { run.stream.getTracks().forEach((t) => t.stop()); return; }
+  const v = box.querySelector("video");
+  v.srcObject = run.stream;
+  try { await v.play(); } catch (_) { /* autoplay of a muted inline stream is allowed */ }
+  const msg = box.querySelector(".spa-msg");
+  const step = () => {
+    if (spotAuto.run !== run) return;
+    if (run.n > 0) { msg.textContent = `Photo in ${run.n}…`; run.n--; run.timer = setTimeout(step, 1000); return; }
+    spotAutoSnap(run, v);
+  };
+  step();
+}
+async function spotAutoSnap(run, v) {
+  const box = spotAutoBox(), msg = box.querySelector(".spa-msg");
+  const w = v.videoWidth, hgt = v.videoHeight;
+  if (!w || !hgt) { spotAutoStop("Camera gave no picture: tap 📷 Spot", 6000); return; }
+  const k = Math.min(1, 1600 / Math.max(w, hgt));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * k); c.height = Math.round(hgt * k);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  spotAutoRelease(run);
+  msg.textContent = "Saving…";
+  const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.72));
+  const saved = blob ? await spotUpload(blob, true) : null;
+  if (spotAuto.run !== run) return;
+  if (!saved) { spotAutoStop("Photo not saved: tap 📷 Spot", 6000); return; }
+  run.id = saved.id;
+  box.innerHTML = `<img src="${saved.url}" alt="Spot photo just taken">
+    <div class="spa-bar"><b>Spot saved ✓</b>
+    <button type="button" data-spa="retake">Retake</button><button type="button" data-spa="delete">Delete</button>
+    <button type="button" data-spa="close">OK</button></div>
+    <button type="button" class="spa-off" data-spa="off">Turn Auto Spot off</button>`;
+  run.timer = setTimeout(() => { if (spotAuto.run === run) spotAutoStop(); }, 8000);
+}
+function spotAutoRelease(run) {
+  if (run && run.stream) { run.stream.getTracks().forEach((t) => t.stop()); run.stream = null; }
+  // The camera can pause the keep-awake clip on iPhone: start it again.
+  try { glWakeSync(); } catch (_) { /* not on the Live page */ }
+}
+function spotAutoStop(note, ms) {
+  const run = spotAuto.run;
+  spotAuto.run = null;
+  if (run) { clearTimeout(run.timer); spotAutoRelease(run); }
+  const box = document.getElementById("spot-auto");
+  if (!box) return;
+  if (note) {
+    box.className = "on note";
+    box.innerHTML = `<div class="spa-bar"><span class="spa-msg">${h(note)}</span><button type="button" data-spa="close">OK</button></div>`;
+    setTimeout(() => { if (!spotAuto.run && box.classList.contains("note")) { box.className = ""; box.innerHTML = ""; } }, ms || 4000);
+  } else { box.className = ""; box.innerHTML = ""; }
+}
+function spotAutoSet(on) {
+  glSave("autoSpot", on ? "on" : "off");
+  document.querySelectorAll("[data-spot-autoset]").forEach((el) => { el.checked = on; });
+}
+
 document.addEventListener("click", async (e) => {
+  const spa = e.target.closest("[data-spa]");
+  if (spa) {
+    const what = spa.dataset.spa, run = spotAuto.run;
+    if (what === "retake") {
+      const id = run && run.id;
+      spotAutoStop();
+      if (id) await fetch(`/api/park-photo/${id}`, { method: "DELETE" });
+      spotAutoRun(true);
+    } else if (what === "delete") {
+      const id = run && run.id;
+      if (id) {
+        await fetch(`/api/park-photo/${id}`, { method: "DELETE" });
+        if (lastData && lastData.park_spot && lastData.park_spot.id === id) { lastData.park_spot = null; renderKpis(lastData); }
+      }
+      spotAutoStop("Spot photo deleted", 2500);
+    } else if (what === "off") {
+      spotAutoSet(false);
+      spotAutoStop("Auto Spot off. Turn it on again under Where I Parked.", 4000);
+    } else spotAutoStop(what === "cancel" ? "Auto Spot cancelled" : "", 2000);
+    return;
+  }
   if (e.target.closest("[data-gl-spot], [data-spot-take]")) { e.preventDefault(); spotTake(); return; }
   const op = e.target.closest("[data-spot-open]");
   if (op) { spotOpen(op.dataset.spotOpen); return; }
@@ -5142,6 +5286,7 @@ function glLiveApply(L) {
   }
   glLiveState.data = L;
   glLiveState.recvAt = Date.now();
+  try { spotAutoTick(L); } catch (_) { /* never in the way of the live page */ }
   // Kept on the phone so the next time it is turned sideways the page opens
   // on the last reading, not on an empty frame waiting for the stream.
   if (Date.now() - (glLiveState.saved || 0) > 5000) {

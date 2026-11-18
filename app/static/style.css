@@ -3785,3 +3785,22 @@ button.kpi-spot { font: inherit; color: inherit; text-align: left; cursor: point
 .spot-th img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
 .spot-th span { display: block; font-size: 10px; }
 #spot-modal { z-index: 10050; }
+
+/* Auto Spot: the small camera box that takes the parking photo by itself. */
+#spot-auto { display: none; }
+#spot-auto.on {
+  display: block; position: fixed; z-index: 10060; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(300px, 46vw); border-radius: 12px; overflow: hidden;
+  background: #0b0f14; border: 1px solid rgba(90, 200, 255, .45); box-shadow: 0 8px 28px rgba(0,0,0,.6); color: #e6ebf0;
+  font: 13px/1.3 system-ui, sans-serif;
+}
+#spot-auto.on.note { width: min(340px, 70vw); }
+#spot-auto video, #spot-auto img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+#spot-auto .spa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px; }
+#spot-auto .spa-bar b { font-weight: 700; }
+#spot-auto .spa-msg { flex: 1; min-width: 0; color: #c9d3dd; }
+#spot-auto button { font: inherit; color: #e6ebf0; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+#spot-auto .spa-off { display: block; width: calc(100% - 20px); margin: 0 10px 10px; background: none; color: #97a4b2; font-size: 12px; }
+body.gl-dim #spot-auto { opacity: 1; filter: none; }
+.spot-auto-set { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.spot-auto-set input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
