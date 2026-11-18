@@ -233,6 +233,24 @@ function h(text) {
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// When to charge next, from the summary's charge_plan: the day the battery
+// is expected to reach the floor at this car's own rate of use.
+function glChargeBy(p) {
+  if (!p) return null;
+  const by = new Date(p.by);
+  if (!(by.getTime() > 0)) return null;
+  const now = new Date();
+  if (p.days_left <= 0.25) return { when: "Now", day: "now", sub: `${fmt(p.pct_now, 1, true)}% · at or near ${fmt(p.floor_pct)}%`, tone: "red" };
+  const d = by;
+  const days = Math.max(0, Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000));
+  const dayName = d.toLocaleDateString(undefined, { weekday: "short" });
+  const label = days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${dayName} ${d.getDate()} ${d.toLocaleDateString(undefined, { month: "short" })}`;
+  return {
+    when: label, day: days <= 1 ? label.toLowerCase() : dayName,
+    sub: `~${fmt(p.days_left, 1)} days to ${fmt(p.floor_pct)}% · ${fmt(p.pct_per_day, 1)}%/day`,
+    tone: days <= 1 ? "red" : days <= 3 ? "amber" : "green",
+  };
+}
 function kpiCard(label, value, sub, tone) {
   return `<div class="kpi${tone ? " tone-" + tone : ""}"><div class="label">${label}</div>
     <div class="value">${value}</div><div class="sub">${sub || ""}</div></div>`;
@@ -938,6 +956,8 @@ function renderKpis(d) {
         soc != null && soc < 15 ? "amber" : "blue"));
     }
   }
+  const cb = glChargeBy(d.charge_plan);
+  if (cb) cards.push(kpiCard("Charge By", cb.when, cb.sub, cb.tone));
   if (drv.available) {
     cards.push(kpiCard("Distance", fmt(drv.total_distance_km, 1, true) + " km",
       `${fmt(drv.total_drives)} drives · ${fmt(drv.total_duration_h)} h`, "blue"));
@@ -6249,6 +6269,7 @@ function renderGlance(d) {
             <div class="gl-battbar-cell"><i style="width:${pctShown ?? 0}%;background:${(pctShown ?? 0) < 20 ? "#ff6b70" : "var(--green)"}"></i></div></div></div>`,
           foot, glHeadChips([
             // The last trip in full is in the box on the right already.
+            (() => { const cb = glChargeBy(d.charge_plan); return cb ? ["Charge by", cb.when] : null; })(),
             nw.out_temp != null ? ["Outside", `${n(nw.out_temp, 0)}°C`] : null,
             (() => {
               const lc = d.last_charge, at = lc && Date.parse(lc.end_time || lc.start_time || "");

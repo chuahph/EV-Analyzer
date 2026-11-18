@@ -5438,6 +5438,58 @@ def repair_tdc_free(session: Session) -> int:
     return n
 
 
+CHARGE_PLAN_FLOOR_PCT = 20.0     # charge before the battery falls below this
+CHARGE_PLAN_CYCLES = 4           # the last few charge-to-charge stretches
+CHARGE_PLAN_MIN_DAYS = 1.0       # a stretch shorter than this says little about a day
+
+
+def _charge_plan(session: Session, vehicle_id: int, pct_now: float | None,
+                 floor_pct: float = CHARGE_PLAN_FLOOR_PCT) -> dict | None:
+    """When the car will need a charge: the battery now, less the floor,
+    over how fast this car's battery has fallen per day between its recent
+    charges (driving and standing alike, as the car's own % shows it), plus
+    the stretch since the last charge. None without a battery reading or a
+    measurable rate."""
+    if pct_now is None:
+        return None
+    now = sync_mod.now_local()
+    charges = session.scalars(
+        select(Charge).where(Charge.vehicle_id == vehicle_id,
+                             Charge.start_time >= now - timedelta(days=90))
+        .order_by(Charge.start_time)).all()
+    spans: list[tuple[float, float]] = []      # (% fallen, days)
+    for a, b in zip(charges, charges[1:]):
+        if a.end_time is None or b.start_time is None or a.end_soc is None or b.start_soc is None:
+            continue
+        days = (b.start_time - a.end_time).total_seconds() / 86400.0
+        drop = float(a.end_soc) - float(b.start_soc)
+        if days >= CHARGE_PLAN_MIN_DAYS and drop > 0:
+            spans.append((drop, days))
+    spans = spans[-CHARGE_PLAN_CYCLES:]
+    last = charges[-1] if charges else None
+    if last is not None and last.end_time is not None and last.end_soc is not None:
+        days = (now - last.end_time).total_seconds() / 86400.0
+        drop = float(last.end_soc) - float(pct_now)
+        if days >= CHARGE_PLAN_MIN_DAYS and drop > 0:
+            spans.append((drop, days))
+    fallen, days = sum(x for x, _ in spans), sum(d for _, d in spans)
+    if days <= 0 or fallen <= 0:
+        return None
+    per_day = fallen / days
+    left = max(0.0, (float(pct_now) - floor_pct) / per_day)
+    by = now + timedelta(days=left)
+    return {
+        "pct_now": round(float(pct_now), 1),
+        "floor_pct": floor_pct,
+        "pct_per_day": round(per_day, 1),
+        "days_left": round(left, 1),
+        "by": by.isoformat(timespec="minutes"),
+        # Over how many days of the car's own use the rate was measured.
+        "basis_days": round(days, 1),
+        "stretches": len(spans),
+    }
+
+
 def repair_streamed_charges(session: Session) -> int:
     """Run the streamed-charge pass once at start, so a correction to how a
     saved charge is read (its type, its boundaries) reaches the rows already
@@ -13922,6 +13974,8 @@ def summary(
         _idle_inducer(session, vehicle.id, vd_longest["start"], vd_longest["end"])
         if vd_longest else None
     )
+    charge_plan = _charge_plan(session, vehicle.id,
+                               _displayed_level(session, vehicle) if current_soc is not None else None)
     battery_balance = {
         "full_charge_kwh": full_charge_kwh,
         "charged_kwh": round(charged_kwh, 1),
@@ -14116,6 +14170,7 @@ def summary(
         "efficiency": efficiency,
         "battery": battery,
         "battery_balance": battery_balance,
+        "charge_plan": charge_plan,
         "petrol_comparison": petrol_comparison,
         "week_compare": week_compare,
         "narrative": narrative_lines,

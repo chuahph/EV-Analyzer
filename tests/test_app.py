@@ -14654,3 +14654,28 @@ def test_a_trip_end_read_from_a_stale_place_is_put_where_the_car_stood():
             for r in (a, b, c):
                 s.delete(r)
             s.commit()
+
+
+def test_charge_plan_rate_from_recent_charge_to_charge_stretches():
+    """Next-charge estimate: % fallen per day across the stretches between
+    charges plus the stretch since the last one, run down to the 20% floor."""
+    from app.api import routes
+    from app import sync as sync_mod
+
+    now = datetime(2026, 11, 18, 12, 0)
+    C = lambda s, e, a, b: SimpleNamespace(start_time=s, end_time=e, start_soc=a, end_soc=b)
+    charges = [
+        C(now - timedelta(days=14), now - timedelta(days=14) + timedelta(hours=1), 30, 80),
+        C(now - timedelta(days=9), now - timedelta(days=9) + timedelta(hours=1), 30, 80),  # 50% in 5 d
+        C(now - timedelta(days=4), now - timedelta(days=4), 40, 80),                      # 40% in ~4.96 d
+        C(now - timedelta(hours=3), now - timedelta(hours=2), 45, 80),                    # 35% in ~3.9 d
+    ]
+    sess = SimpleNamespace(scalars=lambda q: SimpleNamespace(all=lambda: charges))
+    with mock.patch.object(sync_mod, "now_local", return_value=now):
+        p = routes._charge_plan(sess, 1, 60.0)
+        assert p["stretches"] == 3           # the 2 hours since the last charge are too short to count
+        assert 8.9 <= p["pct_per_day"] <= 9.2
+        assert 4.3 <= p["days_left"] <= 4.5  # (60 - 20) / ~9.1
+        assert routes._charge_plan(sess, 1, None) is None
+        assert routes._charge_plan(SimpleNamespace(scalars=lambda q: SimpleNamespace(all=lambda: [])), 1, 60.0) is None
+        assert routes._charge_plan(sess, 1, 15.0)["days_left"] == 0
