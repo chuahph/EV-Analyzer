@@ -272,7 +272,7 @@ function spotIcon(d) {
   const btn = document.getElementById("spot-btn");
   if (!btn) return;
   const p = d && d.park_spot;
-  if (STATIC_MODE || !d || d.live_trip) { btn.classList.add("hidden"); return; }
+  if (STATIC_MODE || !d) { btn.classList.add("hidden"); return; }
   btn.classList.remove("hidden");
   btn.classList.toggle("has", !!p);
   btn.classList.toggle("moved", !!(p && p.moved));
@@ -380,13 +380,14 @@ async function spotOpen(id) {
   draw(id);
 }
 // ---- Auto Spot: the photo taken by itself on parking ----
-// Once the car has been driven and then sits in P for SPOT_AUTO_P_MS with the
+// Once the car has been driven and then sits in P (P only: never a stop in
+// D, however long) for SPOT_AUTO_P_MS with the
 // app open, the phone's back camera (facing out through the windscreen in its
 // mount) is switched on in a small box, counts down and takes one frame,
 // saved like a Spot photo. Once per park; off again until the car is driven.
 // A web page cannot press the camera button, but with camera permission it
 // can take a frame from the camera's live picture.
-const SPOT_AUTO_P_MS = 5000, SPOT_AUTO_COUNT = 3;
+const SPOT_AUTO_P_MS = 3000, SPOT_AUTO_COUNT = 3;
 const spotAuto = { armed: false, pSince: 0, run: null };
 function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
 function spotAutoTick(L) {
@@ -424,7 +425,11 @@ setInterval(() => {
     const L = glLiveState.data, nw = (L && L.now) || {};
     if (nw.age_sec == null || !glLiveState.recvAt) return;
     const quiet = +nw.age_sec + (Date.now() - glLiveState.recvAt) / 1000;
-    if (quiet < SPOT_QUIET_S || (+nw.speed_kmh || 0) > SPOT_CRAWL_KMH) return;
+    // Last heard still moving, at a crawl, then nothing: the signal went
+    // (down a ramp). A car last heard stopped in D is waiting at a light or
+    // in a queue, not parked, and would have sent its P.
+    const v = +nw.speed_kmh || 0;
+    if (quiet < SPOT_QUIET_S || v <= 0 || v > SPOT_CRAWL_KMH || nw.shift === "P") return;
     spotAuto.armed = false;
     spotAutoAsk();
   } catch (_) { /* never in the way of the live page */ }
@@ -6480,7 +6485,7 @@ function renderGlance(d) {
         : "parked · no drive in progress";
       const foot = `<span class="gl-live ${t && fresh ? "on" : ""}"><b></b>${h(status)}</span>
         <button type="button" class="gl-chip gl-dimchip" data-gl-dim>${glDim.off ? "Always Bright" : "Auto Dim"}</button>
-        ${!t && !STATIC_MODE ? `<button type="button" class="gl-chip gl-spotchip" data-gl-spot aria-label="Photo of the parking spot">${spot.busy ? "Saving…" : spot.msg === "Spot saved ✓" ? "Saved ✓" : (d.park_spot ? "📷 Spot ✓" : "📷 Spot")}</button>` : ""}
+        ${!STATIC_MODE && !(spd > 0) ? `<button type="button" class="gl-chip gl-spotchip" data-gl-spot aria-label="Photo of the parking spot">${spot.busy ? "Saving…" : spot.msg === "Spot saved ✓" ? "Saved ✓" : (d.park_spot ? "📷 Spot ✓" : "📷 Spot")}</button>` : ""}
         ${nw.out_temp != null ? `<span class="gl-chip gl-opt">${n(nw.out_temp, 0)}°C outside</span>` : ""}
         ${nw.climate_on ? '<span class="gl-chip gl-opt">climate on</span>' : ""}
         ${t && t.eta ? `<span class="gl-chip gl-opt">ETA ${h(t.eta.place)} ${n(t.eta.eta_min)} min</span>` : ""}
