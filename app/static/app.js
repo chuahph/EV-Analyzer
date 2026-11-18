@@ -265,20 +265,31 @@ function spotTime(iso) {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
-function spotCard(d) {
-  if (STATIC_MODE || d.live_trip) return "";
-  const p = d.park_spot;
-  if (!p) {
-    return `<button type="button" class="kpi tone-violet kpi-spot" data-spot-take><div class="label">Where I Parked</div>
-      <div class="value">📷 Photo</div><div class="sub">${spot.busy ? "Saving…" : h(spot.msg || "Tap to photo the bay, level or pillar")}</div></button>`;
+// The icon at the right of the status strip: the spot photo while it marks
+// where the car is (tap to view), else a camera (tap to take one). Red when
+// the car has been carried off its spot.
+function spotIcon(d) {
+  const btn = document.getElementById("spot-btn");
+  if (!btn) return;
+  const p = d && d.park_spot;
+  if (STATIC_MODE || !d || d.live_trip) { btn.classList.add("hidden"); return; }
+  btn.classList.remove("hidden");
+  btn.classList.toggle("has", !!p);
+  btn.classList.toggle("moved", !!(p && p.moved));
+  btn.classList.toggle("busy", spot.busy);
+  if (p) {
+    btn.dataset.spotOpen = p.id;
+    delete btn.dataset.spotTake;
+    btn.title = p.moved ? `Car ${p.away_km != null ? fmt(p.away_km, 1, true) + " km " : ""}from its spot photo, not driven`
+      : `Where I parked · ${spotAgo(p.ts)}${p.place ? " · " + p.place : ""}`;
+    btn.innerHTML = `<img src="${p.url}" alt="">${p.moved ? "<b>!</b>" : ""}`;
+  } else {
+    delete btn.dataset.spotOpen;
+    btn.dataset.spotTake = "";
+    btn.title = spot.msg || "Photo the parking spot";
+    btn.innerHTML = spot.busy ? "…" : "📷";
   }
-  const warn = p.moved
-    ? `⚠ Car ${p.away_km != null ? fmt(p.away_km, 1, true) + " km " : ""}from here, not driven`
-    : (p.place ? h(p.place) + " · " : "") + h(new Date(p.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }));
-  return `<div class="kpi tone-${p.moved ? "red" : "violet"} kpi-spot" role="button" tabindex="0" data-spot-open="${p.id}">
-    <div class="label">Where I Parked</div>
-    <div class="spot-row"><img src="${p.url}" alt="Parking spot photo" loading="lazy">
-      <div><div class="value">${h(spotAgo(p.ts))}</div><div class="sub">${warn}</div></div></div></div>`;
+  btn.setAttribute("aria-label", btn.title);
 }
 function spotAutoToggle() {
   return `<label class="spot-auto-set"><input type="checkbox" data-spot-autoset ${spotAutoOn() ? "checked" : ""}>
@@ -1265,11 +1276,8 @@ function renderKpis(d) {
   }
   const cb = glChargeBy(d.charge_plan);
   if (cb) cards.push(kpiCard("Charge By", cb.when, cb.sub, cb.tone));
-  // Where I Parked goes last, in the boxes under "Show more"; only a car
-  // carried off its spot (red) stays up top.
-  const sc = spotCard(d);
-  const scTop = sc && d.park_spot && d.park_spot.moved;
-  if (scTop) cards.push(sc);
+  // Where I Parked is an icon in the status strip at the top (spotIcon).
+  spotIcon(d);
   if (drv.available) {
     cards.push(kpiCard("Distance", fmt(drv.total_distance_km, 1, true) + " km",
       `${fmt(drv.total_drives)} drives · ${fmt(drv.total_duration_h)} h`, "blue"));
@@ -1514,7 +1522,6 @@ function renderKpis(d) {
     document.getElementById("show-more-kpis")?.classList.add("hidden");
     return;
   }
-  if (sc && !scTop) cards.push(sc);
   document.getElementById("kpis").innerHTML = cards.join("");
   wireInfoButtons(document.getElementById("kpis"));
   // Collapse to the first KPI_COLLAPSED_COUNT boxes so the dashboard opens

@@ -3804,3 +3804,21 @@ button.kpi-spot { font: inherit; color: inherit; text-align: left; cursor: point
 body.gl-dim #spot-auto { opacity: 1; filter: none; }
 .spot-auto-set { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .spot-auto-set input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+
+/* Where I parked, as an icon at the right end of the status strip. */
+.spot-btn {
+  margin-left: auto; flex: none; position: relative;
+  width: 36px; height: 36px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(150, 120, 255, .12); border: 1px solid rgba(150, 120, 255, .55);
+  font-size: 17px; line-height: 1; cursor: pointer; color: inherit;
+}
+.spot-btn.hidden { display: none; }
+.spot-btn img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.spot-btn.has { border-width: 2px; }
+.spot-btn.moved { border-color: #ff6b70; box-shadow: 0 0 0 2px rgba(255, 107, 112, .35); }
+.spot-btn b {
+  position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; border-radius: 50%;
+  background: #ff3b45; color: #fff; font: 800 11px/16px system-ui, sans-serif; text-align: center;
+}
+.spot-btn.busy { opacity: .6; }
