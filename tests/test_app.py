@@ -14597,3 +14597,60 @@ def test_the_cars_route_line_protobuf_is_read_and_traffic_only_keeps_the_route()
             routes._LIVE_MEM.pop(vin, None)
         routes._ROUTE_LAST.pop(vin, None)
         routes._ROUTE_CACHE.clear()
+
+
+def test_a_trip_end_read_from_a_stale_place_is_put_where_the_car_stood():
+    # Trip #3371 (18 Nov 2026): 9 km to work, saved as Home -> Home because
+    # the car's last place was from near the start.
+    import time as _t
+
+    from app import sync as sync_mod
+    from app.api import routes
+    from app.database import SessionLocal
+    from app.models import Drive, Vehicle
+
+    # The snapshot keeps when the place was sent; a trip's end with an old
+    # place gets none.
+    snap = sync_mod.snapshot_from_telemetry({"Location": {"latitude": 5.3447, "longitude": 100.31},
+                                             "_kt": {"Location": 1000.0}}, ts=1600.0)
+    assert snap["loc_ts"] == 1000.0 and sync_mod._fresh_fix(snap, "lat") is None
+    snap2 = dict(snap, loc_ts=1590.0)
+    assert sync_mod._fresh_fix(snap2, "lat") == 5.3447
+
+    with TestClient(app):
+        pass
+    with SessionLocal() as s:
+        v = s.scalars(select(Vehicle)).first()
+        base = sync_mod.now_local().replace(microsecond=0) - timedelta(days=2)
+        kw = dict(vehicle_id=v.id, start_soc=80, end_soc=78, distance_km=9.0, duration_min=28,
+                  energy_used_kwh=1.4, avg_speed_kmh=20, max_speed_kmh=60, outside_temp_c=27, source="telemetry")
+        a = Drive(start_time=base, end_time=base + timedelta(minutes=28), start_odo_km=99000.0, end_odo_km=99009.0,
+                  start_coords="5.3427, 100.3103", end_coords="5.3447, 100.3100", **kw)
+        b = Drive(start_time=base + timedelta(hours=9), end_time=base + timedelta(hours=9, minutes=30),
+                  start_odo_km=99009.1, end_odo_km=99018.0, start_coords="5.3261, 100.3042",
+                  end_coords="5.3427, 100.3103", **kw)
+        c = Drive(start_time=base + timedelta(hours=20), end_time=base + timedelta(hours=20, minutes=20),
+                  start_odo_km=99018.0, end_odo_km=99025.0, start_coords="5.3427, 100.3103",
+                  end_coords="5.3427, 100.3104", **kw)
+        s.add_all([a, b, c]); s.commit()
+        try:
+            routes._TRIP_ENDS_AT = _t.time()
+            assert routes.repair_trip_ends(s) >= 1
+            s.refresh(a); s.refresh(b); s.refresh(c)
+            assert a.end_coords == "5.3261, 100.3042"        # where the car next stood
+            assert b.end_coords == "5.3427, 100.3103"        # already right: unchanged
+            assert a.distance_km == 9.0 and a.energy_used_kwh == 1.4
+            # The latest trip, from the car's own place now while parked.
+            with routes._LIVE_LOCK:
+                routes._LIVE_MEM[v.vin] = {"Location": {"latitude": 5.4001, "longitude": 100.3302},
+                                           "Odometer": 99025.0 / sync_mod.MILES_TO_KM,
+                                           "_kt": {"Location": _t.time()}}
+            routes.repair_trip_ends(s)
+            s.refresh(c)
+            assert c.end_coords == "5.4001, 100.3302"
+        finally:
+            with routes._LIVE_LOCK:
+                routes._LIVE_MEM.pop(v.vin, None)
+            for r in (a, b, c):
+                s.delete(r)
+            s.commit()

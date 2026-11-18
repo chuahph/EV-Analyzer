@@ -5468,6 +5468,67 @@ def repair_charge_temps(session: Session) -> int:
     return n
 
 
+TRIP_END_SAME_ODO_KM = 0.3     # the car has not moved between these readings
+TRIP_END_MOVE_KM = 0.3         # an end this far from where the car was next seen is wrong
+TRIP_END_DAYS = 14
+_TRIP_ENDS_AT = 0.0
+
+
+def repair_trip_ends(session: Session) -> int:
+    """Put a streamed trip's end where the car was next seen standing.
+
+    The car's place in the stream can be minutes old (it stops sending it
+    while nothing changes, or the signal drops), and a trip's end read from
+    it was put back near the start: trip #3371 (18 Nov 2026) drove 9 km to
+    work and was saved as Home -> Home. Where the car is next seen at the
+    same odometer (the next trip's start, or, for the latest trip, the car's
+    own place now while parked) is where the trip ended. Only the place
+    changes; distance, energy and times are the trip's own. Returns the
+    number of trips moved; never raises."""
+    try:
+        since = sync_mod.now_local() - timedelta(days=TRIP_END_DAYS)
+        rows = session.scalars(select(Drive).where(
+            Drive.start_time >= since, Drive.end_odo_km.is_not(None))
+            .order_by(Drive.vehicle_id, Drive.start_time)).all()
+        vins = {v.id: v.vin for v in session.scalars(select(Vehicle)).all()}
+        n = 0
+        for i, d in enumerate(rows):
+            if (d.source or "") != "telemetry":
+                continue
+            nxt = rows[i + 1] if i + 1 < len(rows) and rows[i + 1].vehicle_id == d.vehicle_id else None
+            seen = None
+            if nxt is not None:
+                if (nxt.start_odo_km is not None and nxt.start_coords
+                        and abs(float(nxt.start_odo_km) - float(d.end_odo_km)) <= TRIP_END_SAME_ODO_KM):
+                    seen = nxt.start_coords
+            else:
+                with _LIVE_LOCK:
+                    car = dict(_LIVE_MEM.get(vins.get(d.vehicle_id) or "") or {})
+                loc, odo = car.get("Location"), car.get("Odometer")
+                loc_t = float((car.get("_kt") or {}).get("Location") or 0.0)
+                end_t = d.end_time.replace(tzinfo=sync_mod.MYT).timestamp() if d.end_time else 0.0
+                if (isinstance(loc, dict) and odo is not None and loc_t > end_t
+                        and abs(float(odo) * sync_mod.MILES_TO_KM - float(d.end_odo_km)) <= TRIP_END_SAME_ODO_KM):
+                    try:
+                        seen = f"{float(loc['latitude']):.4f}, {float(loc['longitude']):.4f}"
+                    except (KeyError, TypeError, ValueError):
+                        seen = None
+            if not seen:
+                continue
+            if d.end_coords and (haversine_km(d.end_coords, seen) or 0.0) <= TRIP_END_MOVE_KM:
+                continue
+            d.end_coords = seen
+            name, area = _place_and_area(seen, session)
+            d.end_location, d.end_area = name or "", area or ""
+            n += 1
+        if n:
+            session.commit()
+        return n
+    except Exception:  # noqa: BLE001 - a repair, never a failed caller
+        session.rollback()
+        return 0
+
+
 def _repair_after_new_trips(session: Session, changed: list) -> int:
     """Reclaim a lost arrival tail as soon as the next trip bounds it.
 
@@ -5483,6 +5544,7 @@ def _repair_after_new_trips(session: Session, changed: list) -> int:
     """
     if not any(c.get("action") == "add" for c in (changed or [])):
         return 0
+    repair_trip_ends(session)
     try:
         out = repair_arrivals(days=ARRIVAL_REPAIR_RECENT_DAYS, apply=True,
                               session=session)
@@ -13464,6 +13526,12 @@ def summary(
                                       max_add=PROMOTE_AUTO_MAX_ADD))
             _record_promote_result(session, "summary", None)
             _mark_swept(session)
+        # The latest trip's end, from where the car now stands (it has no
+        # next trip yet); at most every 10 minutes, on a dashboard load.
+        global _TRIP_ENDS_AT
+        if time.time() - _TRIP_ENDS_AT > 600:
+            _TRIP_ENDS_AT = time.time()
+            repair_trip_ends(session)
     except Exception as exc:  # noqa: BLE001
         # Rolled back rather than only swallowed: on Postgres the failed
         # statement aborts the transaction, and every query the rest of this
@@ -14907,7 +14975,9 @@ def _telemetry_ingest(payload: dict, session: Session):
         # any more can be told from a current one: a gear (see sync._shift_of),
         # and the charger type, which the car never clears after unplugging
         # (see sync._note_charger).
-        timed = ("Gear", "VehicleSpeed", "FastChargerType", "FastChargerPresent")
+        # And the car's place: a trip's end read from a place minutes old was
+        # put back near its start (see sync._fresh_fix).
+        timed = ("Gear", "VehicleSpeed", "FastChargerType", "FastChargerPresent", "Location")
         if ts and not stale and any(k in fields for k in timed):
             kt = car.get("_kt") if isinstance(car.get("_kt"), dict) else {}
             for k in timed:

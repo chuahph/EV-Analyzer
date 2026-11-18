@@ -1252,6 +1252,10 @@ def snapshot_from_telemetry(fields: dict[str, Any], ts: float) -> dict[str, Any]
         "locked": bool(fields.get("Locked")),
         "lat": location.get("latitude") if isinstance(location, dict) else None,
         "lon": location.get("longitude") if isinstance(location, dict) else None,
+        # When the car last sent its place: the composite keeps an old fix
+        # when the car stops sending one, and a trip's end read from it was
+        # put back near its start (trip #3371, 18 Nov 2026: Home -> Home).
+        "loc_ts": (fields.get("_kt") or {}).get("Location") if isinstance(fields.get("_kt"), dict) else None,
         "sentry_mode": (sentry != "SentryModeStateOff") if sentry else None,
         # And the state itself, because the boolean above cannot answer what
         # the parked-drain fit asks of it. See BatteryReading.sentry_state.
@@ -2558,6 +2562,21 @@ def _note_charger(shadow: dict[str, Any], snap: dict[str, Any]) -> None:
         shadow["net"] = label
 
 
+LOC_STALE_SEC = 180   # a place older than this at a trip's end is not its end
+
+
+def _fresh_fix(snap: dict[str, Any], key: str):
+    """snap[key] (lat or lon), unless the car's place in it is stale."""
+    v = snap.get(key)
+    lt, ts = snap.get("loc_ts"), snap.get("ts")
+    try:
+        if v is not None and lt is not None and ts is not None and float(ts) - float(lt) > LOC_STALE_SEC:
+            return None
+    except (TypeError, ValueError):
+        pass
+    return v
+
+
 def _charge_close(shadow: dict[str, Any], end: dict[str, Any]) -> dict[str, Any] | None:
     """Emit the open charge, ending at ``end``, and clear the machine."""
     start = shadow.pop("open", None)
@@ -3189,7 +3208,12 @@ def _shadow_close(shadow: dict[str, Any], end: dict[str, Any],
         "max_speed_kmh": round(max_speed, 1),
         "avg_speed_kmh": round(distance / (minutes / 60.0), 1),
         "start_lat": start.get("lat"), "start_lon": start.get("lon"),
-        "end_lat": end.get("lat"), "end_lon": end.get("lon"),
+        # A place the car had not refreshed for a while is not where the trip
+        # ended: left out, and filled from where the car is next seen at the
+        # same odometer (see routes.repair_trip_ends). Only the end: a parked
+        # car sends no new place until it moves, so an old place at a start
+        # is still the right one.
+        "end_lat": _fresh_fix(end, "lat"), "end_lon": _fresh_fix(end, "lon"),
         # Evidence, not yet figures. A counter's delta over energy_kwh is the
         # ratio that says whether it counts kWh, Wh, or something else — and
         # how much of the pack's fall was traction rather than climate.
