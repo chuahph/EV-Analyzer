@@ -387,7 +387,7 @@ async function spotOpen(id) {
 // saved like a Spot photo. Once per park; off again until the car is driven.
 // A web page cannot press the camera button, but with camera permission it
 // can take a frame from the camera's live picture.
-const SPOT_AUTO_P_MS = 3000, SPOT_AUTO_COUNT = 3;
+const SPOT_AUTO_P_MS = 3000, SPOT_AUTO_COUNT = 3, SPOT_AUTO_OK_S = 3;
 const spotAuto = { armed: false, pSince: 0, run: null };
 function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
 function spotAutoTick(L) {
@@ -501,7 +501,18 @@ async function spotAutoSnap(run, v) {
     <button type="button" data-spa="retake">Retake</button><button type="button" data-spa="delete">Delete</button>
     <button type="button" data-spa="close">OK</button></div>
     <button type="button" class="spa-off" data-spa="off">Turn Auto Spot off</button>`;
-  run.timer = setTimeout(() => { if (spotAuto.run === run) spotAutoStop(); }, 8000);
+  // Saved already: with no tap in SPOT_AUTO_OK_S it closes by itself (OK),
+  // the button counting down; Retake or Delete within it still work.
+  let left = SPOT_AUTO_OK_S;
+  const okBtn = box.querySelector('[data-spa="close"]');
+  const tick = () => {
+    if (spotAuto.run !== run) return;
+    if (left <= 0) { spotAutoStop(); return; }
+    if (okBtn) okBtn.textContent = `OK (${left})`;
+    left--;
+    run.timer = setTimeout(tick, 1000);
+  };
+  tick();
 }
 function spotAutoRelease(run) {
   if (run && run.stream) { run.stream.getTracks().forEach((t) => t.stop()); run.stream = null; }
