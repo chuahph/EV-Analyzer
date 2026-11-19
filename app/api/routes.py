@@ -15769,6 +15769,12 @@ def telemetry_config(session: Session = Depends(get_session)):
         "intervals": {
             name: (spec.get("interval_seconds") if isinstance(spec, dict) else None)
             for name, spec in sorted((config.get("fields") or {}).items())},
+        # Fields the car resends every so many seconds even unchanged
+        # (resend_interval_seconds; HvacFanSpeed), as the car holds them.
+        "resend": {
+            name: spec.get("resend_interval_seconds")
+            for name, spec in sorted((config.get("fields") or {}).items())
+            if isinstance(spec, dict) and spec.get("resend_interval_seconds")},
     }
 
 
