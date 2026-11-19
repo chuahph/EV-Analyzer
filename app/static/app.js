@@ -332,17 +332,90 @@ function spotSay(msg) {
   if (lastData) { renderKpis(lastData); if (document.body.classList.contains("glance-on")) renderGlance(lastData); }
   setTimeout(() => { if (Date.now() - spot.msgT >= 5900) { spot.msg = ""; if (lastData) { renderKpis(lastData); if (document.body.classList.contains("glance-on")) renderGlance(lastData); } } }, 6000);
 }
-async function spotUpload(file, auto) {
+// Where and when, as the phone knows it at the moment of the photo: the car's
+// last position and odometer from the live page, and the clock.
+function spotMeta() {
+  const nw = (glLiveState.data && glLiveState.data.now) || {};
+  return { lat: nw.lat, lon: nw.lon, odo: nw.odo_km, taken: Date.now() / 1000 };
+}
+function spotQuery(m, kept) {
+  const q = new URLSearchParams();
+  if (kept) q.set("kept", "1");   // waited on the phone: its time and place decide
+  if (m.lat != null && m.lon != null) { q.set("lat", m.lat); q.set("lon", m.lon); }
+  if (m.odo != null) q.set("odo", m.odo);
+  if (m.taken) q.set("taken", m.taken.toFixed(0));
+  return q.toString() ? "?" + q : "";
+}
+// ---- Photos kept on the phone until there is signal (underground) ----
+const spotQ = {
+  db() {
+    return new Promise((ok, no) => {
+      const r = indexedDB.open("spotQueue", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("q", { keyPath: "id", autoIncrement: true });
+      r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+    });
+  },
+  async run(mode, fn) {
+    const d = await this.db();
+    return new Promise((ok, no) => {
+      const t = d.transaction("q", mode), st = t.objectStore("q");
+      const r = fn(st);
+      t.oncomplete = () => ok(r && r.result); t.onerror = () => no(t.error);
+    });
+  },
+  add(rec) { return this.run("readwrite", (st) => st.add(rec)); },
+  all() { return this.run("readonly", (st) => st.getAll()); },
+  del(id) { return this.run("readwrite", (st) => st.delete(id)); },
+};
+let spotFlushing = false;
+async function spotFlush() {
+  if (spotFlushing || STATIC_MODE || !window.indexedDB) return;
+  spotFlushing = true;
+  try {
+    const recs = await spotQ.all();
+    for (const r of recs || []) {
+      const fd = new FormData();
+      fd.append("file", r.blob, "spot.jpg");
+      let res;
+      try { res = await fetch(`/api/park-photo${spotQuery(r.meta, true)}`, { method: "POST", body: fd }); } catch (_) { break; }
+      if (res.ok) {
+        const j = await res.json();
+        await spotQ.del(r.id);
+        if (lastData && (!lastData.park_spot || j.saved.ts >= lastData.park_spot.ts)) lastData.park_spot = Object.assign({ moved: false, away_km: 0 }, j.saved);
+        if (lastData) renderKpis(lastData);
+      } else if (res.status >= 400 && res.status < 500) {
+        await spotQ.del(r.id);   // refused for good (not a photo): drop it
+      } else break;
+    }
+  } catch (_) { /* tried again later */ }
+  spotFlushing = false;
+}
+window.addEventListener("online", () => spotFlush());
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") spotFlush(); });
+setInterval(() => spotFlush(), 30000);
+setTimeout(() => spotFlush(), 5000);
+
+async function spotUpload(file, auto, meta) {
   spot.busy = true; spotSay("Saving…");
   // A photo taken by hand this park: no Auto Spot after it.
   if (!auto && typeof spotAuto !== "undefined") spotAuto.armed = false;
+  const m = meta || spotMeta();
+  let blob = file;
   try {
-    const blob = auto ? file : await spotShrink(file);
+    blob = auto ? file : await spotShrink(file);
     const fd = new FormData();
     fd.append("file", blob, "spot.jpg");
-    const nw = (glLiveState.data && glLiveState.data.now) || {};
-    const q = nw.lat != null && nw.lon != null ? `?lat=${nw.lat}&lon=${nw.lon}` : "";
-    const res = await fetch(`/api/park-photo${q}`, { method: "POST", body: fd });
+    let res;
+    try {
+      res = await fetch(`/api/park-photo${spotQuery(m)}`, { method: "POST", body: fd });
+    } catch (netErr) {
+      // No signal: kept on the phone, sent with its own time and place once
+      // there is (spotFlush).
+      if (!window.indexedDB) throw netErr;
+      const qid = await spotQ.add({ blob, meta: m });
+      spot.busy = false; spotSay("Saved on phone ✓ · uploads when online");
+      return { queued: true, qid, url: URL.createObjectURL(blob) };
+    }
     if (!res.ok) throw new Error((await res.text()) || res.status);
     const j = await res.json();
     if (lastData) lastData.park_spot = Object.assign({ moved: false, away_km: 0 }, j.saved);
@@ -366,7 +439,7 @@ async function spotOpen(id) {
     const p = list.find((x) => x.id === +pid) || list[0];
     if (!p) { show.innerHTML = '<p class="modal-sub">No spot photos yet.</p>' + spotAutoToggle(); return; }
     const map = p.coords ? `<a class="btn" target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(p.coords)}">📍 Map</a>` : "";
-    const from = { car: "the car's location", phone: "the phone's location", trip: "where the last trip ended" }[p.coords_from] || "";
+    const from = { car: "the car's location", "car-last": "the car's last location before the signal went", phone: "the phone's location", trip: "where the last trip ended" }[p.coords_from] || "";
     show.innerHTML = `<img class="spot-big" src="${p.url}" alt="Parking spot photo">
       <p class="modal-sub"><b>${h(spotTime(p.ts))}</b>${p.place ? " · " + h(p.place) : ""}${p.drive_id != null ? ` · after trip #${p.drive_id}` : ""}<br>
       ${p.odo_km != null ? `Odometer ${fmt(p.odo_km, 1, true)} km` : ""}${p.soc != null ? ` · battery ${fmt(p.soc)}%` : ""}${from ? ` · place from ${from}` : ""}</p>
@@ -400,7 +473,6 @@ function spotAutoTick(L) {
   if (spotAuto.run) {
     // The ask box (no signal) closes once the car is heard again, driving.
     const heard = nw.age_sec != null && nw.age_sec < 15;
-    if (spotAuto.run.ask) { if (heard && (moving || (gear && gear !== "P"))) spotAutoStop(); return; }
     // A photo asked for by tap (Retake, or Take photo with no signal) goes
     // ahead on the car's old gear; only the car heard driving stops it.
     if (spotAuto.run.manual ? heard && moving : gear && gear !== "P") spotAutoStop("Cancelled: car in " + (gear || "motion"));
@@ -414,9 +486,9 @@ function spotAutoTick(L) {
   spotAuto.armed = false;
   spotAutoRun();
 }
-// No signal underground: the car's P never arrives, so the timer below asks
-// instead. Armed (driven), last heard at a crawl, and nothing new from the
-// car for SPOT_QUIET_S: a box offers the photo, one tap to take it.
+// No signal underground: the car's P never arrives. Armed (driven), last heard
+// at a crawl, and nothing new from the car for SPOT_QUIET_S: the camera opens
+// and takes the photo once its picture has stood still (spotStillWatch).
 const SPOT_QUIET_S = 45, SPOT_CRAWL_KMH = 15;
 setInterval(() => {
   try {
@@ -431,18 +503,9 @@ setInterval(() => {
     const v = +nw.speed_kmh || 0;
     if (quiet < SPOT_QUIET_S || v <= 0 || v > SPOT_CRAWL_KMH || nw.shift === "P") return;
     spotAuto.armed = false;
-    spotAutoAsk();
+    spotAutoRun("still");
   } catch (_) { /* never in the way of the live page */ }
 }, 5000);
-function spotAutoAsk() {
-  const box = spotAutoBox();
-  const run = { stream: null, timer: 0, ask: true };
-  spotAuto.run = run;
-  box.className = "on note";
-  box.innerHTML = `<div class="spa-bar"><span class="spa-msg"><b>No signal from the car.</b> Parked? Photo the spot.</span>
-    <button type="button" data-spa="go">📷 Take photo</button><button type="button" data-spa="close">Not now</button></div>`;
-  run.timer = setTimeout(() => { if (spotAuto.run === run) spotAutoStop(); }, 60000);
-}
 function spotAutoBox() {
   let box = document.getElementById("spot-auto");
   if (!box) {
@@ -456,11 +519,12 @@ function spotAutoBox() {
 }
 async function spotAutoRun(retake) {
   const box = spotAutoBox();
-  const run = { stream: null, timer: 0, n: SPOT_AUTO_COUNT, id: null, manual: !!retake };
+  const still = retake === "still";
+  const run = { stream: null, timer: 0, n: SPOT_AUTO_COUNT, id: null, manual: !!retake, still };
   spotAuto.run = run;
   box.className = "on";
   box.innerHTML = `<video playsinline muted autoplay></video>
-    <div class="spa-bar"><b>📷 Auto Spot</b><span class="spa-msg">Starting camera…</span>
+    <div class="spa-bar"><b>📷 Auto Spot</b><span class="spa-msg">${still ? "No signal from the car · photo once it stops" : "Starting camera…"}</span>
     <button type="button" data-spa="cancel">Cancel</button></div>`;
   try {
     run.stream = await navigator.mediaDevices.getUserMedia({ audio: false,
@@ -474,12 +538,48 @@ async function spotAutoRun(retake) {
   v.srcObject = run.stream;
   try { await v.play(); } catch (_) { /* autoplay of a muted inline stream is allowed */ }
   const msg = box.querySelector(".spa-msg");
+  if (still) { spotStillWatch(run, v, msg); return; }
   const step = () => {
     if (spotAuto.run !== run) return;
     if (run.n > 0) { msg.textContent = `Photo in ${run.n}…`; run.n--; run.timer = setTimeout(step, 1000); return; }
     spotAutoSnap(run, v);
   };
   step();
+}
+// With no P from the car: the camera looks out of the windscreen, and the
+// picture stops changing only when the car stops. Small grey frames are
+// compared four times a second; still for SPOT_STILL_MS, the photo is taken.
+// Never still within SPOT_STILL_GIVEUP_MS: the camera closes.
+const SPOT_STILL_MS = 3000, SPOT_STILL_GIVEUP_MS = 120000, SPOT_STILL_DIFF = 7;
+function spotStillWatch(run, v, msg) {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 48;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  let prev = null, stillSince = 0;
+  const t0 = Date.now();
+  const look = () => {
+    if (spotAuto.run !== run) return;
+    if (Date.now() - t0 > SPOT_STILL_GIVEUP_MS) { spotAutoStop("Car kept moving: no photo. Tap 📷 Spot when parked.", 5000); return; }
+    if (v.videoWidth) {
+      g.drawImage(v, 0, 0, 64, 48);
+      const px = g.getImageData(0, 0, 64, 48).data;
+      const cur = new Uint8Array(64 * 48);
+      for (let i = 0; i < cur.length; i++) cur[i] = (px[i * 4] + px[i * 4 + 1] * 2 + px[i * 4 + 2]) >> 2;
+      if (prev) {
+        let d = 0;
+        for (let i = 0; i < cur.length; i++) d += Math.abs(cur[i] - prev[i]);
+        d /= cur.length;
+        if (d < SPOT_STILL_DIFF) {
+          if (!stillSince) stillSince = Date.now();
+          const left = Math.ceil((SPOT_STILL_MS - (Date.now() - stillSince)) / 1000);
+          msg.textContent = left > 0 ? `Stopped · photo in ${left}…` : "Stopped";
+          if (Date.now() - stillSince >= SPOT_STILL_MS) { spotAutoSnap(run, v); return; }
+        } else { stillSince = 0; msg.textContent = "No signal from the car · photo once it stops"; }
+      }
+      prev = cur;
+    }
+    run.timer = setTimeout(look, 250);
+  };
+  look();
 }
 async function spotAutoSnap(run, v) {
   const box = spotAutoBox(), msg = box.querySelector(".spa-msg");
@@ -491,13 +591,14 @@ async function spotAutoSnap(run, v) {
   c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
   spotAutoRelease(run);
   msg.textContent = "Saving…";
+  const meta = spotMeta();
   const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.72));
-  const saved = blob ? await spotUpload(blob, true) : null;
+  const saved = blob ? await spotUpload(blob, true, meta) : null;
   if (spotAuto.run !== run) return;
   if (!saved) { spotAutoStop("Photo not saved: tap 📷 Spot", 6000); return; }
-  run.id = saved.id;
+  run.id = saved.id; run.qid = saved.qid;
   box.innerHTML = `<img src="${saved.url}" alt="Spot photo just taken">
-    <div class="spa-bar"><b>Spot saved ✓</b>
+    <div class="spa-bar"><b>${saved.queued ? "Saved on phone ✓" : "Spot saved ✓"}</b>${saved.queued ? '<span class="spa-line">No signal: it uploads once the phone is online</span>' : ""}
     <button type="button" data-spa="retake">Retake</button><button type="button" data-spa="delete">Delete</button>
     <button type="button" data-spa="close">OK</button></div>
     <button type="button" class="spa-off" data-spa="off">Turn Auto Spot off</button>`;
@@ -541,6 +642,10 @@ document.addEventListener("click", async (e) => {
   if (spa) {
     const what = spa.dataset.spa, run = spotAuto.run;
     if (what === "go") { spotAutoStop(); spotAutoRun(true); return; }
+    if ((what === "retake" || what === "delete") && run && run.qid != null) {
+      try { await spotQ.del(run.qid); } catch (_) { /* gone already */ }
+      run.qid = null;
+    }
     if (what === "retake") {
       const id = run && run.id;
       spotAutoStop();

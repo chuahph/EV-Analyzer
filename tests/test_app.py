@@ -14823,3 +14823,29 @@ def test_live_climate_wake_off_is_unknown_not_off():
         assert payload()["now"]["climate_on"] is False
     finally:
         routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_park_photo_kept_on_phone_uses_its_own_time_and_place(seeded):
+    """A photo kept on the phone for want of signal (Auto Spot underground)
+    is saved with the time it was taken and the car's last known place and
+    odometer as the phone had them, not where the car is when it uploads."""
+    import time as _time
+    from app.api import routes
+
+    jpg = b"\xff\xd8\xff\xe0" + b"1" * 500
+    taken = _time.time() - 600
+    with TestClient(app) as client:
+        r = client.post(f"/api/park-photo?kept=1&taken={taken:.0f}&lat=3.15021&lon=101.61022&odo=34520.6",
+                        files={"file": ("spot.jpg", jpg, "image/jpeg")})
+        assert r.status_code == 200, r.text
+        p = r.json()["saved"]
+        assert p["coords"] == "3.15021, 101.61022" and p["coords_from"] == "car-last"
+        assert p["odo_km"] == 34520.6
+        want = routes.sync_mod._dt(float(f"{taken:.0f}"))
+        assert abs((datetime.fromisoformat(p["ts"]) - want).total_seconds()) < 2
+        # Sent at once (not kept): the car's own place now, as before.
+        r2 = client.post(f"/api/park-photo?taken={_time.time():.0f}&lat=3.2&lon=101.7",
+                         files={"file": ("spot.jpg", jpg, "image/jpeg")})
+        assert r2.json()["saved"]["coords_from"] in ("car", "phone", "trip")
+        client.delete(f"/api/park-photo/{p['id']}")
+        client.delete(f"/api/park-photo/{r2.json()['saved']['id']}")

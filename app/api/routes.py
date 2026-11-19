@@ -5509,6 +5509,9 @@ PARK_PHOTO_MAX_BYTES = 2_500_000
 # not less); once the odometer has gone on this far it was driven, and the
 # photo no longer marks where it is.
 PARK_MOVED_KM = 0.3
+# A photo sent this long after it was taken was kept on the phone for want
+# of signal: its time and place are the phone's, not the car's now.
+PARK_PHOTO_LATE_SEC = 120
 PARK_MOVED_ODO_KM = 0.2
 
 
@@ -5619,6 +5622,9 @@ def park_photo_add(
     lat: float | None = Query(None, ge=-90, le=90, allow_inf_nan=False),
     lon: float | None = Query(None, ge=-180, le=180, allow_inf_nan=False),
     note: str = Query("", max_length=120),
+    taken: float | None = Query(None, gt=0, allow_inf_nan=False),
+    odo: float | None = Query(None, ge=0, allow_inf_nan=False),
+    kept: bool = Query(False),
     session: Session = Depends(get_session),
 ):
     """Save a photo of where the car is parked. The place is the car's own
@@ -5640,13 +5646,19 @@ def park_photo_add(
     else:
         raise HTTPException(415, "Not a JPEG, PNG or WebP photo.")
     vehicle = _first_vehicle(session)
-    coords, odo_km, soc = _car_live(vehicle)
+    # Taken a while ago and kept on the phone (no signal underground): where
+    # the car is now may not be where the photo was taken, so the phone's
+    # record of it decides, with its own time and odometer.
+    late = taken is not None and (kept or time.time() - taken > PARK_PHOTO_LATE_SEC)
+    when = sync_mod._dt(min(float(taken), time.time())) if late else sync_mod.now_local()
+    coords, odo_km, soc = ("", odo, None) if late else _car_live(vehicle)
     src = "car" if coords else ""
     if not coords and lat is not None and lon is not None:
-        coords, src = f"{lat:.5f}, {lon:.5f}", "phone"
-    last = session.scalars(select(Drive).where(
-        Drive.vehicle_id == vehicle.id, Drive.end_time.is_not(None))
-        .order_by(Drive.start_time.desc()).limit(1)).first()
+        coords, src = f"{lat:.5f}, {lon:.5f}", "car-last" if late else "phone"
+    q_last = select(Drive).where(Drive.vehicle_id == vehicle.id, Drive.end_time.is_not(None))
+    if late:
+        q_last = q_last.where(Drive.start_time <= when.replace(tzinfo=None))
+    last = session.scalars(q_last.order_by(Drive.start_time.desc()).limit(1)).first()
     if not coords and last is not None and last.end_coords:
         coords, src = last.end_coords, "trip"
     if odo_km is None and last is not None:
@@ -5666,7 +5678,7 @@ def park_photo_add(
                 place = ""   # only the coordinates again: no name for it
         except Exception:  # noqa: BLE001 - a place name is a nicety
             place = ""
-    p = ParkPhoto(vehicle_id=vehicle.id, ts=sync_mod.now_local().replace(tzinfo=None),
+    p = ParkPhoto(vehicle_id=vehicle.id, ts=when.replace(tzinfo=None),
                   drive_id=drive_id, coords=coords, coords_from=src, place=place[:160],
                   odo_km=odo_km, soc=soc, note=note.strip()[:120], mime=mime,
                   size=len(data), data=data)
