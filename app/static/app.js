@@ -489,7 +489,10 @@ function spotAutoTick(L) {
 // No signal underground: the car's P never arrives. Armed (driven), last heard
 // at a crawl, and nothing new from the car for SPOT_QUIET_S: the camera opens
 // and takes the photo once its picture has stood still (spotStillWatch).
-const SPOT_QUIET_S = 45, SPOT_CRAWL_KMH = 15;
+// 40 km/h, not a crawl: on 20 Nov the car was last heard at 20 km/h as it
+// rolled into a car park with no signal, and a 15 km/h limit kept the camera
+// shut. The still-picture check is what waits for the car to stop.
+const SPOT_QUIET_S = 30, SPOT_CRAWL_KMH = 40;
 setInterval(() => {
   try {
     if (STATIC_MODE || spotAuto.run || !spotAuto.armed || !spotAutoOn()) return;
@@ -497,11 +500,12 @@ setInterval(() => {
     const L = glLiveState.data, nw = (L && L.now) || {};
     if (nw.age_sec == null || !glLiveState.recvAt) return;
     const quiet = +nw.age_sec + (Date.now() - glLiveState.recvAt) / 1000;
-    // Last heard still moving, at a crawl, then nothing: the signal went
-    // (down a ramp). A car last heard stopped in D is waiting at a light or
-    // in a queue, not parked, and would have sent its P.
+    // Last heard at town speed (or stopped at the barrier), then nothing: the
+    // signal went. With the full field set the car sends pack current every
+    // second, standing at a light included, so a 30 s silence is lost signal,
+    // not a stop. Faster than SPOT_CRAWL_KMH is a dead spot on the road.
     const v = +nw.speed_kmh || 0;
-    if (quiet < SPOT_QUIET_S || v <= 0 || v > SPOT_CRAWL_KMH || nw.shift === "P") return;
+    if (quiet < SPOT_QUIET_S || v > SPOT_CRAWL_KMH || nw.shift === "P") return;
     spotAuto.armed = false;
     spotAutoRun("still");
   } catch (_) { /* never in the way of the live page */ }
