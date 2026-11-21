@@ -377,6 +377,16 @@ async function spotFlush() {
   if (spotFlushing || STATIC_MODE || !window.indexedDB) return;
   spotFlushing = true;
   try {
+    let dels = [];
+    try { dels = JSON.parse(localStorage.getItem("spotDelLater") || "[]"); } catch (_) { /* private mode */ }
+    for (const id of dels.slice()) {
+      let r;
+      try { r = await fetch(`/api/park-photo/${id}`, { method: "DELETE" }); } catch (_) { break; }
+      if (r.ok || r.status === 404) {
+        dels = dels.filter((x) => x !== id);
+        try { localStorage.setItem("spotDelLater", JSON.stringify(dels)); } catch (_) { /* private mode */ }
+      }
+    }
     const recs = await spotQ.all();
     for (const r of recs || []) {
       const fd = new FormData();
@@ -386,7 +396,11 @@ async function spotFlush() {
       if (res.ok) {
         const j = await res.json();
         await spotQ.del(r.id);
-        if (lastData && (!lastData.park_spot || j.saved.ts >= lastData.park_spot.ts)) lastData.park_spot = Object.assign({ moved: false, away_km: 0 }, j.saved);
+        // Now on the server: a short stop found later deletes it there.
+        const la = spotLastAuto();
+        if (la && la.qid === r.id) spotLastAuto({ ...la, qid: null, id: j.saved.id });
+        // Only as the spot if it is the newest; the next refresh says for sure.
+        if (lastData && lastData.park_spot && j.saved.ts >= lastData.park_spot.ts) lastData.park_spot = Object.assign({ moved: false, away_km: 0 }, j.saved);
         if (lastData) renderKpis(lastData);
       } else if (res.status >= 400 && res.status < 500) {
         await spotQ.del(r.id);   // refused for good (not a photo): drop it
@@ -473,8 +487,13 @@ const spotAuto = { _armed: false, pSince: 0, run: null,
   get armed() { return this._armed; },
   set armed(v) {
     v = !!v;
-    if (v !== this._armed) spotLog(v ? "armed: car driven" : "disarmed");
+    const changed = v !== this._armed;
+    if (changed) spotLog(v ? "armed: car driven" : "disarmed");
     this._armed = v;
+    // Set on every frame while driving: written to the phone once a minute,
+    // not every second.
+    if (!changed && (!v || Date.now() - (this._savedAt || 0) < 60000)) return;
+    this._savedAt = Date.now();
     try { if (v) localStorage.setItem("spotArmedAt", String(Date.now())); else localStorage.removeItem("spotArmedAt"); } catch (_) { /* private mode */ }
   },
 };
@@ -499,12 +518,40 @@ function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
 // so its last word was that P) opens the camera again, which takes a photo
 // only if the still view is not the one already photographed.
 const SPOT_SHORT_MS = 10 * 60000, SPOT_SAME_DIFF = 14;
+// Read on every live frame: held in memory, the phone's copy read once.
+let spotLastAutoMem;
 function spotLastAuto(v) {
+  if (v === undefined) {
+    if (spotLastAutoMem === undefined) {
+      try { spotLastAutoMem = JSON.parse(localStorage.getItem("spotLastAuto") || "null"); } catch (_) { spotLastAutoMem = null; }
+    }
+    return spotLastAutoMem;
+  }
+  spotLastAutoMem = v || null;
   try {
-    if (v === undefined) return JSON.parse(localStorage.getItem("spotLastAuto") || "null");
     if (v) localStorage.setItem("spotLastAuto", JSON.stringify(v)); else localStorage.removeItem("spotLastAuto");
   } catch (_) { /* private mode */ }
-  return v || null;
+  return spotLastAutoMem;
+}
+// A photo to delete on the server, kept until there is signal to do it.
+function spotDelLater(id) {
+  try {
+    const L = JSON.parse(localStorage.getItem("spotDelLater") || "[]");
+    if (!L.includes(id)) L.push(id);
+    localStorage.setItem("spotDelLater", JSON.stringify(L));
+  } catch (_) { /* private mode */ }
+}
+// Delete a photo wherever it is: on the phone still (qid), or on the server
+// (id; with no signal, done later by spotFlush).
+async function spotRemove(rec) {
+  if (!rec) return;
+  if (rec.qid != null) { try { await spotQ.del(rec.qid); } catch (_) { /* gone already */ } }
+  if (rec.id != null) {
+    try {
+      const r = await fetch(`/api/park-photo/${rec.id}`, { method: "DELETE" });
+      if (!r.ok && r.status !== 404) spotDelLater(rec.id);
+    } catch (_) { spotDelLater(rec.id); }
+  }
 }
 function spotThumb(v) {
   const c = document.createElement("canvas"); c.width = 64; c.height = 48;
@@ -528,10 +575,7 @@ async function spotShortStopCheck(nw) {
   if (sec <= 5) return;                       // the stop itself
   spotLastAuto(null);
   if (sec > SPOT_SHORT_MS / 1000) return;     // a real park, left later
-  try {
-    if (last.qid != null) await spotQ.del(last.qid);
-    else if (last.id != null) await fetch(`/api/park-photo/${last.id}`, { method: "DELETE" });
-  } catch (_) { /* gone already */ }
+  await spotRemove(last);
   spotLog(`short stop: driven on after ${Math.round(sec / 60)} min, its photo removed`);
   if (lastData && lastData.park_spot && lastData.park_spot.id === last.id) { lastData.park_spot = null; renderKpis(lastData); }
 }
@@ -714,11 +758,8 @@ async function spotAutoSnap(run, v) {
   // moved on, so that one was a short stop and goes.
   const prevShort = run.notView ? spotLastAuto() : null;
   if (prevShort && (prevShort.id != null || prevShort.qid != null)) {
-    try {
-      if (prevShort.qid != null) await spotQ.del(prevShort.qid);
-      else await fetch(`/api/park-photo/${prevShort.id}`, { method: "DELETE" });
-      spotLog("short stop: its photo removed, the car parked further on");
-    } catch (_) { /* no signal: stays, the new photo is the spot */ }
+    await spotRemove(prevShort);
+    spotLog("short stop: its photo removed, the car parked further on");
   }
   spotLastAuto({ id: saved.id ?? null, qid: saved.qid ?? null, at: Date.now(), via: run.still ? "still" : "P", thumb });
   spotLog(saved.queued ? "photo kept on phone (no signal)" : `photo saved #${saved.id}`);

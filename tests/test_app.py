@@ -14861,3 +14861,38 @@ def test_park_photo_kept_on_phone_uses_its_own_time_and_place(seeded):
         assert r2.json()["saved"]["coords_from"] in ("car", "phone", "trip")
         client.delete(f"/api/park-photo/{p['id']}")
         client.delete(f"/api/park-photo/{r2.json()['saved']['id']}")
+
+
+def test_ingest_times_the_climate_readings_so_the_newest_decides():
+    """The stored path records when HvacPower and HvacFanSpeed arrived, so a
+    trip's climate reading is whichever came last, as on the Live page: a fan
+    reading of 0 older than an HvacPower On does not turn climate off."""
+    import json as _json
+
+    from app.database import SessionLocal
+    from app import state
+    from app import sync as sync_mod
+
+    settings = get_settings()
+    old_pc = settings.app_passcode
+    settings.app_passcode = ""
+    sess = SessionLocal()
+    prev = state.get(sess, state.TELEMETRY_LATEST_KEY)
+    try:
+        with TestClient(app) as client:
+            client.post("/api/telemetry", json={"records": [{
+                "vin": "CLIMATETIME1", "createdAt": "2026-11-21T10:00:00Z",
+                "data": [{"key": "HvacFanSpeed", "value": {"intValue": 0}},
+                         {"key": "Gear", "value": {"stringValue": "ShiftStateD"}}]}]})
+            client.post("/api/telemetry", json={"records": [{
+                "vin": "CLIMATETIME1", "createdAt": "2026-11-21T10:02:00Z",
+                "data": [{"key": "HvacPower", "value": {"stringValue": "HvacPowerStateOn"}}]}]})
+        car = _json.loads(state.get(SessionLocal(), state.TELEMETRY_LATEST_KEY))["CLIMATETIME1"]
+        kt = car.get("_kt") or {}
+        assert kt.get("HvacPower", 0) > kt.get("HvacFanSpeed", 0) > 0
+        assert sync_mod.snapshot_from_telemetry(car, kt["HvacPower"])["climate_on"] is True
+    finally:
+        state.put(sess, state.TELEMETRY_LATEST_KEY, prev or "{}")
+        sess.commit()
+        sess.close()
+        settings.app_passcode = old_pc

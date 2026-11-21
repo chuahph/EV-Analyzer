@@ -15290,7 +15290,10 @@ def _telemetry_ingest(payload: dict, session: Session):
         # (see sync._note_charger).
         # And the car's place: a trip's end read from a place minutes old was
         # put back near its start (see sync._fresh_fix).
-        timed = ("Gear", "VehicleSpeed", "FastChargerType", "FastChargerPresent", "Location")
+        # And the two climate readings: whichever came last says whether
+        # climate runs (sync._climate_on), on the stored path as on Live.
+        timed = ("Gear", "VehicleSpeed", "FastChargerType", "FastChargerPresent", "Location",
+                 "HvacPower", "HvacFanSpeed")
         if ts and not stale and any(k in fields for k in timed):
             kt = car.get("_kt") if isinstance(car.get("_kt"), dict) else {}
             for k in timed:
