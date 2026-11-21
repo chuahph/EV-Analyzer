@@ -492,9 +492,53 @@ try {
   if (at && Date.now() - at < 30 * 60000) { spotAuto._armed = true; spotLog("armed again after reopening"); }
 } catch (_) { /* private mode */ }
 function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
+// The last photo Auto Spot took: {id | qid, at (ms), via "P" | "still",
+// thumb (64x48 grey)}. A short stop (dropping someone off) is a P like any
+// other, so: driven on within SPOT_SHORT_MS, that photo is removed; and the
+// car gone quiet within SPOT_SHORT_MS of a P photo (driven on with no signal,
+// so its last word was that P) opens the camera again, which takes a photo
+// only if the still view is not the one already photographed.
+const SPOT_SHORT_MS = 10 * 60000, SPOT_SAME_DIFF = 14;
+function spotLastAuto(v) {
+  try {
+    if (v === undefined) return JSON.parse(localStorage.getItem("spotLastAuto") || "null");
+    if (v) localStorage.setItem("spotLastAuto", JSON.stringify(v)); else localStorage.removeItem("spotLastAuto");
+  } catch (_) { /* private mode */ }
+  return v || null;
+}
+function spotThumb(v) {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 48;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(v, 0, 0, 64, 48);
+  const px = g.getImageData(0, 0, 64, 48).data, out = new Array(64 * 48);
+  for (let i = 0; i < out.length; i++) out[i] = (px[i * 4] + px[i * 4 + 1] * 2 + px[i * 4 + 2]) >> 2;
+  return out;
+}
+function spotThumbDiff(a, b) {
+  if (!a || !b || a.length !== b.length) return 255;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]);
+  return d / a.length;
+}
+// Driven on after a short stop: its photo goes (it is not where the car is).
+async function spotShortStopCheck(nw) {
+  const last = spotLastAuto();
+  if (!last || !nw.ts || (+nw.speed_kmh || 0) < 3) return;
+  const sec = nw.ts - last.at / 1000;
+  if (sec <= 5) return;                       // the stop itself
+  spotLastAuto(null);
+  if (sec > SPOT_SHORT_MS / 1000) return;     // a real park, left later
+  try {
+    if (last.qid != null) await spotQ.del(last.qid);
+    else if (last.id != null) await fetch(`/api/park-photo/${last.id}`, { method: "DELETE" });
+  } catch (_) { /* gone already */ }
+  spotLog(`short stop: driven on after ${Math.round(sec / 60)} min, its photo removed`);
+  if (lastData && lastData.park_spot && lastData.park_spot.id === last.id) { lastData.park_spot = null; renderKpis(lastData); }
+}
 function spotAutoTick(L) {
   if (STATIC_MODE) return;
   const nw = (L && L.now) || {};
+  if (spotLastAuto() && !spotAuto.run) spotShortStopCheck(nw);
   const fresh = nw.age_sec == null || nw.age_sec < 90;
   const gear = fresh ? nw.shift : null;
   const moving = (+nw.speed_kmh || 0) > 0;
@@ -535,6 +579,19 @@ setInterval(() => {
     const quiet = +nw.age_sec + (Date.now() - glLiveState.recvAt) / 1000;
     // Past the wait but held back: say why, once per reason.
     const why = (r) => { if (quiet >= SPOT_QUIET_S && spotAuto.lastWhy !== r) { spotAuto.lastWhy = r; spotLog(`no signal ${Math.round(quiet)} s, no camera: ${r}`); } };
+    // Gone quiet soon after a P photo, last word P: maybe a short stop and
+    // then driven on with no signal. Look again; the same view takes nothing.
+    const la = spotLastAuto();
+    const afterShort = la && la.via === "P" && !la.followed && nw.shift === "P"
+      && Date.now() - la.at <= SPOT_SHORT_MS;
+    if (afterShort) {
+      if (quiet < SPOT_QUIET_S) return;
+      if (!spotAutoOn() || document.visibilityState !== "visible" || !document.body.classList.contains("glance-on")) return;
+      spotLastAuto({ ...la, followed: true });
+      spotLog(`no signal ${Math.round(quiet)} s within ${Math.round((Date.now() - la.at) / 60000)} min of a P photo: camera on, new photo only if the view differs`);
+      spotAutoRun("still", la.thumb);
+      return;
+    }
     if (!spotAuto.armed) return why("not armed (no driving seen since the last photo)");
     if (!spotAutoOn()) return why("Auto Spot is off");
     if (document.visibilityState !== "visible") return why("app not on screen");
@@ -564,10 +621,10 @@ function spotAutoBox() {
   }
   return box;
 }
-async function spotAutoRun(retake) {
+async function spotAutoRun(retake, notView) {
   const box = spotAutoBox();
   const still = retake === "still";
-  const run = { stream: null, timer: 0, n: SPOT_AUTO_COUNT, id: null, manual: !!retake, still };
+  const run = { stream: null, timer: 0, n: SPOT_AUTO_COUNT, id: null, manual: !!retake, still, notView: notView || null };
   spotAuto.run = run;
   box.className = "on";
   box.innerHTML = `<video playsinline muted autoplay></video>
@@ -620,7 +677,13 @@ function spotStillWatch(run, v, msg) {
           if (!stillSince) stillSince = Date.now();
           const left = Math.ceil((SPOT_STILL_MS - (Date.now() - stillSince)) / 1000);
           msg.textContent = left > 0 ? `Stopped · photo in ${left}…` : "Stopped";
-          if (Date.now() - stillSince >= SPOT_STILL_MS) { spotAutoSnap(run, v); return; }
+          if (Date.now() - stillSince >= SPOT_STILL_MS) {
+            if (run.notView && spotThumbDiff(cur, run.notView) < SPOT_SAME_DIFF) {
+              spotAutoStop("Same view as the last photo: car not moved, none taken", 3000);
+              return;
+            }
+            spotAutoSnap(run, v); return;
+          }
         } else { stillSince = 0; msg.textContent = "No signal from the car · photo once it stops"; }
       }
       prev = cur;
@@ -637,6 +700,8 @@ async function spotAutoSnap(run, v) {
   const c = document.createElement("canvas");
   c.width = Math.round(w * k); c.height = Math.round(hgt * k);
   c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  let thumb = null;
+  try { thumb = spotThumb(v); } catch (_) { /* no thumb: no same-spot check */ }
   spotAutoRelease(run);
   msg.textContent = "Saving…";
   const meta = spotMeta();
@@ -645,6 +710,17 @@ async function spotAutoSnap(run, v) {
   if (spotAuto.run !== run) return;
   if (!saved) { spotAutoStop("Photo not saved: tap 📷 Spot", 6000); return; }
   run.id = saved.id; run.qid = saved.qid;
+  // Taken because the view differs from the P photo just before: the car
+  // moved on, so that one was a short stop and goes.
+  const prevShort = run.notView ? spotLastAuto() : null;
+  if (prevShort && (prevShort.id != null || prevShort.qid != null)) {
+    try {
+      if (prevShort.qid != null) await spotQ.del(prevShort.qid);
+      else await fetch(`/api/park-photo/${prevShort.id}`, { method: "DELETE" });
+      spotLog("short stop: its photo removed, the car parked further on");
+    } catch (_) { /* no signal: stays, the new photo is the spot */ }
+  }
+  spotLastAuto({ id: saved.id ?? null, qid: saved.qid ?? null, at: Date.now(), via: run.still ? "still" : "P", thumb });
   spotLog(saved.queued ? "photo kept on phone (no signal)" : `photo saved #${saved.id}`);
   box.innerHTML = `<img src="${saved.url}" alt="Spot photo just taken">
     <div class="spa-bar"><b>${saved.queued ? "Saved on phone ✓" : "Spot saved ✓"}</b>${saved.queued ? '<span class="spa-line">No signal: it uploads once the phone is online</span>' : ""}
@@ -706,6 +782,7 @@ document.addEventListener("click", async (e) => {
       spotAutoRun(true);
     } else if (what === "delete") {
       const id = run && run.id;
+      spotLastAuto(null);
       if (id) {
         await fetch(`/api/park-photo/${id}`, { method: "DELETE" });
         if (lastData && lastData.park_spot && lastData.park_spot.id === id) { lastData.park_spot = null; renderKpis(lastData); }
