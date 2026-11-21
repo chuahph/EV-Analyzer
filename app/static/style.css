@@ -3823,3 +3823,6 @@ body.gl-dim #spot-auto { opacity: 1; filter: none; }
 }
 .spot-btn.busy { opacity: .6; }
 #spot-auto .spa-line { order: 9; flex: 1 0 100%; font-size: 12px; color: #97a4b2; }
+.spot-log { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.spot-log summary { cursor: pointer; }
+.spot-log pre { white-space: pre-wrap; font: 11px/1.5 ui-monospace, Menlo, monospace; max-height: 40vh; overflow: auto; margin: 6px 0 0; user-select: text; -webkit-user-select: text; }

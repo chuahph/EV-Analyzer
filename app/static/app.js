@@ -292,8 +292,13 @@ function spotIcon(d) {
   btn.setAttribute("aria-label", btn.title);
 }
 function spotAutoToggle() {
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem("spotLog") || "[]"); } catch (_) { /* private mode */ }
+  const rows = log.slice().reverse().map(([t, m]) =>
+    `${new Date(t).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}  ${h(m)}`).join("\n");
   return `<label class="spot-auto-set"><input type="checkbox" data-spot-autoset ${spotAutoOn() ? "checked" : ""}>
-    <span><b>Auto Spot</b>: with the Live page open, take the photo by itself 5 s after you park in P (the phone's back camera, through the windscreen)</span></label>`;
+    <span><b>Auto Spot</b>: with the Live page open, take the photo by itself 3 s after you park in P, or once the car stops when its signal is gone (the phone's back camera, through the windscreen)</span></label>
+    <details class="spot-log"><summary>Auto Spot log (newest first)</summary><pre>${rows || "Nothing yet."}</pre></details>`;
 }
 document.addEventListener("change", (e) => {
   if (e.target.matches && e.target.matches("[data-spot-autoset]")) spotAutoSet(e.target.checked);
@@ -461,7 +466,31 @@ async function spotOpen(id) {
 // A web page cannot press the camera button, but with camera permission it
 // can take a frame from the camera's live picture.
 const SPOT_AUTO_P_MS = 3000, SPOT_AUTO_COUNT = 3, SPOT_AUTO_OK_S = 3;
-const spotAuto = { armed: false, pSince: 0, run: null };
+const spotAuto = { _armed: false, pSince: 0, run: null,
+  // Driven since the last photo. Kept on the phone for 30 min, so the app
+  // reopened or reloaded underground (no signal, no fresh reading to arm
+  // it again) still knows the car was being driven.
+  get armed() { return this._armed; },
+  set armed(v) {
+    v = !!v;
+    if (v !== this._armed) spotLog(v ? "armed: car driven" : "disarmed");
+    this._armed = v;
+    try { if (v) localStorage.setItem("spotArmedAt", String(Date.now())); else localStorage.removeItem("spotArmedAt"); } catch (_) { /* private mode */ }
+  },
+};
+// What Auto Spot decided and why, newest last, kept on the phone (the last
+// 40): shown under Where I Parked, so a park with no photo can be explained.
+function spotLog(msg) {
+  try {
+    const L = JSON.parse(localStorage.getItem("spotLog") || "[]");
+    L.push([Date.now(), msg]);
+    localStorage.setItem("spotLog", JSON.stringify(L.slice(-40)));
+  } catch (_) { /* private mode */ }
+}
+try {
+  const at = +localStorage.getItem("spotArmedAt") || 0;
+  if (at && Date.now() - at < 30 * 60000) { spotAuto._armed = true; spotLog("armed again after reopening"); }
+} catch (_) { /* private mode */ }
 function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
 function spotAutoTick(L) {
   if (STATIC_MODE) return;
@@ -482,8 +511,13 @@ function spotAutoTick(L) {
   if (!spotAuto.armed || gear !== "P" || moving) { spotAuto.pSince = 0; return; }
   if (!spotAuto.pSince) spotAuto.pSince = Date.now();
   if (Date.now() - spotAuto.pSince < SPOT_AUTO_P_MS) return;
-  if (!spotAutoOn() || document.visibilityState !== "visible" || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
+  if (!spotAutoOn() || document.visibilityState !== "visible" || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    const r = !spotAutoOn() ? "Auto Spot is off" : document.visibilityState !== "visible" ? "app not on screen" : "no camera in this browser";
+    if (spotAuto.lastWhy !== "P:" + r) { spotAuto.lastWhy = "P:" + r; spotLog(`in P, no camera: ${r}`); }
+    return;
+  }
   spotAuto.armed = false;
+  spotLog("in P 3 s: camera on");
   spotAutoRun();
 }
 // No signal underground: the car's P never arrives. Armed (driven), last heard
@@ -495,17 +529,26 @@ function spotAutoTick(L) {
 const SPOT_QUIET_S = 30, SPOT_CRAWL_KMH = 40;
 setInterval(() => {
   try {
-    if (STATIC_MODE || spotAuto.run || !spotAuto.armed || !spotAutoOn()) return;
-    if (document.visibilityState !== "visible" || !document.body.classList.contains("glance-on")) return;
+    if (STATIC_MODE || spotAuto.run) return;
     const L = glLiveState.data, nw = (L && L.now) || {};
     if (nw.age_sec == null || !glLiveState.recvAt) return;
     const quiet = +nw.age_sec + (Date.now() - glLiveState.recvAt) / 1000;
+    // Past the wait but held back: say why, once per reason.
+    const why = (r) => { if (quiet >= SPOT_QUIET_S && spotAuto.lastWhy !== r) { spotAuto.lastWhy = r; spotLog(`no signal ${Math.round(quiet)} s, no camera: ${r}`); } };
+    if (!spotAuto.armed) return why("not armed (no driving seen since the last photo)");
+    if (!spotAutoOn()) return why("Auto Spot is off");
+    if (document.visibilityState !== "visible") return why("app not on screen");
+    if (!document.body.classList.contains("glance-on")) return why("not on the Live page");
     // Last heard at town speed (or stopped at the barrier), then nothing: the
     // signal went. With the full field set the car sends pack current every
     // second, standing at a light included, so a 30 s silence is lost signal,
     // not a stop. Faster than SPOT_CRAWL_KMH is a dead spot on the road.
     const v = +nw.speed_kmh || 0;
-    if (quiet < SPOT_QUIET_S || v > SPOT_CRAWL_KMH || nw.shift === "P") return;
+    if (quiet < SPOT_QUIET_S) { spotAuto.lastWhy = null; return; }
+    if (v > SPOT_CRAWL_KMH) return why(`last heard at ${Math.round(v)} km/h`);
+    if (nw.shift === "P") return why("last heard in P");
+    spotAuto.lastWhy = null;
+    spotLog(`no signal ${Math.round(quiet)} s, last ${Math.round(v)} km/h ${nw.shift || "?"}: camera on, photo once it stops`);
     spotAuto.armed = false;
     spotAutoRun("still");
   } catch (_) { /* never in the way of the live page */ }
@@ -534,6 +577,7 @@ async function spotAutoRun(retake) {
     run.stream = await navigator.mediaDevices.getUserMedia({ audio: false,
       video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
   } catch (e) {
+    spotLog(`camera failed: ${(e && (e.name || e.message)) || e}`);
     spotAutoStop(e && e.name === "NotAllowedError" ? "Camera not allowed: tap 📷 Spot instead" : "No camera: tap 📷 Spot instead", 6000);
     return;
   }
@@ -601,6 +645,7 @@ async function spotAutoSnap(run, v) {
   if (spotAuto.run !== run) return;
   if (!saved) { spotAutoStop("Photo not saved: tap 📷 Spot", 6000); return; }
   run.id = saved.id; run.qid = saved.qid;
+  spotLog(saved.queued ? "photo kept on phone (no signal)" : `photo saved #${saved.id}`);
   box.innerHTML = `<img src="${saved.url}" alt="Spot photo just taken">
     <div class="spa-bar"><b>${saved.queued ? "Saved on phone ✓" : "Spot saved ✓"}</b>${saved.queued ? '<span class="spa-line">No signal: it uploads once the phone is online</span>' : ""}
     <button type="button" data-spa="retake">Retake</button><button type="button" data-spa="delete">Delete</button>
@@ -626,6 +671,7 @@ function spotAutoRelease(run) {
 }
 function spotAutoStop(note, ms) {
   const run = spotAuto.run;
+  if (note) spotLog(note);
   spotAuto.run = null;
   if (run) { clearTimeout(run.timer); spotAutoRelease(run); }
   const box = document.getElementById("spot-auto");
