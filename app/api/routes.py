@@ -5547,26 +5547,48 @@ def _park_photo_meta(p: ParkPhoto) -> dict:
             "url": f"/api/park-photo/{p.id}.jpg?t={int(p.ts.timestamp())}"}
 
 
+# A photo belongs to the trip that started last before it, if that trip
+# ended no longer than this before the photo (or after it: taken in P before
+# the trip closed).
+PARK_PHOTO_TRIP_GAP = timedelta(minutes=30)
+
+
+def _photo_trip(session: Session, vehicle_id: int, ts) -> int | None:
+    """The trip a spot photo was taken at the end of: the last one started
+    before the photo, ended within PARK_PHOTO_TRIP_GAP before it (or after
+    it). By time, not odometer: with the car's signal weak the odometer the
+    photo carries can be minutes old (21 Nov: 34,600.6 km against the trip's
+    34,603), and the trip still under way at the photo is not saved yet, so
+    the last SAVED one (#3384, ended 17:11) is not the photo's (18:26)."""
+    d = session.scalars(select(Drive).where(
+        Drive.vehicle_id == vehicle_id, Drive.start_time <= ts)
+        .order_by(Drive.start_time.desc()).limit(1)).first()
+    if d is None or d.end_time is None or d.end_time < ts - PARK_PHOTO_TRIP_GAP:
+        return None
+    return d.id
+
+
 def _link_park_photos(session: Session, vehicle: Vehicle) -> int:
-    """Give a spot photo its trip once that trip is saved. A photo taken in P
-    before the driver gets out (Auto Spot, 5 s after parking) comes before the
-    trip closes, so at the time only the trip before it was known. The trip
-    is the one that started before the photo and ended at its odometer."""
+    """Link each recent spot photo to its trip (_photo_trip), and put right a
+    link made before its trip was saved. A photo taken in P comes before its
+    trip closes, so it is linked once the trip is saved."""
     try:
         rows = session.scalars(select(ParkPhoto).where(
-            ParkPhoto.vehicle_id == vehicle.id, ParkPhoto.drive_id.is_(None),
-            ParkPhoto.odo_km.is_not(None),
+            ParkPhoto.vehicle_id == vehicle.id,
             ParkPhoto.ts >= sync_mod.now_local() - timedelta(days=3))).all()
         n = 0
         for p in rows:
-            d = session.scalars(select(Drive).where(
-                Drive.vehicle_id == vehicle.id, Drive.start_time <= p.ts,
-                Drive.end_time.is_not(None), Drive.end_odo_km.is_not(None))
-                .order_by(Drive.start_time.desc()).limit(1)).first()
-            if (d is not None and abs(float(d.end_odo_km) - float(p.odo_km)) <= 0.3
-                    and d.end_time >= p.ts - timedelta(hours=12)):
-                p.drive_id = d.id
+            want = _photo_trip(session, vehicle.id, p.ts)
+            if want is not None and want != p.drive_id:
+                p.drive_id = want
                 n += 1
+            elif want is None and p.drive_id is not None:
+                # Linked by the old odometer rule to a trip that ended long
+                # before the photo: unlinked until its own trip is saved.
+                d = session.get(Drive, p.drive_id)
+                if d is None or d.end_time is None or d.end_time < p.ts - PARK_PHOTO_TRIP_GAP:
+                    p.drive_id = None
+                    n += 1
         if n:
             session.commit()
         return n
@@ -5663,12 +5685,9 @@ def park_photo_add(
         coords, src = last.end_coords, "trip"
     if odo_km is None and last is not None:
         odo_km = last.end_odo_km
-    # The trip that brought the car here: the last one, when the car has not
-    # driven on since (or that cannot be told).
-    drive_id = None
-    if last is not None and (odo_km is None or last.end_odo_km is None
-                             or abs(float(odo_km) - float(last.end_odo_km)) <= 0.3):
-        drive_id = last.id
+    # The trip that brought the car here, by time (see _photo_trip); none yet
+    # while that trip is still under way, linked once it is saved.
+    drive_id = _photo_trip(session, vehicle.id, when.replace(tzinfo=None))
     place = ""
     if coords:
         try:
