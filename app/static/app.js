@@ -7206,7 +7206,17 @@ function glPaintAround(el, slot, host, root, next) {
 // map takes no touches, so a swipe over it still changes the design.
 const GL_MAP = { host: null, eng: null, kind: null, cfg: undefined, cfgAsked: false, gFailed: false,
   loading: {}, routeV: null, routeAsk: null, route: null, zoomKey: null };
-const GL_MAP_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+// The backup map's tiles. CARTO's dark ones need a key since 2026 (without,
+// every tile reads "API KEY REQUIRED"); with none set on the server it is
+// OpenStreetMap's standard map, darkened on the page (.gl-osm-dark).
+function glMapTiles() {
+  const k = GL_MAP.cfg && GL_MAP.cfg.carto_key;
+  return k
+    ? { url: "https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=" + encodeURIComponent(k),
+        opts: { maxZoom: 20, maxNativeZoom: 20 }, credit: "© OpenStreetMap contributors © CARTO", dark: false }
+    : { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        opts: { maxZoom: 20, maxNativeZoom: 19 }, credit: "© OpenStreetMap contributors", dark: true };
+}
 function glNavName(name) {
   // The car sends the full address; the first part is the place.
   return name ? String(name).split(",")[0].trim().slice(0, 40) : "";
@@ -7229,7 +7239,14 @@ function glMapScript(id, src, css) {
   js.onload = glMapRedraw;
   js.onerror = () => {
     GL_MAP.loading[id] = false;
-    if (id === "google") glMapGoogleFailed();
+    js.remove();
+    // Not downloaded (no signal for a moment) is not a refused key: try
+    // again in 15 s, three times, before the backup map for this visit.
+    if (id === "google") {
+      GL_MAP.gTries = (GL_MAP.gTries || 0) + 1;
+      if (GL_MAP.gTries >= 3) glMapGoogleFailed();
+      else setTimeout(glMapRedraw, 15000);
+    } else setTimeout(glMapRedraw, 15000);
   };
   document.head.appendChild(js);
 }
@@ -7335,8 +7352,13 @@ function glMapReady() {
   if (GL_MAP.cfg === undefined) {
     if (!GL_MAP.cfgAsked) {
       GL_MAP.cfgAsked = true;
-      fetch("/api/map-config", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : {}))
-        .catch(() => ({})).then((c) => { GL_MAP.cfg = c || {}; glMapRedraw(); });
+      // A failed ask (no signal as the app opened, 23 Nov) is not "no Google
+      // key": that read as one kept the backup map for the whole visit. Ask
+      // again in 10 s instead.
+      fetch("/api/map-config", { credentials: "same-origin" })
+        .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then((c) => { GL_MAP.cfg = c || {}; glMapRedraw(); })
+        .catch(() => { setTimeout(() => { GL_MAP.cfgAsked = false; glMapRedraw(); }, 10000); });
     }
     return null;
   }
@@ -7547,8 +7569,10 @@ function glMapLeaflet(host) {
   fixCar.className = "gl-map-car gl-map-carfix";
   fixCar.innerHTML = GL_CAR_SVG;
   const credit = document.createElement("div");
+  const tiles = glMapTiles();
   credit.className = "gl-map-credit";
-  credit.textContent = "© OpenStreetMap contributors © CARTO";
+  credit.textContent = tiles.credit;
+  host.classList.toggle("gl-osm-dark", tiles.dark);
   host.append(inner, fixCar, credit);
   const map = L.map(inner, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
     doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, fadeAnimation: false, zoomSnap: 0,
@@ -7556,7 +7580,7 @@ function glMapLeaflet(host) {
   // {r} asks CARTO for its sharp @2x tiles on a high-density screen, at the
   // normal label size (detectRetina would also step the zoom up a level,
   // shrinking every street name to half size).
-  L.tileLayer(GL_MAP_TILES, { subdomains: "abcd", maxZoom: 20, maxNativeZoom: 20, detectRetina: false }).addTo(map);
+  L.tileLayer(tiles.url, { ...tiles.opts, detectRetina: false }).addTo(map);
   map.setView([0, 0], 2);
   let dest = null, line = null, lineDim = null, rot = 0, sizeKey = "";
   const layout = () => {

@@ -7966,8 +7966,12 @@ def map_config():
     public by design), else none and the page uses CARTO's tiles."""
     key = (get_settings().google_maps_key or "").strip()
     map_id = (get_settings().google_maps_map_id or "").strip()
+    carto = (get_settings().carto_key or "").strip()
     return {"google_key": key or None, "traffic": bool(key),
-            "map_id": (map_id or None) if key else None, "heading_up": bool(key and map_id)}
+            "map_id": (map_id or None) if key else None, "heading_up": bool(key and map_id),
+            # The backup map's tiles: CARTO's dark ones with a key, else
+            # OpenStreetMap's, darkened on the page.
+            "carto_key": carto or None}
 
 
 @router.get("/push/vapid-public-key")

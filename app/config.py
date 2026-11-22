@@ -206,6 +206,11 @@ class Settings(BaseSettings):
     # address (HTTP referrers) and to the Maps JavaScript API. Empty = the
     # map uses CARTO's dark tiles instead.
     google_maps_key: str = ""
+    # Optional CARTO basemaps key (free, carto.com/basemaps/apikey) for the
+    # backup map used when there is no Google key or Google refuses it. CARTO
+    # began requiring one in 2026: without, its tiles read "API KEY
+    # REQUIRED", so the backup uses OpenStreetMap's own tiles, darkened.
+    carto_key: str = ""
     # Optional Map ID (Google Cloud → Google Maps Platform → Map management,
     # JavaScript, Vector). With it the map is Google's vector map and turns
     # with the car, the road ahead up; without it the map stays north up.

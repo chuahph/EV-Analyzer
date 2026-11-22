@@ -14228,10 +14228,16 @@ def test_map_config_names_the_google_key_only_when_set():
         client = TestClient(app)
         settings.google_maps_key = ""
         assert client.get("/api/map-config").json() == {"google_key": None, "traffic": False,
-                                                         "map_id": None, "heading_up": False}
+                                                         "map_id": None, "heading_up": False,
+                                                         "carto_key": None}
         settings.google_maps_key = " AIzaTestKey "
         assert client.get("/api/map-config").json() == {"google_key": "AIzaTestKey", "traffic": True,
-                                                         "map_id": None, "heading_up": False}
+                                                         "map_id": None, "heading_up": False,
+                                                         "carto_key": None}
+        # The backup map's key, when set (CARTO's tiles need one since 2026).
+        settings.carto_key = " cartoKey1 "
+        assert client.get("/api/map-config").json()["carto_key"] == "cartoKey1"
+        settings.carto_key = ""
         settings.google_maps_map_id = "abc123"
         assert client.get("/api/map-config").json()["heading_up"] is True
         assert client.get("/api/map-config").json()["map_id"] == "abc123"
