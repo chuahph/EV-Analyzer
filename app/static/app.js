@@ -511,6 +511,11 @@ try {
   if (at && Date.now() - at < 30 * 60000) { spotAuto._armed = true; spotLog("armed again after reopening"); }
 } catch (_) { /* private mode */ }
 function spotAutoOn() { return glPref("autoSpot", "on") !== "off"; }
+// In its mount the phone is sideways. Upright, it is in a hand: parked
+// already and being carried off (to the lift, out of signal), when a camera
+// left to look for "the car stopping" would photograph the lift and drop the
+// real spot photo. No camera then.
+function spotMounted() { return window.innerWidth > window.innerHeight; }
 // The last photo Auto Spot took: {id | qid, at (ms), via "P" | "still",
 // thumb (64x48 grey)}. A short stop (dropping someone off) is a P like any
 // other, so: driven on within SPOT_SHORT_MS, that photo is removed; and the
@@ -599,8 +604,9 @@ function spotAutoTick(L) {
   if (!spotAuto.armed || gear !== "P" || moving) { spotAuto.pSince = 0; return; }
   if (!spotAuto.pSince) spotAuto.pSince = Date.now();
   if (Date.now() - spotAuto.pSince < SPOT_AUTO_P_MS) return;
-  if (!spotAutoOn() || document.visibilityState !== "visible" || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
-    const r = !spotAutoOn() ? "Auto Spot is off" : document.visibilityState !== "visible" ? "app not on screen" : "no camera in this browser";
+  if (!spotAutoOn() || document.visibilityState !== "visible" || !spotMounted() || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    const r = !spotAutoOn() ? "Auto Spot is off" : document.visibilityState !== "visible" ? "app not on screen"
+      : !spotMounted() ? "phone upright (not in its mount)" : "no camera in this browser";
     if (spotAuto.lastWhy !== "P:" + r) { spotAuto.lastWhy = "P:" + r; spotLog(`in P, no camera: ${r}`); }
     return;
   }
@@ -631,6 +637,7 @@ setInterval(() => {
     if (afterShort) {
       if (quiet < SPOT_QUIET_S) return;
       if (!spotAutoOn() || document.visibilityState !== "visible" || !document.body.classList.contains("glance-on")) return;
+      if (!spotMounted()) return why("phone upright (not in its mount)");
       spotLastAuto({ ...la, followed: true });
       spotLog(`no signal ${Math.round(quiet)} s within ${Math.round((Date.now() - la.at) / 60000)} min of a P photo: camera on, new photo only if the view differs`);
       spotAutoRun("still", la.thumb);
@@ -640,6 +647,7 @@ setInterval(() => {
     if (!spotAutoOn()) return why("Auto Spot is off");
     if (document.visibilityState !== "visible") return why("app not on screen");
     if (!document.body.classList.contains("glance-on")) return why("not on the Live page");
+    if (!spotMounted()) return why("phone upright (not in its mount)");
     // Last heard at town speed (or stopped at the barrier), then nothing: the
     // signal went. With the full field set the car sends pack current every
     // second, standing at a light included, so a 30 s silence is lost signal,
@@ -708,6 +716,7 @@ function spotStillWatch(run, v, msg) {
   const look = () => {
     if (spotAuto.run !== run) return;
     if (Date.now() - t0 > SPOT_STILL_GIVEUP_MS) { spotAutoStop("Car kept moving: no photo. Tap 📷 Spot when parked.", 5000); return; }
+    if (!spotMounted()) { spotAutoStop("Phone taken out of its mount: no photo", 3000); return; }
     if (v.videoWidth) {
       g.drawImage(v, 0, 0, 64, 48);
       const px = g.getImageData(0, 0, 64, 48).data;

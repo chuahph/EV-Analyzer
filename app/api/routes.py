@@ -5601,8 +5601,10 @@ def _park_spot(session: Session, vehicle: Vehicle) -> dict | None:
     """The photo of where the car is parked now: the newest one, as long as
     no trip has started since it was taken. With whether the car has since
     moved from that spot without a trip (its place, or its odometer)."""
+    # Newest by time, then by id: two photos in the same second (a tap and
+    # Auto Spot) must not come back in either order.
     p = session.scalars(select(ParkPhoto).where(ParkPhoto.vehicle_id == vehicle.id)
-                        .order_by(ParkPhoto.ts.desc()).limit(1)).first()
+                        .order_by(ParkPhoto.ts.desc(), ParkPhoto.id.desc()).limit(1)).first()
     if p is None:
         return None
     later = session.scalars(select(Drive.id).where(
@@ -5717,7 +5719,7 @@ def park_photos(session: Session = Depends(get_session)):
     """The saved spot photos, newest first (without the images)."""
     vehicle = _first_vehicle(session)
     rows = session.scalars(select(ParkPhoto).where(ParkPhoto.vehicle_id == vehicle.id)
-                           .order_by(ParkPhoto.ts.desc())).all()
+                           .order_by(ParkPhoto.ts.desc(), ParkPhoto.id.desc())).all()
     return {"keep": PARK_PHOTO_KEEP, "photos": [_park_photo_meta(p) for p in rows],
             "current": _park_spot(session, vehicle)}
 
