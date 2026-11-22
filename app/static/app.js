@@ -5646,7 +5646,11 @@ function glLiveApply(L) {
     const w = nw.power_kw * 1000 / nw.speed_kmh;
     if (glLiveState.maxWh == null || w > glLiveState.maxWh) glLiveState.maxWh = w;
   }
-  if (nw.power_kw != null) {
+  // No power reading (the car has stopped sending pack current: parked,
+  // asleep), parked: nothing, not the last figure of the drive held on.
+  const pwStale = !L.driving && nw.age_sec != null && nw.age_sec > 60;
+  if ((nw.power_kw == null || pwStale) && !L.driving) glLiveState.inst = null;
+  if (nw.power_kw != null && !pwStale) {
     const kw = nw.power_kw;
     const v = nw.speed_kmh || 0;
     glLiveState.inst = { kw, regen: kw < 0, whkm: v > 5 && kw > 0 ? kw * 1000 / v : null, measured: true };
@@ -6819,8 +6823,9 @@ function renderGlance(d) {
           // it read 122 km against a rated 384 (12 Nov 2026). Until then the
           // car's own rated range shows.
           rangeHere: nw.energy_kwh != null && twA > 0 && t && +t.distance_km >= GL_RANGE_MIN_KM ? nw.energy_kwh * 1000 / twA : null, n,
+          // Parked, the last trip's (as its Net kWh beside it): "—" before.
           usedPct: t ? Math.min(100, Math.max(+t.soc_used || 0, lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh && t.energy_kwh > 0
-            ? t.energy_kwh / lastData.vehicle.usable_capacity_kwh * 100 : 0)) : null,
+            ? t.energy_kwh / lastData.vehicle.usable_capacity_kwh * 100 : 0)) : (lt && lt.soc_used_pct != null ? +lt.soc_used_pct : null),
           packKwh: lastData && lastData.vehicle && lastData.vehicle.usable_capacity_kwh,
           // What a kWh out of the pack cost at the last charge, the charger's
           // loss included (RM 30.44 for 24.56 kWh at QBM: 1.24), as the trip

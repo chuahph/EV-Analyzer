@@ -14902,3 +14902,30 @@ def test_ingest_times_the_climate_readings_so_the_newest_decides():
         sess.commit()
         sess.close()
         settings.app_passcode = old_pc
+
+
+def test_live_power_is_not_held_on_after_the_car_stops_sending_it():
+    """Parked, the car stops sending pack current; its last figure from the
+    drive (6.9 kW of regen, 23 Nov) must not stay on the page as the power
+    now, once the car's other readings have moved on 30 s past it."""
+    from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+    from app.api import routes as routes_mod
+
+    vin = "TESTPOWERSTALE01"
+    t0 = _dtm.now(_tz.utc) - _td(seconds=100)
+    at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fold = lambda d, f: routes_mod._live_mem_fold(vin, at(d), f)
+    payload = lambda: routes_mod._live_payload(vin, 68.3)
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        for k in range(5):
+            fold(k, {"Gear": "ShiftStateD", "VehicleSpeed": 0.0,
+                     "PackVoltage": 380.0, "PackCurrent": 10.0})
+        assert payload()["now"]["power_kw"] == 3.8
+        fold(10, {"Gear": "ShiftStateP", "PackVoltage": 380.0, "PackCurrent": -18.0})
+        assert payload()["now"]["power_kw"] is not None
+        # Parked: other readings go on, the pack current does not.
+        fold(50, {"InsideTemp": 26.0})
+        assert payload()["now"]["power_kw"] is None
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)

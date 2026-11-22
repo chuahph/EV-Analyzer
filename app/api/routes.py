@@ -17247,6 +17247,15 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
         power = round(float(v) * float(a) / 1000.0, 2) if v is not None and a is not None else None
     except (TypeError, ValueError):
         power = None
+    # The car sends pack current every second while it changes; once it has
+    # stopped (parked, asleep) the last figure of the drive stayed on the page
+    # as if drawn now (6.9 kW in P, 23 Nov). Older than this: no reading.
+    # Judged against the car's own newest reading (late bursts after weak
+    # signal keep their times). With nothing at all arriving, the page goes
+    # by the reading's age instead (glLiveApply).
+    pc_t = float((car.get("_kt") or {}).get("PackCurrent") or 0.0)
+    if power is not None and pc_t and float(ts) - pc_t > LIVE_POWER_STALE_SEC:
+        power = None
     sign = int(car.get("_sign") or 0)
     if power is not None:
         # Discharge positive; until the sign is learned, unknown.
@@ -17328,6 +17337,9 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     return {"driving": trip is not None, "vin": vin, "trip": trip, "now": now,
             "nav": _live_nav(car), "server_ts": round(time.time(), 1)}
 
+
+# Pack power older than this is not shown as the car's power now.
+LIVE_POWER_STALE_SEC = 30
 
 # An HvacPower Off reported this soon after the drive began (or before it),
 # with no report since, is the car's wake-up reading: see live_now's end.
