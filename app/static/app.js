@@ -601,13 +601,15 @@ function spotAutoTick(L) {
     return;
   }
   if (!gear) return;   // a frame without the gear: wait for the next
-  if (!spotAuto.armed || gear !== "P" || moving) { spotAuto.pSince = 0; return; }
+  if (!spotAuto.armed || gear !== "P" || moving) { spotAuto.pSince = 0; spotAuto.lastWhyP = null; return; }
   if (!spotAuto.pSince) spotAuto.pSince = Date.now();
   if (Date.now() - spotAuto.pSince < SPOT_AUTO_P_MS) return;
   if (!spotAutoOn() || document.visibilityState !== "visible" || !spotMounted() || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
     const r = !spotAutoOn() ? "Auto Spot is off" : document.visibilityState !== "visible" ? "app not on screen"
       : !spotMounted() ? "phone upright (not in its mount)" : "no camera in this browser";
-    if (spotAuto.lastWhy !== "P:" + r) { spotAuto.lastWhy = "P:" + r; spotLog(`in P, no camera: ${r}`); }
+    // Its own memory of what it last said: shared with the no-signal check,
+    // the two overwrote each other and the same line was logged every second.
+    if (spotAuto.lastWhyP !== r) { spotAuto.lastWhyP = r; spotLog(`in P, no camera: ${r}`); }
     return;
   }
   spotAuto.armed = false;
