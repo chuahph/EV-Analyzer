@@ -7244,7 +7244,7 @@ function glMapScript(id, src, css) {
     // again in 15 s, three times, before the backup map for this visit.
     if (id === "google") {
       GL_MAP.gTries = (GL_MAP.gTries || 0) + 1;
-      if (GL_MAP.gTries >= 3) glMapGoogleFailed();
+      if (GL_MAP.gTries >= 3) glMapGoogleFailed("Google map would not download");
       else setTimeout(glMapRedraw, 15000);
     } else setTimeout(glMapRedraw, 15000);
   };
@@ -7332,10 +7332,11 @@ function glRouteSnap(pos) {
   return at || pos;
 }
 
-function glMapGoogleFailed() {
-  // A refused key (Google calls gm_authFailure) or no script: CARTO instead,
-  // for the rest of this visit.
+function glMapGoogleFailed(why) {
+  // A refused key (Google calls gm_authFailure) or no script: the backup map
+  // instead, for the rest of this visit, saying why on its credit line.
   if (GL_MAP.gFailed) return;
+  GL_MAP.why = typeof why === "string" ? why : "Google refused the key";
   GL_MAP.gFailed = true;
   if (GL_MAP.kind === "google") {
     if (GL_MAP.host) GL_MAP.host.remove();
@@ -7571,7 +7572,10 @@ function glMapLeaflet(host) {
   const credit = document.createElement("div");
   const tiles = glMapTiles();
   credit.className = "gl-map-credit";
-  credit.textContent = tiles.credit;
+  // On the backup map with a Google key set: why, so it can be told apart
+  // from a key problem (fix that in Google Cloud) or a passing signal gap.
+  const why = GL_MAP.cfg && GL_MAP.cfg.google_key ? (GL_MAP.why || "") : "no Google key on the server";
+  credit.textContent = tiles.credit + (why ? ` · backup map: ${why}` : "");
   host.classList.toggle("gl-osm-dark", tiles.dark);
   host.append(inner, fixCar, credit);
   const map = L.map(inner, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
