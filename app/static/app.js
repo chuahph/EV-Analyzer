@@ -607,7 +607,10 @@ function spotAutoTick(L) {
     const heard = nw.age_sec != null && nw.age_sec < 15;
     // A photo asked for by tap (Retake, or Take photo with no signal) goes
     // ahead on the car's old gear; only the car heard driving stops it.
-    if (spotAuto.run.manual ? heard && moving : gear && gear !== "P") spotAutoStop("Cancelled: car in " + (gear || "motion"));
+    // The no-signal camera also stops once the car is heard again in a
+    // driving gear, moving or not: it was a gap in the signal, not a park.
+    if (spotAuto.run.still && heard && gear && gear !== "P") spotAutoStop(`Cancelled: car heard again in ${gear}`);
+    else if (spotAuto.run.manual ? heard && moving : gear && gear !== "P") spotAutoStop("Cancelled: car in " + (gear || "motion"));
     return;
   }
   if (!gear) return;   // a frame without the gear: wait for the next
@@ -667,6 +670,9 @@ setInterval(() => {
     const v = +nw.speed_kmh || 0;
     if (quiet < SPOT_QUIET_S) { spotAuto.lastWhy = null; return; }
     if (v > SPOT_CRAWL_KMH) return why(`last heard at ${Math.round(v)} km/h`);
+    // Last heard standing in D: a light or a queue. The car can go quiet
+    // there too, and the still view then took a photo at the light (24 Nov).
+    if (v <= 0 && nw.shift !== "P") return why(`last heard stopped in ${nw.shift || "gear"} (a light or a queue)`);
     if (nw.shift === "P") return why("last heard in P");
     spotAuto.lastWhy = null;
     spotLog(`no signal ${Math.round(quiet)} s, last ${Math.round(v)} km/h ${nw.shift || "?"}: camera on, photo once it stops`);

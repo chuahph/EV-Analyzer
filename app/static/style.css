@@ -3837,3 +3837,8 @@ body.gl-dim #spot-auto { opacity: 1; filter: none; }
    Dim (23 Nov). Kept dark, a step dimmer than bright. */
 .gl-dim .gl-map-leaflet.gl-osm-dark .leaflet-tile-pane,
 .gl-dim .gl-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.62) contrast(.85) saturate(.5); }
+/* Bright: the Saver map a good deal lighter than at first (24 Nov: too dark
+   in bright mode); Dim keeps its own, darker filter above. */
+.gl-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(1.25) contrast(.9) saturate(.8); }
+.gl-dim .gl-map-leaflet.gl-osm-dark .leaflet-tile-pane,
+.gl-dim .gl-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.62) contrast(.85) saturate(.5); }
