@@ -14929,3 +14929,24 @@ def test_live_power_is_not_held_on_after_the_car_stops_sending_it():
         assert payload()["now"]["power_kw"] is None
     finally:
         routes_mod._LIVE_MEM.pop(vin, None)
+
+
+def test_live_now_carries_the_gear_as_the_car_sent_it():
+    """An invalid gear reads as P in "shift" (right for ending a drive), but
+    gear_raw says what the car sent, so Auto Spot can tell it from Park."""
+    from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+    from app.api import routes as routes_mod
+
+    vin = "TESTGEARRAW00001"
+    t0 = _dtm.now(_tz.utc) - _td(seconds=30)
+    at = lambda d: (t0 + _td(seconds=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        routes_mod._LIVE_MEM.pop(vin, None)
+        routes_mod._live_mem_fold(vin, at(0), {"Gear": "ShiftStateD", "VehicleSpeed": 0.0})
+        routes_mod._live_mem_fold(vin, at(5), {"Gear": "ShiftStateInvalid"})
+        now = routes_mod._live_payload(vin, 68.3)["now"]
+        assert now["shift"] == "P" and now["gear_raw"] == "ShiftStateInvalid"
+        routes_mod._live_mem_fold(vin, at(9), {"Gear": "ShiftStateP"})
+        assert routes_mod._live_payload(vin, 68.3)["now"]["gear_raw"] == "ShiftStateP"
+    finally:
+        routes_mod._LIVE_MEM.pop(vin, None)

@@ -17263,6 +17263,10 @@ def _live_payload(vin: str | None, capacity_kwh: float | None) -> dict:
     now = {
         "ts": ts, "age_sec": round(max(time.time() - ts, 0.0)), "source": "memory",
         "speed_kmh": snap.get("speed_kmh"), "shift": snap.get("shift"),
+        # The gear as the car sent it: "shift" reads an invalid or not yet
+        # heard gear as P, which is right for ending a drive but is not the
+        # car saying Park (Auto Spot took a photo at a light in D, 24 Nov).
+        "gear_raw": car.get("Gear") if isinstance(car.get("Gear"), str) else None,
         "odo_km": snap.get("odo_km"), "energy_kwh": snap.get("energy_kwh"),
         "battery_level": snap.get("battery_level"), "soc": snap.get("soc"),
         "range_km": snap.get("range_km"), "out_temp": snap.get("out_temp"),

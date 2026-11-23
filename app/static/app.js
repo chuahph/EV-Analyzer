@@ -599,7 +599,10 @@ function spotAutoTick(L) {
   const nw = (L && L.now) || {};
   if (spotLastAuto() && !spotAuto.run) spotShortStopCheck(nw);
   const fresh = nw.age_sec == null || nw.age_sec < 90;
-  const gear = fresh ? nw.shift : null;
+  // P only when the car said Park: the server's "shift" also reads an invalid
+  // or not yet heard gear as P (a photo at a light in D, 24 Nov).
+  const saidP = nw.gear_raw === undefined ? nw.shift === "P" : nw.gear_raw === "ShiftStateP";
+  const gear = !fresh ? null : nw.shift === "P" && !saidP ? null : nw.shift;
   const moving = (+nw.speed_kmh || 0) > 0;
   if ((gear && gear !== "P") || (fresh && moving)) { spotAuto.armed = true; spotAuto.pSince = 0; }
   if (spotAuto.run) {
@@ -647,7 +650,8 @@ setInterval(() => {
     // Gone quiet soon after a P photo, last word P: maybe a short stop and
     // then driven on with no signal. Look again; the same view takes nothing.
     const la = spotLastAuto();
-    const afterShort = la && la.via === "P" && !la.followed && nw.shift === "P"
+    const saidP = nw.gear_raw === undefined ? nw.shift === "P" : nw.gear_raw === "ShiftStateP";
+    const afterShort = la && la.via === "P" && !la.followed && saidP
       && Date.now() - la.at <= SPOT_SHORT_MS;
     if (afterShort) {
       if (quiet < SPOT_QUIET_S) return;
@@ -672,8 +676,8 @@ setInterval(() => {
     if (v > SPOT_CRAWL_KMH) return why(`last heard at ${Math.round(v)} km/h`);
     // Last heard standing in D: a light or a queue. The car can go quiet
     // there too, and the still view then took a photo at the light (24 Nov).
-    if (v <= 0 && nw.shift !== "P") return why(`last heard stopped in ${nw.shift || "gear"} (a light or a queue)`);
-    if (nw.shift === "P") return why("last heard in P");
+    if (v <= 0 && !saidP) return why(`last heard stopped in ${nw.gear_raw || nw.shift || "gear"} (a light or a queue)`);
+    if (saidP) return why("last heard in P");
     spotAuto.lastWhy = null;
     spotLog(`no signal ${Math.round(quiet)} s, last ${Math.round(v)} km/h ${nw.shift || "?"}: camera on, photo once it stops`);
     spotAuto.armed = false;
