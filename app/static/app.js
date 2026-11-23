@@ -6762,6 +6762,10 @@ function glHeld() {
 function renderGlance(d) {
   const el = document.getElementById("glance");
   if (!el || !d) return;
+  // The same ids for the gauges' glow filters on every redraw: numbered on
+  // from the last redraw, every glowing part read as changed each second and
+  // was rewritten (glMorph keeps what is unchanged).
+  glDialSeq = 0;
   if (glHeld()) {
     GL_HOLD.d = d;
     if (!GL_HOLD.timer) {
@@ -7191,16 +7195,46 @@ function renderGlance(d) {
 // the whole page was replaced and the map lifted out and put back into it,
 // once a second, which made the phone set the map's drawing up again each
 // time. Anything else (no map, figures, another layout) replaces the page.
+// The page as it is made like the page to be, changing only what differs:
+// a child the same as before stays (the frame, the rail, labels, a figure
+// that has not moved), a changed one of the same kind is gone into, anything
+// else replaced. The whole page used to be rebuilt every second, the static
+// frame and every label with it, for the phone to lay out and paint again.
+function glMorph(a, b, depth) {
+  const A = a.childNodes, B = [...b.childNodes];
+  if (A.length !== B.length) { a.replaceChildren(...B); return; }
+  for (let i = 0; i < B.length; i++) {
+    const x = A[i], y = B[i];
+    if (x.isEqualNode(y)) continue;
+    if (x.nodeType === 3 && y.nodeType === 3) { x.data = y.data; continue; }
+    if (depth > 0 && x.nodeType === 1 && y.nodeType === 1 && x.tagName === y.tagName
+        && !(GL_MAP.host && (x === GL_MAP.host || x.contains(GL_MAP.host)))) {
+      glSyncAttrs(x, y);
+      glMorph(x, y, depth - 1);
+      continue;
+    }
+    a.replaceChild(y, x);
+  }
+}
+function glSyncAttrs(a, b) {
+  for (const at of [...a.attributes]) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
+  for (const at of [...b.attributes]) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+}
+const GL_MORPH_DEPTH = 8;
 function glPaint(el, html) {
   const host = GL_MAP.host;
   const slot = host && host.parentElement && el.contains(host) ? host.parentElement : null;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
   if (slot && slot.classList.contains("gl-map-slot")) {
-    const tpl = document.createElement("template");
-    tpl.innerHTML = html;
     const next = tpl.content.querySelector(".gl-map-slot:not(.gl-numsv)");
     if (next && glPaintAround(el, slot, host, tpl.content, next)) return;
+    el.innerHTML = html;
+    return;
   }
-  el.innerHTML = html;
+  // No map on the page: the whole page morphed, unless it was empty.
+  if (el.firstChild) glMorph(el, tpl.content, GL_MORPH_DEPTH);
+  else el.replaceChildren(...tpl.content.childNodes);
 }
 function glPaintAround(el, slot, host, root, next) {
   // The boxes from the page down to the map, in the page as it is and as
@@ -7217,12 +7251,29 @@ function glPaintAround(el, slot, host, root, next) {
   let pa = el, pb = root;
   for (let i = 0; i < was.length; i++) {
     const keep = was[i], fresh = now[i];
-    // Around the kept box: the old neighbours out, the new ones in, in order.
-    for (const c of [...pa.childNodes]) if (c !== keep) c.remove();
-    let before = true;
-    for (const c of [...pb.childNodes]) {
-      if (c === fresh) { before = false; continue; }
-      if (before) pa.insertBefore(c, keep); else pa.appendChild(c);
+    // Around the kept box: each old neighbour made like the new one in the
+    // same place (unchanged ones untouched), when the two sides match in
+    // number; else the old ones out and the new ones in, in order.
+    const olds = [...pa.childNodes], news = [...pb.childNodes];
+    const ko = olds.indexOf(keep), kn = news.indexOf(fresh);
+    if (olds.length === news.length && ko === kn) {
+      for (let j = 0; j < olds.length; j++) {
+        if (j === ko) continue;
+        const x = olds[j], y = news[j];
+        if (x.isEqualNode(y)) continue;
+        if (x.nodeType === 3 && y.nodeType === 3) { x.data = y.data; continue; }
+        if (x.nodeType === 1 && y.nodeType === 1 && x.tagName === y.tagName) {
+          glSyncAttrs(x, y); glMorph(x, y, GL_MORPH_DEPTH); continue;
+        }
+        pa.replaceChild(y, x);
+      }
+    } else {
+      for (const c of olds) if (c !== keep) c.remove();
+      let before = true;
+      for (const c of news) {
+        if (c === fresh) { before = false; continue; }
+        if (before) pa.insertBefore(c, keep); else pa.appendChild(c);
+      }
     }
     sync(keep, fresh);
     pa = keep; pb = fresh;

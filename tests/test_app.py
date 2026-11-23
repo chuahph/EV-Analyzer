@@ -11012,7 +11012,11 @@ def test_a_single_trip_can_be_asked_why_it_is_not_fast_highway():
     try:
         with TestClient(app) as client:
             vid = sess.scalar(select(Vehicle.id))
-            base = datetime.now().replace(microsecond=0) - _td(hours=6)
+            # The app's clock (Malaysian time), not this machine's: a UTC
+            # base put the trips on the previous Malaysian day in the hours
+            # after Malaysian midnight, outside the 1-day window.
+            from app import sync as sync_mod
+            base = sync_mod.now_local().replace(microsecond=0) - _td(hours=6)
             # Sustained: an hour at 135 with a 145 peak.
             # Mixed: the same peak, but averaged down by town at both ends.
             for i, (km, mins, mx) in enumerate((
