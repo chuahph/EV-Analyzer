@@ -7217,8 +7217,19 @@ function glMorph(a, b, depth) {
   }
 }
 function glSyncAttrs(a, b) {
-  for (const at of [...a.attributes]) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
-  for (const at of [...b.attributes]) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+  // The same names in the same order: only the values that differ are set.
+  // Otherwise all are written again in the new order, so the page comes out
+  // exactly as written (a box turned from figures to map kept its old
+  // attributes first and took the new ones on at the end).
+  const A = a.attributes, B = b.attributes;
+  let same = A.length === B.length;
+  for (let i = 0; same && i < B.length; i++) same = A[i].name === B[i].name;
+  if (same) {
+    for (const at of [...B]) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+    return;
+  }
+  for (const at of [...A]) a.removeAttribute(at.name);
+  for (const at of [...B]) a.setAttribute(at.name, at.value);
 }
 const GL_MORPH_DEPTH = 8;
 function glPaint(el, html) {
@@ -7244,10 +7255,7 @@ function glPaintAround(el, slot, host, root, next) {
   for (let n = next; n && n !== root; n = n.parentNode) now.unshift(n);
   if (!was.length || was.length !== now.length) return false;
   for (let i = 0; i < was.length; i++) if (was[i].tagName !== now[i].tagName) return false;
-  const sync = (a, b) => {
-    for (const at of [...a.attributes]) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
-    for (const at of [...b.attributes]) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
-  };
+  const sync = glSyncAttrs;
   let pa = el, pb = root;
   for (let i = 0; i < was.length; i++) {
     const keep = was[i], fresh = now[i];
