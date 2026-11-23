@@ -5636,7 +5636,13 @@ function glLiveApply(L) {
     const dt = nw.ts && lt ? nw.ts - lt : 0;
     // Only while the pedal is unknown: once the car streams BrakePedal (the
     // relay's level-3 set), the pedal alone decides.
-    const braking = nw.brake == null && v != null && lv != null && dt >= 0.5 && dt <= 2.5
+    // Once the car has sent its brake pedal this visit, only the pedal (and a
+    // gear change) wakes the screen: slowing on regen or rolling to a stop
+    // without the brake lit it up too (24 Nov). The slowing and the stop
+    // stand in for the pedal only for a car that does not send it.
+    if (nw.brake != null) glLiveState.brakeSeen = true;
+    const noPedal = !glLiveState.brakeSeen;
+    const braking = noPedal && nw.brake == null && v != null && lv != null && dt >= 0.5 && dt <= 2.5
       && (lv - v) / dt >= GL_BRAKE_KMH_S;
     // The pedal itself, when the car streams it, is the surest sign of all.
     // Each event wakes the screen once and starts the same wake; holding
@@ -5645,9 +5651,11 @@ function glLiveApply(L) {
     // server after 2 minutes, so the next press is still seen).
     const pedal = nw.brake === true && glLiveState.lastBrake !== true;
     glLiveState.lastBrake = nw.brake;
-    if (pedal || braking || (v === 0 && lv > 0) || (nw.shift && ls && nw.shift !== ls)) glDimArm(GL_DIM_EVENT_MS);
+    // A gear change, not the car's passing "invalid" gear (read as P).
+    const sh = nw.gear_raw && !/^ShiftState[PRND]$/.test(nw.gear_raw) ? null : nw.shift;
+    if (pedal || braking || (noPedal && v === 0 && lv > 0) || (sh && ls && sh !== ls)) glDimArm(GL_DIM_EVENT_MS);
     if (v != null && nw.ts) { glLiveState.lastV = v; glLiveState.lastT = nw.ts; }
-    if (nw.shift) glLiveState.lastShift = nw.shift;
+    if (sh) glLiveState.lastShift = sh;
   }
   glLiveState.data = L;
   glLiveState.recvAt = Date.now();
@@ -7684,10 +7692,15 @@ function glMapLeaflet(host) {
       inner.style.transform = `rotate(${rot.toFixed(1)}deg)`;
     },
     jump(p, z) { layout(); map.setView(p, z, { animate: false }); },
-    zoomTo(p, z) { map.setView(p, z, { animate: false }); },
+    // Animated: a zoom without it makes Leaflet drop every tile and fetch the
+    // new level, a blank map for a moment (about 9 frames each step, the map
+    // flickering on + and - and on the speed zoom, 24 Nov). Animated, the old
+    // tiles stay, scaled, until the new ones are in.
+    zoomTo(p, z) { map.setView(p, z, { animate: true }); },
     // A frame (many a second): an instant move, the frames make the motion.
     // A redraw (once a second, car slow or stopped): a short glide if bright.
     follow(p, frame) {
+      if (map._animatingZoom) return;   // the zoom carries the view; a move now would cut it short
       const dx = map.latLngToContainerPoint(p).distanceTo(map.getSize().divideBy(2));
       const glide = !frame && dx < 400 && !document.body.classList.contains("gl-dim");
       if (dx > 0.5) map.panTo(p, { animate: glide, duration: 0.2, easeLinearity: 1, noMoveStart: true });
