@@ -3831,3 +3831,9 @@ body.gl-dim #spot-auto { opacity: 1; filter: none; }
    (inverted, hues turned back), close to the dark map it stands in for. */
 .gl-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.6); }
 .gl-engchip.on { border-color: #2ee86a; color: #2ee86a; }
+/* Dimmed: the Dim rule for the backup map (.gl-dim .gl-map-leaflet ...,
+   written for CARTO's dark tiles) is more specific than the darkening
+   above and replaced it, so the light OpenStreetMap map showed through in
+   Dim (23 Nov). Kept dark, a step dimmer than bright. */
+.gl-dim .gl-map-leaflet.gl-osm-dark .leaflet-tile-pane,
+.gl-dim .gl-osm-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.62) contrast(.85) saturate(.5); }
