@@ -353,12 +353,18 @@ function spotQuery(m, kept) {
 }
 // ---- Photos kept on the phone until there is signal (underground) ----
 const spotQ = {
+  // One connection for the visit: opened anew on every 30 s check, they
+  // piled up unclosed.
+  _db: null,
   db() {
-    return new Promise((ok, no) => {
+    if (this._db) return this._db;
+    this._db = new Promise((ok, no) => {
       const r = indexedDB.open("spotQueue", 1);
       r.onupgradeneeded = () => r.result.createObjectStore("q", { keyPath: "id", autoIncrement: true });
-      r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+      r.onsuccess = () => { r.result.onclose = () => { spotQ._db = null; }; ok(r.result); };
+      r.onerror = () => { spotQ._db = null; no(r.error); };
     });
+    return this._db;
   },
   async run(mode, fn) {
     const d = await this.db();
@@ -368,9 +374,13 @@ const spotQ = {
       t.oncomplete = () => ok(r && r.result); t.onerror = () => no(t.error);
     });
   },
-  add(rec) { return this.run("readwrite", (st) => st.add(rec)); },
-  all() { return this.run("readonly", (st) => st.getAll()); },
-  del(id) { return this.run("readwrite", (st) => st.delete(id)); },
+  // How many wait, kept in plain storage: the 30 s check opens the queue
+  // only when one may be waiting.
+  _n(d) { try { const n = Math.max(0, (+localStorage.getItem("spotQn") || 0) + d); localStorage.setItem("spotQn", String(n)); } catch (_) { /* private mode */ } },
+  waiting() { try { return localStorage.getItem("spotQn") !== "0"; } catch (_) { return true; } },
+  async add(rec) { const r = await this.run("readwrite", (st) => st.add(rec)); this._n(1); return r; },
+  async all() { const r = await this.run("readonly", (st) => st.getAll()); try { localStorage.setItem("spotQn", String((r || []).length)); } catch (_) { /* private mode */ } return r; },
+  async del(id) { const r = await this.run("readwrite", (st) => st.delete(id)); this._n(-1); return r; },
 };
 let spotFlushing = false;
 async function spotFlush() {
@@ -387,7 +397,7 @@ async function spotFlush() {
         try { localStorage.setItem("spotDelLater", JSON.stringify(dels)); } catch (_) { /* private mode */ }
       }
     }
-    const recs = await spotQ.all();
+    const recs = spotQ.waiting() ? await spotQ.all() : [];
     for (const r of recs || []) {
       const fd = new FormData();
       fd.append("file", r.blob, "spot.jpg");
@@ -7350,6 +7360,17 @@ function glMapGoogleFailed(why) {
   glMapRedraw();
 }
 window.gm_authFailure = glMapGoogleFailed;
+// Off Google only because its script would not download (no signal): back
+// online, try Google again rather than keep the backup for the visit.
+window.addEventListener("online", () => {
+  if (!GL_MAP.gFailed || GL_MAP.why !== "Google map would not download") return;
+  GL_MAP.gFailed = false; GL_MAP.gTries = 0; GL_MAP.why = null; GL_MAP.loading.google = false;
+  if (GL_MAP.kind === "leaflet") {
+    if (GL_MAP.host) GL_MAP.host.remove();
+    GL_MAP.host = null; GL_MAP.eng = null; GL_MAP.kind = null; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_ZOOM.cur = null;
+  }
+  glMapRedraw();
+});
 // Which engine, once the server has said whether it has a Google key; null
 // while that question or the library is still on its way.
 function glMapReady() {
