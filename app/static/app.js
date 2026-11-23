@@ -6510,7 +6510,12 @@ function glFlipChip(body) {
   const nums = glMapIsNums(key);
   // With the map showing, - and + to zoom it by hand (see glZoomBy).
   const zoom = nums ? "" : `<button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="-1" aria-label="Zoom the map out">−</button><button type="button" class="gl-chip gl-zoomchip" data-gl-zoom="1" aria-label="Zoom the map in">+</button>`;
-  return `${zoom}<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>`;
+  // Google or Saver, while the map shows (and there is a Google map to
+  // choose: a key on the server).
+  const eng = nums || !(GL_MAP.cfg && GL_MAP.cfg.google_key) ? "" : glMapSaver()
+    ? '<button type="button" class="gl-chip gl-engchip on" data-gl-mapeng="google" aria-label="Map: Saver (no traffic, less battery). Tap for Google">Saver</button>'
+    : '<button type="button" class="gl-chip gl-engchip" data-gl-mapeng="saver" aria-label="Map: Google (live traffic). Tap for Saver, less battery">Google</button>';
+  return `${zoom}<button type="button" class="gl-chip gl-flipchip" data-mapflip-btn="${key}" aria-label="${nums ? "Show the map" : "Show the figures"}">${nums ? "Map" : "123"}</button>${eng}`;
 }
 // What the rest of the route takes, from the car's own % on arrival (to 0.1),
 // the route's km and minutes and the battery now. Shared by every design's
@@ -7360,6 +7365,18 @@ function glMapGoogleFailed(why) {
   glMapRedraw();
 }
 window.gm_authFailure = glMapGoogleFailed;
+// Map: Google (live traffic, Google's map) or Saver (OpenStreetMap, darkened,
+// no traffic): a battery choice made on the Live page, kept on the phone.
+// 23 Nov: 36 min of Live on a map that drew almost nothing cost 2%
+// (about 3.3%/h) against about 5-6%/h with Google's.
+function glMapSaver() { return glPref("glMapEngine", "google") === "saver"; }
+function glMapEngineSet(saver) {
+  glSave("glMapEngine", saver ? "saver" : "google");
+  if (GL_MAP.host) GL_MAP.host.remove();
+  GL_MAP.host = null; GL_MAP.eng = null; GL_MAP.kind = null; GL_MAP.zoomKey = null; GL_MAP.routeV = null; GL_ZOOM.cur = null;
+  glMapRedraw();
+  if (lastData) renderGlance(lastData);
+}
 // Off Google only because its script would not download (no signal): back
 // online, try Google again rather than keep the backup for the visit.
 window.addEventListener("online", () => {
@@ -7389,7 +7406,7 @@ function glMapReady() {
     }
     return null;
   }
-  if (GL_MAP.cfg.google_key && !GL_MAP.gFailed) {
+  if (GL_MAP.cfg.google_key && !GL_MAP.gFailed && !glMapSaver()) {
     const vec = !!GL_MAP.cfg.map_id;
     // The marker library (asked for with a Map ID) is used for the destination
     // pin when it loaded; the map does not wait for it.
@@ -7600,8 +7617,8 @@ function glMapLeaflet(host) {
   credit.className = "gl-map-credit";
   // On the backup map with a Google key set: why, so it can be told apart
   // from a key problem (fix that in Google Cloud) or a passing signal gap.
-  const why = GL_MAP.cfg && GL_MAP.cfg.google_key ? (GL_MAP.why || "") : "no Google key on the server";
-  credit.textContent = tiles.credit + (why ? ` · backup map: ${why}` : "");
+  const why = glMapSaver() ? "" : GL_MAP.cfg && GL_MAP.cfg.google_key ? (GL_MAP.why || "") : "no Google key on the server";
+  credit.textContent = tiles.credit + (glMapSaver() ? " · Saver map" : why ? ` · backup map: ${why}` : "");
   host.classList.toggle("gl-osm-dark", tiles.dark);
   host.append(inner, fixCar, credit);
   const map = L.map(inner, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false,
@@ -8133,6 +8150,8 @@ document.addEventListener("click", (e) => {
   }
   const skinDot = e.target.closest("[data-gl-skin]");
   if (skinDot) { glSkinSet(+skinDot.dataset.glSkin); return; }
+  const engBtn = e.target.closest("[data-gl-mapeng]");
+  if (engBtn) { glMapEngineSet(engBtn.dataset.glMapeng === "saver"); return; }
   if (e.target.closest("[data-gl-dim]")) {
     glDim.off = !glDim.off;
     glDimArm();
