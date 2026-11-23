@@ -7369,7 +7369,8 @@ window.gm_authFailure = glMapGoogleFailed;
 // no traffic): a battery choice made on the Live page, kept on the phone.
 // 23 Nov: 36 min of Live on a map that drew almost nothing cost 2%
 // (about 3.3%/h) against about 5-6%/h with Google's.
-function glMapSaver() { return glPref("glMapEngine", "google") === "saver"; }
+// Saver unless Google is chosen (the default since 24 Nov).
+function glMapSaver() { return glPref("glMapEngine", "saver") === "saver"; }
 function glMapEngineSet(saver) {
   glSave("glMapEngine", saver ? "saver" : "google");
   if (GL_MAP.host) GL_MAP.host.remove();
