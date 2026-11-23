@@ -13696,6 +13696,15 @@ def test_deleting_a_charge_does_not_make_promotion_add_it_back():
     try:
         vin = sess.scalars(select(Vehicle.vin)).first()
         at = sync_mod.now_local().replace(microsecond=0) - timedelta(hours=50)
+        # A stretch no saved charge is near: 50 h back from just after
+        # midnight lands at about 22:00, among the demo's nightly charges,
+        # and promotion rightly matches the made-up one to them (failed only
+        # when run in the first hours after Malaysian midnight).
+        for _ in range(48):
+            if not sess.query(Charge).filter(Charge.end_time >= at - timedelta(hours=2),
+                                             Charge.start_time <= at + timedelta(hours=3)).first():
+                break
+            at -= timedelta(hours=3)
         ts = at.replace(tzinfo=sync_mod.MYT).timestamp()
         state.put(sess, state.TELEMETRY_CHARGES_KEY, _json.dumps([{
             "vin": vin, "start_ts": ts, "end_ts": ts + 3600,
