@@ -596,6 +596,7 @@ async function spotShortStopCheck(nw) {
 }
 function spotAutoTick(L) {
   if (STATIC_MODE) return;
+  spotPlaces();   // refreshed on the phone every 6 h, while there is signal
   const nw = (L && L.now) || {};
   if (spotLastAuto() && !spotAuto.run) spotShortStopCheck(nw);
   const fresh = nw.age_sec == null || nw.age_sec < 90;
@@ -639,6 +640,31 @@ function spotAutoTick(L) {
 // rolled into a car park with no signal, and a 15 km/h limit kept the camera
 // shut. The still-picture check is what waits for the car to stop.
 const SPOT_QUIET_S = 30, SPOT_CRAWL_KMH = 40;
+// Your saved places (Home, Office...), kept on the phone so they are there
+// with no signal: going quiet near one is arriving at its car park, even when
+// the car was last heard stopped (the barrier before the ramp), which away
+// from them reads as a light (24 Nov: no photo at home after a barrier stop).
+const SPOT_PLACE_KM = 0.4;
+function spotPlaces() {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem("spotPlaces") || "null"); } catch (_) { /* private mode */ }
+  if (!STATIC_MODE && (!c || Date.now() - c.at > 6 * 3600000) && !spotPlaces.asking) {
+    spotPlaces.asking = true;
+    fetch("/api/places", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((list) => {
+      if (Array.isArray(list)) try { localStorage.setItem("spotPlaces", JSON.stringify({ at: Date.now(), list: list.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, r: p.radius_km })) })); } catch (_) { /* private mode */ }
+    }).catch(() => {}).finally(() => { spotPlaces.asking = false; });
+  }
+  return (c && c.list) || [];
+}
+function spotNearPlace(lat, lon) {
+  if (lat == null || lon == null) return null;
+  for (const p of spotPlaces()) {
+    if (p.lat == null || p.lon == null) continue;
+    const dy = (p.lat - lat) * 110.57, dx = (p.lon - lon) * 111.32 * Math.cos(lat * Math.PI / 180);
+    if (Math.hypot(dx, dy) <= Math.max(SPOT_PLACE_KM, +p.r || 0)) return p.name || "a saved place";
+  }
+  return null;
+}
 setInterval(() => {
   try {
     if (STATIC_MODE || spotAuto.run) return;
@@ -676,10 +702,11 @@ setInterval(() => {
     if (v > SPOT_CRAWL_KMH) return why(`last heard at ${Math.round(v)} km/h`);
     // Last heard standing in D: a light or a queue. The car can go quiet
     // there too, and the still view then took a photo at the light (24 Nov).
-    if (v <= 0 && !saidP) return why(`last heard stopped in ${nw.gear_raw || nw.shift || "gear"} (a light or a queue)`);
+    const near = spotNearPlace(nw.lat, nw.lon);
+    if (v <= 0 && !saidP && !near) return why(`last heard stopped in ${nw.gear_raw || nw.shift || "gear"} (a light or a queue)`);
     if (saidP) return why("last heard in P");
     spotAuto.lastWhy = null;
-    spotLog(`no signal ${Math.round(quiet)} s, last ${Math.round(v)} km/h ${nw.shift || "?"}: camera on, photo once it stops`);
+    spotLog(`no signal ${Math.round(quiet)} s, last ${Math.round(v)} km/h ${nw.shift || "?"}${near ? " near " + near : ""}: camera on, photo once it stops`);
     spotAuto.armed = false;
     spotAutoRun("still");
   } catch (_) { /* never in the way of the live page */ }
