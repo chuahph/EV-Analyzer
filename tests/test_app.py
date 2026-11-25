@@ -1925,7 +1925,10 @@ def test_summary_reports_week_compare_and_costs():
             assert drv["total_cost"] is not None      # tariff configured by default
             assert drv["cost_per_km"] is not None
             assert "insights" in drv
-            assert round(chg["ac_cost"] + chg["dc_cost"], 1) == round(chg["total_cost"], 1)
+            # Within a cent: each part is rounded on its own, so the sum can
+            # sit on the other side of a .x5 than the total (775.56 + 439.09
+            # is 1214.6499..., the total 1214.65).
+            assert abs((chg["ac_cost"] + chg["dc_cost"]) - chg["total_cost"]) <= 0.011
             # Narrow "since charge" windows skip the compare rather than
             # sending a misleading partial week.
             since = client.get("/api/summary?days=365&since_charge=1").json()
