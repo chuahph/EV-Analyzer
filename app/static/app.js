@@ -284,12 +284,25 @@ function spotIcon(d) {
       : `Where I parked · ${spotAgo(p.ts)}${p.place ? " · " + p.place : ""}`;
     btn.innerHTML = `<img src="${p.url}" alt="">${p.moved ? "<b>!</b>" : ""}`;
   } else {
-    delete btn.dataset.spotOpen;
-    btn.dataset.spotTake = "";
-    btn.title = spot.msg || "Photo the parking spot";
+    // No photo of where the car is now: the Where I Parked screen (a Take
+    // photo button, the older photos, the Auto Spot log), not the camera
+    // straight away, which left the log out of reach (25 Nov).
+    btn.dataset.spotOpen = "now";
+    delete btn.dataset.spotTake;
+    btn.title = spot.msg || "Where I parked: no photo of the spot yet";
     btn.innerHTML = spot.busy ? "…" : "📷";
   }
   btn.setAttribute("aria-label", btn.title);
+}
+// Which build the phone runs, against the server's: a phone still on an
+// older one has not got the latest fixes (a home-screen app keeps the
+// version it started with until it is swiped away and opened again).
+function spotVersionLine() {
+  const mine = (typeof pageBuildSha === "string" && pageBuildSha) || window.PAGE_BUILD || "";
+  const srv = window.__serverSha || "";
+  if (!mine) return "";
+  if (srv && srv !== mine) return `App on this phone: ${h(mine.slice(0, 7))} · newer on the server: ${h(srv.slice(0, 7))}. Swipe the app away and open it again.`;
+  return `App on this phone: ${h(mine.slice(0, 7))}${srv ? " (up to date)" : ""}`;
 }
 function spotAutoToggle() {
   let log = [];
@@ -298,7 +311,8 @@ function spotAutoToggle() {
     `${new Date(t).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}  ${h(m)}`).join("\n");
   return `<label class="spot-auto-set"><input type="checkbox" data-spot-autoset ${spotAutoOn() ? "checked" : ""}>
     <span><b>Auto Spot</b>: with the Live page open, take the photo by itself 3 s after you park in P, or once the car stops when its signal is gone (the phone's back camera, through the windscreen)</span></label>
-    <details class="spot-log"><summary>Auto Spot log (newest first)</summary><pre>${rows || "Nothing yet."}</pre></details>`;
+    <details class="spot-log"><summary>Auto Spot log (newest first)</summary><pre>${rows || "Nothing yet."}</pre></details>
+    <p class="modal-hint spot-ver">${spotVersionLine()}</p>`;
 }
 document.addEventListener("change", (e) => {
   if (e.target.matches && e.target.matches("[data-spot-autoset]")) spotAutoSet(e.target.checked);
@@ -465,8 +479,15 @@ async function spotOpen(id) {
   let list = [];
   try { list = (await (await fetch("/api/park-photos")).json()).photos || []; } catch (_) { /* shown below */ }
   const draw = (pid) => {
+    if (pid === "now" || !list.length) {
+      show.innerHTML = `<p class="modal-sub"><b>No photo of where the car is now.</b>${list.length ? " Earlier ones below." : ""}</p>
+        <div class="modal-actions" style="justify-content:flex-start"><button type="button" class="btn btn-accent" data-spot-take>📷 Take photo</button></div>
+        ${spotAutoToggle()}`;
+      grid.innerHTML = list.length ? `<p class="modal-hint">${list.length} of the last 30 kept · tap one to view</p><div class="spot-grid">` +
+        list.map((x) => `<button type="button" class="spot-th" data-spot-pick="${x.id}"><img src="${x.url}" loading="lazy" alt=""><span>${h(spotAgo(x.ts))}</span></button>`).join("") + "</div>" : "";
+      return;
+    }
     const p = list.find((x) => x.id === +pid) || list[0];
-    if (!p) { show.innerHTML = '<p class="modal-sub">No spot photos yet.</p>' + spotAutoToggle(); return; }
     const map = p.coords ? `<a class="btn" target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(p.coords)}">📍 Map</a>` : "";
     const from = { car: "the car's location", "car-last": "the car's last location before the signal went", phone: "the phone's location", trip: "where the last trip ended" }[p.coords_from] || "";
     show.innerHTML = `<img class="spot-big" src="${p.url}" alt="Parking spot photo">
@@ -4880,6 +4901,7 @@ function setBuildInfo(info) {
   // the build the SERVER is on — and those differ precisely in the case this
   // is here to catch: a page kept open across a deploy.
   if (pageBuildSha === null) pageBuildSha = window.PAGE_BUILD || info.sha || null;
+  if (info.sha) window.__serverSha = info.sha;
   if (info.sha && pageBuildSha && info.sha !== pageBuildSha) {
     // Deliberately a button and not an automatic reload: a reload mid-edit
     // loses whatever was half-typed, and this can fire while the user is doing
